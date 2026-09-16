@@ -1,0 +1,18 @@
+[Unit]
+Description=cadence deploy webhook listener
+After=network.target docker.service
+
+[Service]
+Type=simple
+Environment=WEBHOOK_SECRET=CAMBIA_ESTE_VALOR
+Environment=REPO_PATH=/ruta/absoluta/al/checkout/de/este/repo
+Environment=DEPLOY_BRANCH=master
+Environment=COMPOSE_SERVICES=cadence
+Environment=WEBHOOK_PORT=9000
+ExecStart=/usr/bin/python3 /ruta/absoluta/al/checkout/de/este/repo/deploy/webhook_listener.py
+Restart=on-failure
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

@@ -116,6 +116,28 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # cadence: extension propia sobre wger, reconocimiento de comida por foto.
+  # No modifica el core de wger, solo consume su API REST (WGER_BASE_URL).
+  cadence:
+    build: ./cadence
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: 3
+    env_file:
+      # required: false evita repetir el bug de powersync: si este archivo
+      # no existe todavia, el stack completo (wger incluido) debe poder
+      # seguir arrancando igual, en vez de fallar por completo.
+      - path: ./cadence/.env
+        required: false
+    depends_on:
+      web:
+        condition: service_healthy
+    expose:
+      - 8001
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   celery-beat:

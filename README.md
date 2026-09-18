@@ -1,7 +1,30 @@
-<img src="https://raw.githubusercontent.com/wger-project/wger/master/wger/core/static/images/logos/logo.png" width="100" height="100" alt="wger logo" />
+# cadence
 
+Proyecto personal de Andrés: despliegue de [wger](https://wger.de/)
+(tracker de nutricion/ejercicio open-source) mas una extension propia de
+reconocimiento de comida por foto usando IA (carpeta `cadence/`). Este repo
+es un fork de `wger-project/docker` - contiene tanto la infraestructura de
+wger sin modificar su core, como el codigo propio de cadence, aislado en
+sus propias carpetas para poder seguir sincronizando con el upstream.
 
-# docker compose stacks for wger
+**Si vas a trabajar en este repo (humano o IA), lee primero
+[`CLAUDE.md`](./CLAUDE.md)** - tiene todo el contexto del proyecto, las
+decisiones ya tomadas y el porque, para no tener que reexplicar nada desde
+cero en cada sesion nueva.
+
+## Estructura
+
+- `docker-compose.yml`, `config/`, `services/`, `dev*/` - stack de wger tal
+  como viene de `wger-project/docker`, con ajustes minimos documentados en
+  `CLAUDE.md` (sin `powersync`, nginx sin puerto publicado).
+- `cadence/` - el servicio propio: reconocimiento de comida por foto
+  (Gemini Flash) + integracion con la API de wger. Ver
+  [`cadence/README.md`](./cadence/README.md).
+- `deploy/` - webhook liviano de despliegue automatico (push a `master` ->
+  pull + rebuild + restart, sin pasos manuales). Ver
+  [`deploy/README.md`](./deploy/README.md).
+
+## docker compose stacks para wger (upstream, sin cambios de fondo)
 Contains 3 docker compose environments:
 
 * prod (in root of this repository)

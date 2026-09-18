@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>cadence</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #0b0b0c; color: #f2f2f2; }
+  #stage { position: relative; width: 100%; max-width: 480px; margin: 0 auto; }
+  video, canvas { width: 100%; display: block; border-radius: 8px; }
+  #guide { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
+  #guideText { margin: 0 0 16px; padding: 8px 16px; border-radius: 20px; background: rgba(0,0,0,.6); font-size: 15px; }
+  #guideText.ok { background: rgba(34,197,94,.75); }
+  .controls { max-width: 480px; margin: 16px auto; padding: 0 16px; }
+  button { width: 100%; padding: 14px; font-size: 16px; border: none; border-radius: 8px; background: #22c55e; color: #0b0b0c; font-weight: 600; }
+  button:disabled { background: #444; color: #999; }
+  .component { border: 1px solid #333; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+  .candidate { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+  #results { max-width: 480px; margin: 0 auto; padding: 0 16px 40px; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  small { color: #999; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <div id="guide"><p id="guideText">Activa la orientacion para guiarte</p></div>
+  </div>
+  <div class="controls">
+    <button id="captureBtn">Capturar foto</button>
+  </div>
+  <div id="results"></div>
+
+  <script>
+    const video = document.getElementById('video');
+    const guideText = document.getElementById('guideText');
+    const captureBtn = document.getElementById('captureBtn');
+    const results = document.getElementById('results');
+
+    // Angulo objetivo: ~45 grados respecto al plato (no cenital, no al ras).
+    // beta ~0 = telefono horizontal apuntando hacia abajo (foto cenital, mala).
+    // beta ~90 = telefono vertical (foto al ras, mala).
+    // Apuntamos a beta entre 35 y 55 grados como "buen angulo".
+    const TARGET_MIN = 35;
+    const TARGET_MAX = 55;
+    let lastBetaOk = false;
+
+    async function initCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false,
+      });
+      video.srcObject = stream;
+    }
+
+    function handleOrientation(event) {
+      const beta = event.beta; // front-back tilt in degrees
+      if (beta === null) return;
+      const tiltFromHorizontal = Math.abs(90 - Math.abs(beta));
+      const ok = tiltFromHorizontal >= TARGET_MIN && tiltFromHorizontal <= TARGET_MAX;
+      lastBetaOk = ok;
+      guideText.classList.toggle('ok', ok);
+      if (ok) {
+        guideText.textContent = 'Angulo correcto - captura ahora';
+      } else if (tiltFromHorizontal < TARGET_MIN) {
+        guideText.textContent = 'Inclina mas el telefono (evita la foto cenital)';
+      } else {
+        guideText.textContent = 'Baja un poco el telefono (evita la foto al ras)';
+      }
+    }
+
+    async function initOrientation() {
+      if (typeof DeviceOrientationEvent !== 'undefined' &&
+          typeof DeviceOrientationEvent.requestPermission === 'function') {
+        // iOS 13+ requires an explicit user gesture to grant this.
+        try {
+          const permission = await DeviceOrientationEvent.requestPermission();
+          if (permission !== 'granted') {
+            guideText.textContent = 'Sin acceso al sensor - encuadra a ~45 grados a ojo';
+            return;
+          }
+        } catch (e) {
+          guideText.textContent = 'Sin acceso al sensor - encuadra a ~45 grados a ojo';
+          return;
+        }
+      }
+      window.addEventListener('deviceorientation', handleOrientation);
+    }
+
+    captureBtn.addEventListener('click', async () => {
+      if (!lastBetaOk) {
+        const proceed = confirm('El angulo no parece ideal (45 grados aprox). Capturar de todas formas?');
+        if (!proceed) return;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+
+      canvas.toBlob(async (blob) => {
+        captureBtn.disabled = true;
+        captureBtn.textContent = 'Analizando...';
+        try {
+          await analyzePhoto(blob);
+        } finally {
+          captureBtn.disabled = false;
+          captureBtn.textContent = 'Capturar foto';
+        }
+      }, 'image/jpeg', 0.92);
+    });
+
+    async function analyzePhoto(blob) {
+      const formData = new FormData();
+      formData.append('image', blob, 'plate.jpg');
+
+      // Ruta relativa: nginx expone este servicio bajo /cadence/, y las
+      // rutas absolutas resolverian contra la raiz del dominio en vez de
+      // ese prefijo.
+      const response = await fetch('api/analyze', { method: 'POST', body: formData });
+      if (!response.ok) {
+        results.innerHTML = `<p>Error analizando la foto: ${await response.text()}</p>`;
+        return;
+      }
+      const data = await response.json();
+      renderComponents(data.components);
+    }
+
+    function renderComponents(components) {
+      results.innerHTML = '';
+      const selections = {};
+
+      components.forEach((component, idx) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'component';
+        wrap.innerHTML = `<h2>${component.detected_name}</h2>`;
+
+        if (component.candidates.length === 0) {
+          wrap.innerHTML += '<small>Sin coincidencias en wger - buscalo manualmente.</small>';
+        }
+
+        component.candidates.forEach((candidate, cIdx) => {
+          const row = document.createElement('label');
+          row.className = 'candidate';
+          row.innerHTML = `
+            <input type="radio" name="component-${idx}" value="${candidate.id}" ${cIdx === 0 ? 'checked' : ''}>
+            ${candidate.name} <small>(${Math.round(candidate.score * 100)}% match)</small>
+          `;
+          wrap.appendChild(row);
+          if (cIdx === 0) selections[idx] = candidate.id;
+        });
+
+        const amountInput = document.createElement('input');
+        amountInput.type = 'number';
+        amountInput.value = 100;
+        amountInput.placeholder = 'gramos';
+        amountInput.id = `amount-${idx}`;
+        wrap.appendChild(document.createElement('br'));
+        wrap.appendChild(amountInput);
+
+        wrap.addEventListener('change', (e) => {
+          if (e.target.name === `component-${idx}`) selections[idx] = Number(e.target.value);
+        });
+
+        results.appendChild(wrap);
+      });
+
+      const confirmBtn = document.createElement('button');
+      confirmBtn.textContent = 'Confirmar y guardar en wger';
+      confirmBtn.style.marginTop = '12px';
+      confirmBtn.addEventListener('click', () => confirmSelections(components, selections));
+      results.appendChild(confirmBtn);
+    }
+
+    async function confirmSelections(components, selections) {
+      const items = components.map((component, idx) => ({
+        ingredient_id: selections[idx],
+        amount_grams: Number(document.getElementById(`amount-${idx}`).value) || 100,
+        detected_name: component.detected_name,
+      })).filter((item) => item.ingredient_id);
+
+      const response = await fetch('api/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+
+      if (!response.ok) {
+        alert(`Error guardando en wger: ${await response.text()}`);
+        return;
+      }
+      alert('Registrado en wger correctamente.');
+      results.innerHTML = '';
+    }
+
+    initCamera().catch((e) => { guideText.textContent = 'No se pudo acceder a la camara: ' + e.message; });
+    document.body.addEventListener('click', initOrientation, { once: true });
+  </script>
+</body>
+</html>

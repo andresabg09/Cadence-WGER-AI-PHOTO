@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="cadence">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>cadence — Escanear</title>
 <meta name="theme-color" content="#05050A">
 <link rel="manifest" href="static/manifest.json">
@@ -58,10 +62,6 @@
   </div>
   <div class="app-content grid-2">
     <div class="card" style="border-radius:26px;padding:18px;display:flex;flex-direction:column;gap:16px;">
-      <div style="display:flex;align-self:flex-start;background:rgba(127,127,140,0.1);border:1px solid var(--card-border);border-radius:100px;padding:4px;">
-        <button aria-current="true" style="border:none;border-radius:100px;min-height:36px;padding:0 18px;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">Foto</button>
-        <button id="deskBarcode" style="border:none;border-radius:100px;min-height:36px;padding:0 18px;background:transparent;color:var(--ink-soft);font-size:12.5px;font-weight:700;cursor:pointer;">Código de barras</button>
-      </div>
       <div class="dropzone" id="dropzone">
         <div style="width:68px;height:68px;border-radius:22px;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 0 36px -4px rgba(124,92,255,0.6);">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m0 0l-4 4m4-4l4 4M5 20h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -104,23 +104,16 @@
 
   <!-- Top bar -->
   <div style="position:relative;padding:24px 20px 0;display:flex;align-items:center;justify-content:space-between;z-index:2;">
-    <a href="index.html" data-leave aria-label="Cerrar" style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.12);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;">
+    <a href="index.html" data-leave aria-label="Cerrar" style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.12);-webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);display:flex;align-items:center;justify-content:center;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
     </a>
     <div id="angleBadge" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:100px;padding:7px 13px;">
       <span id="angleDot" style="width:7px;height:7px;border-radius:50%;background:#8B8B96;"></span>
       <span class="mono" id="angleText" style="font-size:12px;font-weight:700;">Activa el sensor</span>
     </div>
-    <button id="flashBtn" aria-label="Flash" style="width:38px;height:38px;border-radius:50%;border:none;background:rgba(255,255,255,0.12);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;">
+    <button id="flashBtn" aria-label="Flash" style="width:38px;height:38px;border-radius:50%;border:none;background:rgba(255,255,255,0.12);-webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);display:flex;align-items:center;justify-content:center;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
     </button>
-  </div>
-
-  <!-- Toggle Foto / Código de barras -->
-  <div style="position:relative;z-index:2;margin:14px auto 0;display:flex;background:rgba(10,10,15,0.65);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.12);border-radius:100px;padding:4px;width:fit-content;">
-    <button id="modePhoto" style="border:none;border-radius:100px;padding:7px 16px;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));color:#fff;font-size:12px;font-weight:700;cursor:pointer;">📷 Foto</button>
-    <button id="modeBarcode" style="border:none;border-radius:100px;padding:7px 16px;background:transparent;color:rgba(255,255,255,0.65);font-size:12px;font-weight:700;cursor:pointer;">▦ Código</button>
-    <a id="modeVoice" href="voice.html" data-replace style="border-radius:100px;padding:7px 16px;display:flex;align-items:center;color:rgba(255,255,255,0.65);font-size:12px;font-weight:700;">🎤 Voz</a>
   </div>
 
   <div id="liveChips" style="position:relative;z-index:2;margin-top:auto;padding:0 20px 14px;display:flex;flex-direction:column;gap:8px;"></div>
@@ -163,7 +156,7 @@ let stream = null;
 const appending = new URLSearchParams(location.search).get('append') === '1';
 if (!appending) clearScanSession();
 const requestedMeal = new URLSearchParams(location.search).get('meal');
-{ const q = [requestedMeal ? `meal=${requestedMeal}` : '', appending ? 'append=1' : ''].filter(Boolean).join('&'); if (q) document.getElementById('modeVoice').href = `voice.html?${q}`; }
+const BARCODE_FIRST = new URLSearchParams(location.search).get('mode') === 'barcode'; // chosen in the register menu: Foto, Código or Voz
 if (requestedMeal) sessionStorage.setItem('cadence_meal', requestedMeal);
 
 const video = document.getElementById('video');
@@ -249,9 +242,6 @@ document.getElementById('flashBtn').addEventListener('click', async () => {
 // ---- Barcode mode: read the code on the live camera, look it up, and send it to Confirmar ----
 let barcodeMode = false;
 let stopBarcode = null;
-const modePhoto = document.getElementById('modePhoto');
-const modeBarcode = document.getElementById('modeBarcode');
-const ON = 'linear-gradient(135deg,var(--accent-from),var(--accent-to))';
 
 function addScannedFood(food) {
   // Same shape the AI gives: a plate with one food (100 g to start; the stepper adjusts it).
@@ -292,10 +282,6 @@ function afterSheet() {
 async function setBarcodeMode(on) {
   barcodeMode = on;
   if (stopBarcode) { stopBarcode(); stopBarcode = null; }
-  modeBarcode.style.background = on ? ON : 'transparent';
-  modeBarcode.style.color = on ? '#fff' : 'rgba(255,255,255,0.65)';
-  modePhoto.style.background = on ? 'transparent' : ON;
-  modePhoto.style.color = on ? 'rgba(255,255,255,0.65)' : '#fff';
   document.body.classList.toggle('barcode-mode', on);
   captureBtn.style.visibility = on ? 'hidden' : 'visible';
   document.getElementById('typeCode').style.display = on ? 'inline-block' : 'none';
@@ -308,8 +294,6 @@ async function setBarcodeMode(on) {
     showToast(err.message || 'No se pudo iniciar el lector', 'warn');
   }
 }
-modeBarcode.addEventListener('click', () => setBarcodeMode(true));
-modePhoto.addEventListener('click', () => setBarcodeMode(false));
 document.getElementById('typeCode').addEventListener('click', () => {
   if (stopBarcode) { stopBarcode(); stopBarcode = null; }
   openBarcodeTyping(handleCode);
@@ -350,11 +334,6 @@ dropzone.addEventListener('drop', (e) => {
 document.getElementById('webcamBtn').addEventListener('click', () => {
   document.body.classList.add('webcam-open');
   initCamera();
-});
-document.getElementById('deskBarcode').addEventListener('click', async () => {
-  document.body.classList.add('webcam-open');
-  await initCamera();
-  setBarcodeMode(true);
 });
 
 function setBusy(busy) {
@@ -415,7 +394,7 @@ function renderLiveChips(components) {
   components.forEach((c, i) => {
     const chip = document.createElement('div');
     chip.className = 'chip-in';
-    chip.style.cssText = `animation-delay:${i * 0.12}s;background:rgba(10,10,15,0.75);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.12);border-radius:100px;padding:8px 14px;display:flex;align-items:center;gap:7px;width:fit-content;`;
+    chip.style.cssText = `animation-delay:${i * 0.12}s;background:rgba(10,10,15,0.75);-webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);border:1px solid rgba(255,255,255,0.12);border-radius:100px;padding:8px 14px;display:flex;align-items:center;gap:7px;width:fit-content;`;
     const confidence = c.confidence != null ? Math.round(c.confidence * 100) : null;
     chip.innerHTML = `<span style="font-size:12.5px;font-weight:700;">${escapeHtml(c.detected_name)}</span>${confidence !== null ? `<span class="mono" style="font-size:11px;color:var(--accent-to);font-weight:700;">${confidence}%</span>` : ''}`;
     wrap.appendChild(chip);
@@ -425,7 +404,7 @@ function renderLiveChips(components) {
 // On a desktop layout the camera only starts when the user picks "Usar webcam";
 // asking for it on load would trigger a permission prompt next to a drop zone.
 if (!window.matchMedia('(min-width: 1024px)').matches) {
-  initCamera().then(() => { if (new URLSearchParams(location.search).get('mode') === 'barcode') setBarcodeMode(true); });
+  initCamera().then(() => { if (BARCODE_FIRST) setBarcodeMode(true); });
   // iOS 13+ only grants sensor access from a user gesture; everywhere else
   // (Android/Chrome) the listener can start right away, otherwise the badge
   // would sit on "Activa el sensor" until the first tap.
@@ -434,6 +413,10 @@ if (!window.matchMedia('(min-width: 1024px)').matches) {
   } else {
     initOrientation();
   }
+} else if (BARCODE_FIRST) {
+  // Computer: the barcode needs the webcam, so it opens straight away when chosen in the register menu.
+  document.body.classList.add('webcam-open');
+  initCamera().then(() => setBarcodeMode(true));
 }
 </script>
 </body>

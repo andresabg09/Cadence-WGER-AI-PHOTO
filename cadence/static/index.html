@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="cadence">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>cadence</title>
 <meta name="theme-color" content="#0A0A0F">
 <link rel="manifest" href="static/manifest.json">
@@ -28,10 +32,10 @@
       <h1 class="disp" id="greeting">Hola</h1>
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <a href="scan.html" class="btn-upload desktop-only">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m0 0l-4 4m4-4l4 4M5 20h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Subir foto
-      </a>
+      <button type="button" class="btn-upload desktop-only" id="deskRegister">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Registrar
+      </button>
       <button type="button" class="streak-pill" id="streakBtn" aria-label="Ver mi racha">
         <span class="flame">🔥</span>
         <span class="mono" id="streakValue" style="font-weight:700;color:var(--ember);font-size:13px;">–</span>
@@ -132,6 +136,7 @@
     </button>
     <div class="launcher" id="launcher">
       <div class="lc-halo"></div>
+      <span class="lc-meal mono" id="lcMeal"></span>
       <svg class="lc-arc" width="320" height="230" viewBox="-160 -210 320 230" fill="none" aria-hidden="true">
         <defs><linearGradient id="lcg-a" x1="-100" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color: var(--accent-from); stop-opacity: 0"/><stop offset="0.5" style="stop-color: var(--accent-to)"/><stop offset="1" style="stop-color: var(--accent-from); stop-opacity: 0"/></linearGradient></defs>
         <path d="M -96 -82 Q 0 -204 96 -82" pathLength="100" stroke="url(#lcg-a)" stroke-width="1.4" stroke-linecap="round"/>
@@ -334,9 +339,11 @@ function mealCard(meal, key) {
 }
 
 function dashedAdd(label) {
+  // "Agregar almuerzo" opens the same menu as the central button (Foto · Código · Voz) with that meal chosen.
   const link = document.createElement('a');
   link.href = `scan.html?meal=${label}`;
   link.className = 'dashed-add';
+  link.addEventListener('click', (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); openRegister(label); });
   link.innerHTML = `
     <span style="width:28px;height:28px;border-radius:10px;background:var(--card);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--accent-to);">+</span>
     <span style="font-size:13px;font-weight:600;">Agregar ${label}</span>
@@ -358,7 +365,7 @@ function renderMeals(meals) {
         <span style="font-size:36px;">🍽️</span>
         <h3 class="disp" style="margin:14px 0 6px;font-size:15.5px;font-weight:700;">${isViewingToday() ? 'Aún no registras nada hoy' : 'No hay nada registrado este día'}</h3>
         <p style="margin:0 0 18px;font-size:12px;color:var(--ink-soft);line-height:1.5;">${isViewingToday() ? 'Toma una foto de tu primer plato del día y empieza tu racha.' : 'Usa las flechas para ver otros días. Si subes la foto de un plato de ese día, se guarda en su fecha.'}</p>
-        <a href="scan.html" class="btn-primary" style="display:inline-flex;width:auto;padding:13px 22px;">✨ Escanear un plato</a>
+        <button type="button" class="btn-primary" data-register style="display:inline-flex;width:auto;padding:13px 22px;">✨ Registrar un plato</button>
       </div>`;
     list.appendChild(container);
     return;
@@ -574,7 +581,10 @@ async function openStreaks() {
     dismissOverlay(() => openCalendar(latestToday ? latestToday.date : data.today, data.today));
   });
 }
-document.getElementById('streakBtn').addEventListener('click', openStreaks);
+document.getElementById('streakBtn').addEventListener('click', () => {
+  if (window.sfx) sfx.play('streakOpen', { days: latestToday ? latestToday.streak_days : 0 }); // the intro
+  openStreaks();
+});
 
 // ---- Entry detail: photo, numbers, portion, meal and a note ----
 const MEAL_CHOICES = [['desayuno', 'Desayuno'], ['almuerzo', 'Almuerzo'], ['merienda', 'Merienda'], ['cena', 'Cena']];
@@ -890,7 +900,24 @@ function setLauncher(open) {
   fabBtn.setAttribute('aria-expanded', String(open));
   launcher.querySelectorAll('.lc-sat').forEach((a) => a.setAttribute('tabindex', open ? '0' : '-1'));
 }
-function openLauncher() {
+const LC_MEALS = { desayuno: 'Desayuno', almuerzo: 'Almuerzo', merienda: 'Merienda', cena: 'Cena' };
+// Which meal the three options register into (null = the one the photo's time suggests).
+function setLauncherMeal(meal) {
+  const q = meal ? `meal=${encodeURIComponent(meal)}` : '';
+  launcher.querySelector('.lc-foto').setAttribute('href', `scan.html${q ? `?${q}` : ''}`);
+  launcher.querySelector('.lc-code').setAttribute('href', `scan.html?mode=barcode${q ? `&${q}` : ''}`);
+  launcher.querySelector('.lc-voz').setAttribute('href', `voice.html${q ? `?${q}` : ''}`);
+  const chip = document.getElementById('lcMeal');
+  chip.textContent = meal && LC_MEALS[meal] ? `AGREGAR ${LC_MEALS[meal].toUpperCase()}` : '';
+  chip.classList.toggle('has', !!(meal && LC_MEALS[meal]));
+}
+// From "Agregar almuerzo" and similar: phones open the central menu; computers open the register panel.
+function openRegister(meal) {
+  if (window.matchMedia('(min-width: 1024px)').matches) { window.openRegisterMenu({ meal }); return; }
+  openLauncher(meal);
+}
+function openLauncher(meal) {
+  setLauncherMeal(meal || null);
   if (launcher.classList.contains('open')) return;
   setLauncher(true);
   window.sfx && sfx.play('open');
@@ -902,6 +929,8 @@ function closeLauncher(quiet) {
   dismissOverlay();
 }
 fabBtn.addEventListener('click', () => (launcher.classList.contains('open') ? closeLauncher() : openLauncher()));
+document.getElementById('deskRegister').addEventListener('click', () => window.openRegisterMenu());
+document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('[data-register]'); if (b) openRegister(null); });
 lcScrim.addEventListener('click', () => closeLauncher());
 launcher.querySelectorAll('[data-launch]').forEach((a) => a.addEventListener('click', (e) => {
   if (e.metaKey || e.ctrlKey || e.shiftKey) return;

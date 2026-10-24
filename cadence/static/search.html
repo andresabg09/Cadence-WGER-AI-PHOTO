@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="cadence">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>cadence — Buscar alimento</title>
 <meta name="theme-color" content="#0A0A0F">
 <link rel="manifest" href="static/manifest.json">
@@ -139,7 +143,8 @@ function addFood(food) {
     grams: food.last_amount_grams || food.grams || 100,
   });
   sessionStorage.setItem('cadence_analyze_result', JSON.stringify(result));
-  window.location.replace('confirm.html');
+  if (window.sfx) sfx.play('add');
+  setTimeout(() => window.location.replace('confirm.html'), window.sfx && sfx.isOn() ? 230 : 0);
 }
 
 function kcalFor(food) {

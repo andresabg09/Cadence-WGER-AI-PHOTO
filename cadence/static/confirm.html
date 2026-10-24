@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="cadence">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>cadence — Confirmar</title>
 <meta name="theme-color" content="#0A0A0F">
 <link rel="manifest" href="static/manifest.json">
@@ -280,6 +284,7 @@ function renderMealPick() {
   wrap.innerHTML = MEALS.map((m) => `<button type="button" data-meal="${m.key}" aria-pressed="${meal === m.key}">${m.label}</button>`).join('');
   wrap.querySelectorAll('button').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (window.sfx) sfx.play('pick');
       meal = btn.dataset.meal;
       mealSource = 'chosen';
       sessionStorage.setItem('cadence_meal', meal);
@@ -290,6 +295,7 @@ function renderMealPick() {
 }
 
 async function selectCandidate(idx, candidateId) {
+  if (window.sfx) sfx.play('pick');
   const item = state[idx];
   item.selectedId = candidateId;
   const candidate = item.candidates.find((c) => c.id === candidateId);
@@ -343,6 +349,7 @@ function paintFind(idx) {
       item.candidates.push({ id: picked.id, name: picked.name, score: null, energy_kcal_100g: picked.energy_kcal_100g });
     }
     item.searching = false;
+    if (window.sfx) sfx.play('add');
     selectCandidate(idx, picked.id);
   }));
 }
@@ -472,6 +479,7 @@ function renderItems() {
   });
   wrap.querySelectorAll('.find-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (window.sfx) sfx.play('tick');
       const item = state[Number(btn.dataset.idx)];
       item.searching = !item.searching;
       renderItems();
@@ -499,6 +507,7 @@ function renderItems() {
       const current = state[idx].grams;
       // Finer steps for small portions (a 60 g popsicle), coarser for a plate of rice.
       state[idx].grams = Math.min(1500, Math.max(5, current + direction * stepFor(direction < 0 ? current - 1 : current)));
+      if (window.sfx) sfx.play('tick');
       document.getElementById(`grams-${idx}`).textContent = `${state[idx].grams} g`;
       document.getElementById(`kcal-${idx}`).textContent = `${Math.round(itemKcal(state[idx]))} kcal`;
       renderTotal();

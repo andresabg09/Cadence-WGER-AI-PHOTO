@@ -377,6 +377,22 @@ La app debe sentirse como app nativa. Reglas que la logran, no deshacerlas:
   ml a la barra del dia de la foto (`addWater`, localStorage por dia) sin crear registro en el diario; si solo hay
   agua el boton dice "Sumar el agua".
 
+## Registrar: un solo menu (25 oct 2026, decision de Andres)
+
+- La CAMARA YA NO TIENE selector Foto/Codigo/Voz. La unica forma de elegir como registrar es el menu central:
+  celular = `#launcher` (boton con la marca); computadora = `js/register-menu.js` (`openRegisterMenu({meal})`, boton
+  "Registrar comida" de la barra lateral y "Registrar" del diario). `scan.html?mode=barcode` abre directo el modo
+  codigo; `voice.html` es la voz.
+- "Agregar desayuno/almuerzo/cena" (tarjetas punteadas del diario) NO abre la camara: abre ese mismo menu con la
+  comida elegida (`openRegister(meal)`, chip "AGREGAR ALMUERZO"; los 3 enlaces llevan `?meal=`). "Agregar otro
+  alimento al almuerzo" sigue yendo a la busqueda escrita (`search.html?meal=`), que se queda.
+- Foto de perfil: `PUT/GET/DELETE /api/avatar` (tabla `avatars`, recorte cuadrado 360 px hecho en el navegador;
+  `me.avatar_v` versiona la URL). Se pinta en Perfil, en la cabecera del diario y en la barra lateral (`paintAvatars`).
+- Sonidos nuevos: `add` (anadir alimento), `pick` (elegir opcion), `streakOpen` (intro al abrir la racha).
+- iOS: no hay WebKit en el entorno de pruebas, asi que NO esta probado en iPhone. Lo que se cuido por revision de
+  codigo: `-webkit-backdrop-filter`, campos de 16 px (si no, iOS hace zoom), desbloqueo de audio en `click/touchend`,
+  metas `apple-mobile-web-app-*`, push solo con la app instalada, lector de codigos con ZXing (sin BarcodeDetector).
+
 ## Navegacion y boton Atras (regla de Andres, 25 oct 2026; aplica a TODA pantalla nueva)
 
 cadence se usa como web y como app instalada (PWA en Android/iPhone). El boton Atras del sistema

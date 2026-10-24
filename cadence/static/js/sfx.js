@@ -79,6 +79,30 @@
     src.start(t); src.stop(t + dur + 0.02);
   }
 
+  // A synth pluck: a saw through a closing low-pass, the "sleek / futuristic" voice of the app.
+  function pluck(t, freq, dur, o = {}) {
+    const { gain = 0.14, from = 4200, to = 500, send = 0.6 } = o;
+    const osc = ctx.createOscillator(); const lp = ctx.createBiquadFilter(); const amp = ctx.createGain();
+    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq, t); osc.detune.value = 6;
+    lp.type = 'lowpass'; lp.Q.value = 3;
+    lp.frequency.setValueAtTime(from, t); lp.frequency.exponentialRampToValueAtTime(to, t + dur * 0.8);
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(gain, t + 0.006); amp.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(lp); lp.connect(amp); amp.connect(master);
+    if (send) { const r = ctx.createGain(); r.gain.value = send; amp.connect(r); r.connect(reverb); }
+    osc.start(t); osc.stop(t + dur + 0.05);
+  }
+
+  // A riser: a note that climbs while its filter opens (the build-up of an intro).
+  function riser(t, dur, f0, f1, o = {}) {
+    const { gain = 0.1, type = 'sawtooth', lp0 = 300, lp1 = 7000 } = o;
+    const osc = ctx.createOscillator(); const lp = ctx.createBiquadFilter(); const amp = ctx.createGain();
+    osc.type = type; osc.frequency.setValueAtTime(f0, t); osc.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    lp.type = 'lowpass'; lp.Q.value = 2; lp.frequency.setValueAtTime(lp0, t); lp.frequency.exponentialRampToValueAtTime(lp1, t + dur);
+    amp.gain.setValueAtTime(0.0001, t); amp.gain.exponentialRampToValueAtTime(gain, t + dur * 0.9); amp.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.04);
+    osc.connect(lp); lp.connect(amp); amp.connect(master);
+    osc.start(t); osc.stop(t + dur + 0.1);
+  }
+
   const N = (semitones) => 440 * Math.pow(2, semitones / 12); // A4 = 0
   const C5 = N(3), E5 = N(7), G5 = N(10), A5 = N(12), B5 = N(14), C6 = N(15), E6 = N(19); // A4 = 440 Hz
 
@@ -87,6 +111,23 @@
     open(t) { tone(t, 520, 0.16, { type: 'triangle', glideTo: 820, gain: 0.12, send: 0.5 }); air(t, 0.26, 500, 2600, { gain: 0.05, q: 0.9 }); tone(t + 0.07, 1040, 0.22, { gain: 0.05, bell: true }); },
     close(t) { tone(t, 760, 0.12, { type: 'triangle', glideTo: 420, gain: 0.1, send: 0.3 }); air(t, 0.14, 2000, 500, { gain: 0.03 }); },
     save(t) { [E5, B5, E6].forEach((f, i) => tone(t + i * 0.085, f, 0.9, { gain: 0.2 - i * 0.03, bell: true })); },
+    // Adding a food: two quick plucks going up, a touch of glitter.
+    add(t) { pluck(t, N(0), 0.22, { gain: 0.13 }); pluck(t + 0.075, N(7), 0.3, { gain: 0.12 }); tone(t + 0.075, N(19), 0.5, { gain: 0.05, bell: true }); air(t + 0.07, 0.07, 6000, 9500, { gain: 0.02, type: 'highpass' }); },
+    // Picking one of the options: a clean glass tick.
+    pick(t) { tone(t, 1976, 0.07, { gain: 0.1, send: 0.3 }); tone(t, 2637, 0.05, { gain: 0.04, send: 0.3 }); pluck(t, N(-12), 0.1, { gain: 0.06, send: 0.1 }); },
+    // Opening the streak panel: an intro. Riser, hit, then a shimmer chord (bigger with a longer streak).
+    streakOpen(t, o = {}) {
+      const big = (o.days || 0) >= 7;
+      riser(t, 0.48, 110, 880, { gain: 0.11 });
+      riser(t, 0.48, 220, 1760, { gain: 0.05, type: 'triangle', lp0: 500, lp1: 9000 });
+      air(t, 0.5, 1500, 9000, { gain: 0.035, type: 'highpass', q: 0.5 });
+      const hit = t + 0.5;
+      tone(hit, 78, 0.55, { glideTo: 38, gain: 0.34, send: 0.1 });                  // sub-bass impact
+      air(hit, 0.14, 2500, 300, { gain: 0.1, type: 'lowpass', q: 0.7 });          // the thud's air
+      [A5, E6, N(24)].forEach((f, i) => tone(hit + 0.02 + i * 0.045, f, 1.5, { gain: 0.17 - i * 0.03, bell: true }));
+      tone(hit + 0.02, N(16), 1.4, { gain: 0.08, bell: true });                    // C#6: the major third
+      if (big) { tone(hit + 0.2, N(28), 1.6, { gain: 0.09, bell: true }); air(hit + 0.05, 0.9, 6000, 12000, { gain: 0.03, type: 'highpass', q: 0.4 }); }
+    },
     shutter(t) { air(t, 0.03, 3600, 2600, { gain: 0.16, q: 2 }); air(t + 0.05, 0.05, 2200, 1500, { gain: 0.1, q: 2 }); },
     photo(t) { air(t, 0.03, 3600, 2600, { gain: 0.16, q: 2 }); air(t + 0.05, 0.05, 2200, 1500, { gain: 0.1, q: 2 }); [E5, B5, E6].forEach((f, i) => tone(t + 0.16 + i * 0.085, f, 0.9, { gain: 0.17 - i * 0.03, bell: true })); },
     water(t) { tone(t, 980, 0.16, { glideTo: 310, gain: 0.26, send: 0.6 }); tone(t + 0.09, 620, 0.1, { glideTo: 1100, gain: 0.09, send: 0.5 }); air(t, 0.05, 2800, 1200, { gain: 0.05 }); },
@@ -110,7 +151,7 @@
     error(t) { tone(t, 247, 0.22, { gain: 0.14 }); tone(t + 0.13, 196, 0.3, { gain: 0.13 }); },
   };
 
-  const BUZZ = { open: 8, save: [14, 40, 14], photo: [10, 30, 18], water: 10, goal: [20, 50, 20, 50, 40], streak: [16, 40, 30], error: [30, 40, 30], remove: 12 };
+  const BUZZ = { streakOpen: [12, 70, 40], add: 10, pick: 6, open: 8, save: [14, 40, 14], photo: [10, 30, 18], water: 10, goal: [20, 50, 20, 50, 40], streak: [16, 40, 30], error: [30, 40, 30], remove: 12 };
 
   function play(name, opts) {
     const s = settings();
@@ -136,7 +177,7 @@
     if (ctx.state === 'suspended') ctx.resume().then(flush).catch(() => {}); else flush();
   }
 
-  ['pointerdown', 'keydown', 'touchstart'].forEach((type) => window.addEventListener(type, unlock, { passive: true }));
+  ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'].forEach((type) => window.addEventListener(type, unlock, { passive: true }));
 
   window.sfx = {
     play,

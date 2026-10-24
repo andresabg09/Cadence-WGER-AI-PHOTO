@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="cadence">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>cadence · Perfil</title>
 <meta name="theme-color" content="#0A0A0F">
 <link rel="manifest" href="static/manifest.json">
@@ -34,9 +38,12 @@
 
   <div class="app-content" id="content" style="display:flex;flex-direction:column;gap:16px;padding-bottom:60px;">
     <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:8px 0 4px;">
-      <div id="avatar" style="width:76px;height:76px;border-radius:26px;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));display:flex;align-items:center;justify-content:center;box-shadow:0 0 30px -6px rgba(124,92,255,0.5);">
-        <span class="disp" id="initial" style="font-size:28px;font-weight:700;color:#fff;">·</span>
-      </div>
+      <button type="button" id="avatar" aria-label="Cambiar foto de perfil" style="position:relative;width:84px;height:84px;border-radius:28px;border:none;padding:0;cursor:pointer;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));display:flex;align-items:center;justify-content:center;box-shadow:0 0 30px -6px rgba(124,92,255,0.5);background-size:cover;background-position:center;">
+        <span class="disp" id="initial" style="font-size:30px;font-weight:700;color:#fff;">·</span>
+        <span aria-hidden="true" style="position:absolute;right:-6px;bottom:-6px;width:30px;height:30px;border-radius:50%;background:var(--card);border:2px solid var(--bg);display:flex;align-items:center;justify-content:center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 8a2 2 0 012-2h1.2l.9-1.5A2 2 0 0110 3.5h4a2 2 0 011.9 1l.9 1.5H18a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="var(--ink)" stroke-width="1.8"/><circle cx="12" cy="13" r="3.3" stroke="var(--ink)" stroke-width="1.8"/></svg>
+        </span>
+      </button>
       <div style="text-align:center;">
         <div class="disp" id="userName" style="font-size:17px;font-weight:700;">&nbsp;</div>
         <div id="userEmail" style="font-size:12px;color:var(--ink-soft);margin-top:2px;">&nbsp;</div>
@@ -98,6 +105,10 @@ function openSheet(html, bind) {
 function render() {
   const p = me.profile;
   $('initial').textContent = (me.name || '?').trim().charAt(0).toUpperCase();
+  const pic = $('avatar');
+  pic.style.backgroundImage = me.avatar_v ? `url('api/avatar?v=${me.avatar_v}')` : '';
+  $('initial').style.display = me.avatar_v ? 'none' : '';
+  try { if (me.avatar_v) localStorage.setItem('cadence_avatar_v', String(me.avatar_v)); else localStorage.removeItem('cadence_avatar_v'); } catch { /* no storage */ }
   $('userName').textContent = me.name;
   $('userEmail').textContent = me.email;
   $('statWeight').textContent = p.weight_kg != null ? Number(p.weight_kg).toFixed(1) : '–';
@@ -112,6 +123,45 @@ async function loadStreak() {
     $('statStreak').textContent = s.current ? s.current.length : 0;
   } catch { /* the number just stays empty */ }
 }
+
+// ---- profile picture: anyone can choose their own (camera or gallery); it is trimmed to a square and kept small ----
+function squareJpeg(file, size = 360) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      canvas.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.86));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer esa imagen')); };
+    img.src = url;
+  });
+}
+
+$('avatar').addEventListener('click', () => openSheet(`
+  <h3 class="disp" style="margin:0 0 14px;font-size:17px;">Foto de perfil</h3>
+  <label class="btn-primary" style="cursor:pointer;">Elegir o tomar una foto<input type="file" accept="image/*" id="pic" style="display:none;"></label>
+  ${me.avatar_v ? '<button type="button" class="btn-secondary" id="picDel" style="margin-top:10px;min-height:46px;">Quitar la foto</button>' : ''}
+  <div class="form-error" id="sErr" style="margin-top:10px;"></div>`, (sheet, close) => {
+  const fail = (err) => { const e = sheet.querySelector('#sErr'); e.textContent = err.message || 'No se pudo guardar la foto'; e.classList.add('show'); };
+  sheet.querySelector('#pic').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      me = await apiPut('api/avatar', { image: await squareJpeg(file) });
+      if (window.sfx) sfx.play('save');
+      close(() => { render(); paintAvatars(); });
+    } catch (err) { fail(err); }
+  });
+  const del = sheet.querySelector('#picDel');
+  if (del) del.addEventListener('click', async () => {
+    try { me = await apiDelete('api/avatar'); close(render); } catch (err) { fail(err); }
+  });
+}));
 
 // ---- name ----
 $('editName').addEventListener('click', () => openSheet(`

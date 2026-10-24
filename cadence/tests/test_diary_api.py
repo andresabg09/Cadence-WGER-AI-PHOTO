@@ -102,6 +102,8 @@ def test_calendar_marks_days_and_restarts_the_streak_after_a_gap():
         assert by_day["2026-09-01"]["streak"] == 3  # Aug 30, Aug 31 and Sep 1
         assert by_day["2026-09-02"]["streak"] == 4 and by_day["2026-09-02"]["count"] == 2
         assert by_day["2026-09-05"]["streak"] == 1 and by_day["2026-09-06"]["streak"] == 2
+        assert by_day["2026-09-02"]["kcal"] > by_day["2026-09-01"]["kcal"] > 0  # two entries that day vs one
+        assert data["goal_kcal"] > 0
         assert http.get("/api/calendar", params={"month": "xx"}).status_code == 400
     finally:
         patcher.stop()

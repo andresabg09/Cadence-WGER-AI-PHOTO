@@ -51,7 +51,7 @@
   <!-- The day you are looking at: always on top, with the week and a way back to today -->
   <div class="day-bar" id="dayBar">
     <div class="db-top">
-      <div class="db-title"><span class="disp db-label" id="dbLabel">Hoy</span><span class="db-date" id="dbDate"></span></div>
+      <div class="db-title" id="dbTitle" role="button" tabindex="0" aria-label="Abrir el calendario"><span class="disp db-label" id="dbLabel">Hoy</span><span class="db-date" id="dbDate"></span></div>
       <button type="button" class="db-cal" id="dbCal" aria-label="Abrir el calendario">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3" stroke="currentColor" stroke-width="2"/><path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         <span id="dbMonth">Octubre</span>
@@ -1093,6 +1093,27 @@ function goToDate(iso) {
   loadToday();
 }
 
+// Swipe the diary sideways to change day (right = the day before). Rows that already swipe (delete) and the week strip keep their own gesture.
+(function () {
+  const area = document.querySelector('.app-content');
+  let start = null;
+  area.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    start = e.touches.length === 1 && !e.target.closest('.swipe-row, .pg-swipe, .db-pager, input, textarea, select') ? { x: t.clientX, y: t.clientY } : null;
+  }, { passive: true });
+  area.addEventListener('touchend', (e) => {
+    if (!start || !latestToday || document.querySelector('.sheet-scrim')) { start = null; return; }
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    start = null;
+    if (Math.abs(dx) < 90 || Math.abs(dx) < 2.2 * Math.abs(dy)) return;
+    if (dx < 0 && latestToday.date >= latestToday.today) return; // nothing after today
+    if (window.sfx) sfx.play('tick');
+    goToDate(shiftDate(latestToday.date, dx > 0 ? -1 : 1));
+  }, { passive: true });
+})();
+
 // ---- The day bar: what day you are looking at (big), the weeks (a smooth swipeable strip) and the way back to today ----
 const DOW_LETTER = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 const STRIP_WEEKS_BACK = 104; // two years of weeks are ready to swipe through
@@ -1134,7 +1155,14 @@ function updateCell(btn, today, selected) {
   btn.setAttribute('aria-pressed', String(iso === selected));
   const info = stripInfo[iso];
   btn.querySelector('.db-mark').innerHTML = state === 'flame' ? flameSvg(info.streak, 14) : state === 'late' ? '<i class="db-late"></i>' : '';
-  btn.setAttribute('aria-label', `${cap(longDay(iso))}${state === 'flame' ? `, racha de ${info.streak} ${info.streak === 1 ? 'día' : 'días'}` : state === 'late' ? ', registrado después, sin racha' : state === 'empty' ? ', sin registro' : ''}`);
+  // the ring around a day with entries: how much of the goal was eaten (green inside the band, amber above it)
+  const num = btn.querySelector('.db-num');
+  const goal = (latestToday && latestToday.goal && latestToday.goal.kcal) || 0;
+  const kcal = info && info.kcal ? info.kcal : 0;
+  const ratio = goal > 0 ? kcal / goal : 0;
+  num.style.setProperty('--p', String(Math.min(100, Math.round(ratio * 100))));
+  num.style.setProperty('--rc', ratio > 1.15 ? 'var(--ember)' : ratio >= 0.9 ? 'var(--good)' : 'var(--accent-to)');
+  btn.setAttribute('aria-label', `${cap(longDay(iso))}${state === 'flame' ? `, racha de ${info.streak} ${info.streak === 1 ? 'día' : 'días'}` : state === 'late' ? ', registrado después, sin racha' : state === 'empty' ? ', sin registro' : ''}${kcal ? `, ${kcal} kcal` : ''}`);
 }
 
 function paintStrip(data, wide) {
@@ -1213,7 +1241,11 @@ function renderDayBar(data) {
   lastSelected = data.date;
   updateStripLabel(data.today);
 
-  document.getElementById('dbCal').onclick = () => { if (window.sfx) sfx.play('open'); openCalendar(data.date, data.today, stripMonthKey); };
+  const openCal = () => { if (window.sfx) sfx.play('open'); openCalendar(data.date, data.today, stripMonthKey); };
+  document.getElementById('dbCal').onclick = openCal;
+  const title = document.getElementById('dbTitle');
+  title.onclick = openCal;
+  title.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCal(); } };
   pager.onclick = (e) => {
     const btn = e.target.closest('.db-day');
     if (!btn || btn.disabled || btn.dataset.date === data.date) return;
@@ -1245,7 +1277,8 @@ function renderDayBar(data) {
     document.getElementById('dbBack').onclick = () => { if (window.sfx) sfx.play('pick'); goToDate(data.today); };
   }
   // Today's own flame comes straight from the diary being shown; the rest from the calendar, read behind it.
-  if (isToday && data.totals && data.totals.kcal > 0 && data.streak_days > 0) stripInfo[data.date] = { date: data.date, streak: data.streak_days };
+  if (isToday && data.totals && data.totals.kcal > 0 && data.streak_days > 0) stripInfo[data.date] = { date: data.date, streak: data.streak_days, kcal: Math.round(data.totals.kcal) };
+  else if (stripInfo[data.date] && data.totals) stripInfo[data.date].kcal = Math.round(data.totals.kcal);
   paintStrip(data, true);
   const sig = `${data.date}|${Math.round(data.totals ? data.totals.kcal : 0)}|${data.streak_days}`;
   const changed = sig !== stripSig;

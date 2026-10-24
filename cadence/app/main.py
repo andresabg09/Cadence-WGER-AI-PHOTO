@@ -722,11 +722,19 @@ def calendar(month: str | None = None, user: store.User = Depends(current_user))
             counting |= older_counting
             window_start = older_start
         streaks = streak_by_day(counting)
+        kcal_by_day: dict[date_type, float] = {}
+        try:  # calories per day for the ring in the week strip; the calendar still works without them
+            month_entries = user_entries(wger, user, plan_id, datetime.combine(first, time.min, tzinfo=now.tzinfo),
+                                         datetime.combine(last, time.max, tzinfo=now.tzinfo))
+            kcal_by_day = {d: t["kcal"] for d, t in day_totals(month_entries, lambda i: ingredient_info(wger, user, i)).items()}
+        except Exception:  # noqa: BLE001
+            logger.exception("no se pudieron sumar las calorias del mes")
         return CalendarResponse(
             month=first.strftime("%Y-%m"),
             today=real_today.isoformat(),
+            goal_kcal=_goal_kcal(user),
             days=[
-                CalendarDay(date=d.isoformat(), count=counts[d], streak=streaks.get(d, 0))
+                CalendarDay(date=d.isoformat(), count=counts[d], streak=streaks.get(d, 0), kcal=round(kcal_by_day.get(d, 0)))
                 for d in sorted(counts) if first <= d <= last
             ],
         )

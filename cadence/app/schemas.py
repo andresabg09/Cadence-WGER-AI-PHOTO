@@ -255,11 +255,13 @@ class CalendarDay(BaseModel):
     # Consecutive same-day-logged days ending on this one (1 = a new streak starts).
     # 0 = the day has entries but they were all added later (old photos): no flame.
     streak: int
+    kcal: int = 0  # calories eaten that day (the ring around the day in the week strip)
 
 
 class CalendarResponse(BaseModel):
     month: str  # YYYY-MM
     today: str
+    goal_kcal: float = 0
     days: list[CalendarDay]
 
 

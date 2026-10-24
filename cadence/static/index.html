@@ -29,10 +29,10 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m0 0l-4 4m4-4l4 4M5 20h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Subir foto
       </a>
-      <div class="streak-pill">
+      <button type="button" class="streak-pill" id="streakBtn" aria-label="Ver mi racha">
         <span class="flame">🔥</span>
         <span class="mono" id="streakValue" style="font-weight:700;color:var(--ember);font-size:13px;">–</span>
-      </div>
+      </button>
       <button class="icon-btn" id="themeToggle" aria-label="Apariencia">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"></svg>
       </button>
@@ -449,6 +449,77 @@ async function openCalendar(selected, today) {
   show();
 }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCalendar(); });
+
+
+// ---- Streak panel: the run in progress, its days, and the ones before ----
+function closeStreaks() {
+  document.querySelectorAll('.streak-scrim, .streak-sheet').forEach((el) => el.remove());
+}
+
+function shortDay(iso) {
+  return new Date(`${iso}T12:00:00`).toLocaleDateString('es', { day: 'numeric', month: 'short' }).replace(/\./g, '');
+}
+
+function dayWord(n) { return n === 1 ? 'día' : 'días'; }
+
+async function openStreaks() {
+  closeStreaks();
+  const scrim = document.createElement('div');
+  scrim.className = 'sheet-scrim streak-scrim';
+  const sheet = document.createElement('div');
+  sheet.className = 'entry-sheet streak-sheet';
+  sheet.setAttribute('role', 'dialog');
+  sheet.setAttribute('aria-label', 'Mi racha');
+  sheet.innerHTML = '<div class="cal-loading" style="text-align:center;padding:30px 0;">Cargando tu racha…</div>';
+  document.body.appendChild(scrim);
+  document.body.appendChild(sheet);
+  scrim.addEventListener('click', closeStreaks);
+
+  let data;
+  try {
+    data = await apiGet('api/streaks');
+  } catch (err) {
+    sheet.innerHTML = `<div class="save-error show" style="margin:0;">No pudimos cargar tu racha: ${escapeHtml(err.message)}</div>`;
+    return;
+  }
+  const cur = data.current;
+  const len = cur ? cur.length : 0;
+  const hint = !cur
+    ? 'No tienes una racha activa. Registra algo hoy y empieza una nueva: arranca en 1.'
+    : data.logged_today
+      ? 'Ya registraste hoy: tu racha sigue viva. Mañana suma otro día.'
+      : 'Aún no registras hoy. Hazlo antes de que acabe el día para mantenerla; si no, vuelve a 1.';
+  const chain = (data.current_days || []).map((iso, i) =>
+    `<button type="button" class="chain-day" data-date="${iso}" aria-label="${shortDay(iso)}, día ${i + 1} de la racha">
+       ${flameSvg(i + 1, 16)}<b>${i + 1}</b><span>${shortDay(iso)}</span></button>`).join('');
+  const previous = data.previous.map((run) =>
+    `<button type="button" class="run-row" data-date="${run.end}">
+       ${flameSvg(run.length, 18)}
+       <span class="run-len">${run.length} ${dayWord(run.length)}</span>
+       <span class="run-range">${run.start === run.end ? shortDay(run.start) : `${shortDay(run.start)} – ${shortDay(run.end)}`}</span>
+     </button>`).join('');
+
+  sheet.innerHTML = `
+    <div class="streak-hero">
+      <div class="streak-big">${flameSvg(Math.max(len, 1), 46)}</div>
+      <div>
+        <div class="disp streak-count">${len} <small>${dayWord(len)}</small></div>
+        <div class="when">${cur ? 'Racha actual' : 'Sin racha activa'}${data.best ? ` · mejor: ${data.best} ${dayWord(data.best)}` : ''}</div>
+      </div>
+    </div>
+    <p class="cal-note" style="margin:10px 0 0;">${hint}</p>
+    ${chain ? `<label class="field">DÍAS DE ESTA RACHA</label><div class="chain">${chain}</div>` : ''}
+    ${previous ? `<label class="field">RACHAS ANTERIORES</label><div class="runs">${previous}</div>` : ''}
+    <p class="cal-note">Solo cuenta registrar el mismo día: subir una foto vieja llena ese día pero no recupera la racha.</p>
+    <div class="sheet-actions"><button type="button" class="btn-primary" id="streakCal">Ver calendario</button></div>`;
+  sheet.querySelectorAll('[data-date]').forEach((el) => el.addEventListener('click', () => { closeStreaks(); goToDate(el.dataset.date); }));
+  sheet.querySelector('#streakCal').addEventListener('click', () => {
+    closeStreaks();
+    openCalendar(latestToday ? latestToday.date : data.today, data.today);
+  });
+}
+document.getElementById('streakBtn').addEventListener('click', openStreaks);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeStreaks(); });
 
 // ---- Entry detail: photo, numbers, portion, meal and a note ----
 const MEAL_CHOICES = [['desayuno', 'Desayuno'], ['almuerzo', 'Almuerzo'], ['merienda', 'Merienda'], ['cena', 'Cena']];

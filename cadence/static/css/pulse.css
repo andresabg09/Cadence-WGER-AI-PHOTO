@@ -559,3 +559,27 @@ button { font-family: inherit; }
 
 .cal-late { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: rgba(127,127,140,0.7); vertical-align: middle; }
 .cal-cell .cal-late { margin-top: 2px; }
+
+/* ---- Streak panel ---- */
+button.streak-pill { font-family: inherit; cursor: pointer; }
+.streak-hero { display: flex; align-items: center; gap: 16px; }
+.streak-big { width: 72px; height: 72px; border-radius: 22px; background: var(--bg); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.streak-count { font-size: 30px; font-weight: 700; line-height: 1; }
+.streak-count small { font-size: 14px; font-weight: 600; color: var(--ink-soft); }
+.chain { display: flex; flex-wrap: wrap; gap: 6px; }
+.chain-day {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 52px; padding: 7px 6px 6px;
+  border-radius: 12px; border: 1px solid var(--card-border); background: var(--bg); color: var(--ink); font-family: inherit; cursor: pointer;
+}
+.chain-day b { font-family: 'Space Mono', monospace; font-size: 11px; line-height: 1; }
+.chain-day span { font-size: 9.5px; color: var(--ink-soft); font-weight: 600; }
+.runs { display: flex; flex-direction: column; gap: 6px; }
+.run-row {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--card-border);
+  background: var(--bg); color: var(--ink); font-family: inherit; cursor: pointer; text-align: left;
+}
+.run-row .run-len { font-weight: 700; font-size: 13px; }
+.run-row .run-range { margin-left: auto; font-size: 11.5px; color: var(--ink-soft); }
+svg.flame { animation: none; }                      /* the calendar grid stays calm */
+.streak-big svg.flame { animation: flicker 1.8s ease-in-out infinite; }
+.streak-big svg.flame.t4, .streak-big svg.flame.t5 { filter: drop-shadow(0 0 8px currentColor); }

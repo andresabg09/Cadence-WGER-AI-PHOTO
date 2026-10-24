@@ -69,13 +69,15 @@ def test_food_values_are_sanity_checked(wger):
 
 def test_barcode_prefers_own_then_wger_then_nothing(wger, monkeypatch):
     admin, _ = two_people()
-    monkeypatch.setattr(main, "_off_product", lambda code: {"name": "Galletas", "kcal": 450, "protein": 6, "carbs": 70, "fat": 16} if code == "8000000000019" else None)
+    cookies = {"name": "Galletas", "kcal": 450, "protein": 6, "carbs": 70, "fat": 16}
+    monkeypatch.setattr(main, "_off_lookup", lambda code: (cookies, "found", "Galletas") if code == "8000000000019" else (None, "not_listed", None))
     assert admin.get("/api/barcode/abc").status_code == 422
     hit = admin.get("/api/barcode/7501055300004").json()
     assert (hit["found"], hit["source"], hit["id"], hit["kcal"]) == (True, "wger", 77, 61)
     off = admin.get("/api/barcode/8000000000019").json()
     assert (off["found"], off["source"], off["id"], off["name"]) == (True, "off", None, "Galletas")
-    assert admin.get("/api/barcode/1234567890123").json()["found"] is False
+    missing = admin.get("/api/barcode/1234567890123").json()
+    assert (missing["found"], missing["reason"]) == (False, "not_listed")  # both databases answered: it is not there
     made = admin.post("/api/foods", json={**off, "barcode": "8000000000019"}).json()
     again = admin.get("/api/barcode/8000000000019").json()
     assert (again["source"], again["id"]) == ("own", made["id"])
@@ -214,3 +216,16 @@ def test_water_saved_on_a_device_is_imported_once_keeping_the_larger_amount(wger
     assert sent == {"imported": 2}
     assert admin.get("/api/today").json()["water_ml"] == 500  # the server already had more
     assert admin.get("/api/today?date=2026-01-05").json()["water_ml"] == 750
+
+
+def test_barcode_not_found_says_why(wger, monkeypatch):
+    admin, _ = two_people()
+    monkeypatch.setattr(main, "_off_lookup", lambda code: (None, "no_nutrition", "Salsa de la casa"))
+    listed = admin.get("/api/barcode/1234567890123").json()
+    assert (listed["found"], listed["reason"], listed["name"]) == (False, "no_nutrition", "Salsa de la casa")
+    monkeypatch.setattr(main, "_off_lookup", lambda code: (None, "unreachable", None))
+    assert admin.get("/api/barcode/1234567890123").json()["reason"] == "unreachable"
+    # wger failing while Open Food Facts says "not listed" must not be presented as "it does not exist"
+    monkeypatch.setattr(main, "_off_lookup", lambda code: (None, "not_listed", None))
+    monkeypatch.setattr(wger.__class__, "get_ingredient_by_code", lambda self, code: (_ for _ in ()).throw(RuntimeError("wger caido")), raising=False)
+    assert admin.get("/api/barcode/1234567890123").json()["reason"] == "unreachable"

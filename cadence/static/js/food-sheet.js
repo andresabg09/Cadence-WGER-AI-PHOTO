@@ -10,10 +10,11 @@ function openFoodSheet(initial, onSaved) {
   sheet.setAttribute('role', 'dialog');
   sheet.setAttribute('aria-label', 'Alimento propio');
   sheet.innerHTML = `
+    ${start.notice ? `<div class="sheet-notice" role="note"><h3 class="disp">${escapeHtml(start.notice.title)}</h3><p>${escapeHtml(start.notice.text)}</p></div>` : `
     <h3 class="disp" style="margin:0 0 4px;font-size:17px;">${start.barcode ? 'Producto escaneado' : 'Alimento propio'}</h3>
     <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);line-height:1.5;">${start.barcode
       ? 'Revisa los valores (por cada 100 g) y guárdalos: la próxima vez saldrá solo al escanear.'
-      : 'Escribe los valores por cada 100 g (están en la etiqueta). Solo tú lo verás.'}</p>
+      : 'Escribe los valores por cada 100 g (están en la etiqueta). Solo tú lo verás.'}</p>`}
     <label class="field"><span>NOMBRE</span><input class="input" id="fName" maxlength="80" value="${escapeHtml(start.name || '')}" placeholder="Ej.: Pan de la abuela" autocomplete="off"></label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <label class="field"><span>CALORÍAS</span><div class="input-unit"><input class="input" id="fKcal" type="number" inputmode="decimal" min="0" max="950" step="any" value="${num(start.kcal)}"><i>kcal</i></div></label>

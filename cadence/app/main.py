@@ -913,26 +913,34 @@ def my_foods(user: store.User = Depends(current_user)):
     return [SearchResult(id=f["id"], name=f["name"], energy_kcal_100g=f["energy"]) for f in store.custom_foods(user.id)[:30]]
 
 
-def _off_product(code: str) -> dict | None:
-    """Open Food Facts, only as a fallback when wger could not resolve the code."""
+def _off_lookup(code: str) -> tuple[dict | None, str, str | None]:
+    """Open Food Facts, only as a fallback when wger could not resolve the code.
+
+    Returns (product with nutrition or None, why not, product name if the entry exists without nutrition):
+    why = "found" | "not_listed" (they answered: not in their database) | "no_nutrition" (listed, no values) | "unreachable".
+    """
     try:
         response = httpx.get(f"https://world.openfoodfacts.org/api/v2/product/{code}.json",
                              params={"fields": "product_name,nutriments"}, timeout=8,
                              headers={"User-Agent": "cadence/1.0 (personal nutrition diary)"})
-        if response.status_code != 200 or response.json().get("status") != 1:
-            return None
+        if response.status_code == 404 or (response.status_code == 200 and response.json().get("status") != 1):
+            return None, "not_listed", None
+        if response.status_code != 200:
+            return None, "unreachable", None
         product = response.json()["product"]
         n = product.get("nutriments") or {}
         kcal = n.get("energy-kcal_100g")
         if kcal is None and n.get("energy_100g") is not None:
             kcal = float(n["energy_100g"]) / 4.184
-        if not product.get("product_name") or kcal is None:
-            return None
-        return {"name": product["product_name"], "kcal": round(float(kcal), 1), "protein": round(float(n.get("proteins_100g") or 0), 1),
-                "carbs": round(float(n.get("carbohydrates_100g") or 0), 1), "fat": round(float(n.get("fat_100g") or 0), 1)}
+        name = (product.get("product_name") or "").strip() or None
+        if not name or kcal is None:
+            return None, "no_nutrition", name
+        return ({"name": name, "kcal": round(float(kcal), 1), "protein": round(float(n.get("proteins_100g") or 0), 1),
+                 "carbs": round(float(n.get("carbohydrates_100g") or 0), 1), "fat": round(float(n.get("fat_100g") or 0), 1)},
+                "found", name)
     except Exception:  # noqa: BLE001 - a bonus lookup
         logger.exception("Open Food Facts no respondio para %s", code)
-        return None
+        return None, "unreachable", None
 
 
 @app.get("/api/barcode/{code}", response_model=BarcodeResult)
@@ -946,22 +954,28 @@ def barcode(code: str, user: store.User = Depends(current_user)):
         return BarcodeResult(found=True, source="own", id=own["id"], name=own["name"], kcal=own["energy"], protein=own["protein"],
                              carbs=own["carbohydrates"], fat=own["fat"], barcode=code)
     wger = get_wger_client()
+    wger_failed = False
     try:
         try:
             hit = wger.get_ingredient_by_code(code)
         except Exception:  # noqa: BLE001
             logger.exception("wger no pudo buscar el codigo %s", code)
-            hit = None
+            hit, wger_failed = None, True
     finally:
         wger.close()
     if hit and hit.get("energy") is not None:
         return BarcodeResult(found=True, source="wger", id=hit["id"], name=hit["name"], kcal=float(hit["energy"]),
                              protein=float(hit.get("protein") or 0), carbs=float(hit.get("carbohydrates") or 0),
                              fat=float(hit.get("fat") or 0), barcode=code)
-    off = _off_product(code)
+    off, why, listed_name = _off_lookup(code)
     if off:
         return BarcodeResult(found=True, source="off", barcode=code, **off)
-    return BarcodeResult(found=False, barcode=code)
+    # Not found anywhere: say WHY, so the person knows what happened and what to do.
+    if why == "not_listed" and wger_failed:
+        why = "unreachable"  # one of the two databases did not answer: we cannot say it does not exist
+    if hit and hit.get("name"):
+        why, listed_name = "no_nutrition", hit["name"]
+    return BarcodeResult(found=False, barcode=code, reason=why, name=listed_name)
 
 
 @app.post("/api/workouts", response_model=WorkoutOut)

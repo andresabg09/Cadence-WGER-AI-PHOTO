@@ -262,8 +262,14 @@ async function handleCode(code) {
         addScannedFood);
       afterSheet();
     } else {
-      showToast('No encontré ese código: puedes crearlo con sus valores', 'warn');
-      openFoodSheet({ barcode: code }, addScannedFood);
+      // Say plainly what happened (the old toast hid behind the sheet): not in any database, listed without values, or no answer.
+      const name = found.name || '';
+      const why = {
+        not_listed: { title: 'No encontramos este producto', text: `El código ${code} no está en las bases de datos que consultamos (wger y Open Food Facts). Es normal con productos locales o muy nuevos. Escribe sus valores una sola vez, tal como salen en la etiqueta: se guarda en tu cuenta y la próxima vez aparecerá solo al escanearlo.` },
+        no_nutrition: { title: `Encontramos «${name}», pero sin calorías`, text: 'La base de datos tiene el producto pero no su información nutricional. Escribe los valores de la etiqueta una sola vez y quedarán guardados en tu cuenta.' },
+        unreachable: { title: 'No pudimos consultar las bases de datos', text: 'No hubo respuesta ahora mismo, así que no sabemos si el producto existe. Cancela y vuelve a escanear para reintentar, o escribe los valores de la etiqueta y se guardarán en tu cuenta.' },
+      }[found.reason] || { title: 'No encontramos este producto', text: 'Escribe sus valores una sola vez y se guardará en tu cuenta.' };
+      openFoodSheet({ barcode: code, name, notice: why }, addScannedFood);
       afterSheet();
     }
   } catch (err) {

@@ -279,6 +279,25 @@ se publica a `master` y se valida con UNA sola revision en el servidor
 - **Bloque 6 - Marca y deploy.** Rebranding wger -> cadence; decidir deploy automatico
   (ver `deploy/README.md`).
 
+## Navegacion y boton Atras (regla de Andres, 25 oct 2026; aplica a TODA pantalla nueva)
+
+cadence se usa como web y como app instalada (PWA en Android/iPhone). El boton Atras del sistema
+(o del navegador) NUNCA debe llevar a un lugar distinto de donde estabas:
+1. Todo lo que se abre ENCIMA de una pantalla (hoja de detalle, calendario, panel de rachas, visor
+   de foto, hoja de instalar, cualquier modal) usa `pushOverlay(cerrar)` al abrir y
+   `dismissOverlay(despues)` en TODOS sus controles de cierre (X, fondo, Esc, Guardar, Borrar)
+   (js/api.js). Atras cierra lo abierto y te deja en la misma pantalla. Nunca cerrar con
+   `elemento.remove()` suelto: desordena el historial. Lo que haya que hacer despues de cerrar
+   (recargar, ir a otro dia, abrir otra hoja) se pasa como `despues`.
+2. Un flujo que se inicia desde el diario (escanear -> confirmar, buscar -> confirmar) ocupa UNA
+   sola entrada del historial: dentro del flujo se navega con `location.replace` (enlaces con
+   `data-replace`), y al terminar o cancelar se usa `leaveFlow(fallback)` / `data-leave`, que
+   retrocede al diario. El diario marca el inicio del flujo (`cadence_from_index`) y al volver
+   aplica `applyReturnHints()` (abre el dia guardado y muestra el aviso) tambien en `pageshow`.
+3. Cambiar de dia o de mes dentro de una pantalla no agrega historial (`replaceState`).
+4. Probar siempre con Playwright (`page.goBack()`): abrir hoja -> Atras = misma pantalla;
+   diario -> buscar -> confirmar -> guardar -> Atras = sale del diario, no reentra al flujo.
+
 ## Reglas de trabajo (validas para cualquier chat futuro)
 
 - Codigo quirurgico y cambios minimos sobre reescrituras amplias.

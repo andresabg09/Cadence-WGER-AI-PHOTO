@@ -99,7 +99,7 @@
 
   <!-- Top bar -->
   <div style="position:relative;padding:24px 20px 0;display:flex;align-items:center;justify-content:space-between;z-index:2;">
-    <a href="index.html" aria-label="Cerrar" style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.12);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;">
+    <a href="index.html" data-leave aria-label="Cerrar" style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.12);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
     </a>
     <div id="angleBadge" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:100px;padding:7px 13px;">
@@ -304,14 +304,14 @@ async function runAnalysis(source) {
     const data = await apiPost('api/analyze', formData, { isFormData: true });
     renderLiveChips(data.components);
     storePlate(data.components, thumb, takenAt);
-    setTimeout(() => { window.location.href = 'confirm.html'; }, 600);
+    setTimeout(() => { window.location.replace('confirm.html'); }, 600);
   } catch (err) {
     setBusy(false);
     if (/identific/i.test(err.message || '')) {
       // The AI saw no food: the confirm screen has the "No logramos identificar el plato" state
       // (or, when appending, the plate we already had).
       storePlate([], thumb, takenAt);
-      window.location.href = 'confirm.html';
+      window.location.replace('confirm.html');
       return;
     }
     caption.textContent = 'No pudimos analizar la foto — intenta de nuevo';

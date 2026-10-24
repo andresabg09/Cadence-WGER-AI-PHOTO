@@ -2,6 +2,67 @@
 // exposes this service under /cadence/, and absolute paths would resolve
 // against the domain root instead of that prefix (see nginx.conf).
 
+// ---- Navigation: the system Back button must never surprise ----
+// Rules (also in CLAUDE.md): (1) anything that opens on top of a screen (sheet, calendar, photo
+// viewer) takes one history step, so Back closes it and leaves you where you were; (2) a flow
+// started from the diary (scan -> confirm, search -> confirm) occupies ONE history entry: moving
+// inside it replaces, and finishing or cancelling steps back to the diary.
+const _overlays = []; // close functions, innermost last
+let _afterDismiss = null;
+
+function pushOverlay(close) {
+  _overlays.push(close);
+  history.pushState({ cadenceOverlay: _overlays.length }, '');
+}
+
+// Used by every "close" control (X, backdrop, Esc, Save): one step back; popstate does the closing.
+function dismissOverlay(after) {
+  if (!_overlays.length) { if (after) after(); return; }
+  _afterDismiss = after || null;
+  history.back();
+}
+
+window.addEventListener('popstate', (e) => {
+  const depth = (e.state && e.state.cadenceOverlay) || 0;
+  while (_overlays.length > depth) {
+    const close = _overlays.pop();
+    try { close(); } catch { /* already gone */ }
+  }
+  if (_afterDismiss && _overlays.length === depth) {
+    const fn = _afterDismiss;
+    _afterDismiss = null;
+    fn();
+  }
+});
+
+// A reload leaves a stale "overlay" marker in the current entry: clear it.
+if (history.state && history.state.cadenceOverlay) history.replaceState(null, '');
+
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') dismissOverlay(); });
+
+const FROM_INDEX_KEY = 'cadence_from_index';
+
+// Finish or cancel a flow: back to the diary entry it started from, or to `fallback` when the
+// flow was opened directly (a shortcut, a link, a reload).
+function leaveFlow(fallback) {
+  let fromIndex = false;
+  try { fromIndex = sessionStorage.getItem(FROM_INDEX_KEY) === '1'; } catch { /* no storage */ }
+  if (fromIndex && history.length > 1) {
+    try { sessionStorage.removeItem(FROM_INDEX_KEY); } catch { /* no storage */ }
+    history.back();
+  } else {
+    window.location.replace(fallback);
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const link = e.target.closest && e.target.closest('a[data-replace], a[data-leave]');
+  if (!link || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
+  e.preventDefault();
+  if (link.hasAttribute('data-leave')) leaveFlow(link.getAttribute('href'));
+  else window.location.replace(link.getAttribute('href'));
+});
+
 async function apiGet(path) {
   const response = await fetch(path);
   if (!response.ok) throw new Error(await safeText(response));

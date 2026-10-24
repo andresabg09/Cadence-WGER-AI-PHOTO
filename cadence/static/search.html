@@ -37,7 +37,7 @@
 <body class="with-shell" data-page="diario">
 <div class="app">
   <div class="page-head" style="padding:22px 20px 14px;display:flex;align-items:center;gap:12px;">
-    <a id="backLink" href="index.html" aria-label="Volver" class="icon-btn" style="width:36px;height:36px;border-radius:11px;">
+    <a id="backLink" href="index.html" data-leave aria-label="Volver" class="icon-btn" style="width:36px;height:36px;border-radius:11px;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
     </a>
     <h1 class="disp" style="margin:0;font-size:17px;font-weight:700;">Buscar alimento</h1>
@@ -82,7 +82,12 @@
 <script>
 const FAV_KEY = 'cadence_favorites';
 const params = new URLSearchParams(location.search);
-if (params.get('from') === 'confirm') document.getElementById('backLink').href = 'confirm.html';
+if (params.get('from') === 'confirm') {
+  const back = document.getElementById('backLink');
+  back.href = 'confirm.html';
+  back.removeAttribute('data-leave');
+  back.setAttribute('data-replace', '');
+}
 if (params.get('meal')) sessionStorage.setItem('cadence_meal', params.get('meal'));
 
 function loadFavorites() {
@@ -122,7 +127,7 @@ function addFood(food) {
     grams: food.last_amount_grams || food.grams || 100,
   });
   sessionStorage.setItem('cadence_analyze_result', JSON.stringify(result));
-  window.location.href = 'confirm.html';
+  window.location.replace('confirm.html');
 }
 
 function kcalFor(food) {

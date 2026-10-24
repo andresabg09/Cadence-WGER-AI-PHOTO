@@ -19,6 +19,8 @@ const SHELL_FILES = [
   'voice.html',
   'static/css/pulse.css',
   'static/js/api.js',
+  'static/js/bits.js',
+  'static/js/meal-detail.js',
   'static/js/theme.js',
   'static/js/shell.js',
   'static/js/install.js',

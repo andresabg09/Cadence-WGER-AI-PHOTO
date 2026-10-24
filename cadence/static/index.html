@@ -170,6 +170,8 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/bits.js"></script>
+<script src="static/js/meal-detail.js"></script>
 <script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/shell.js"></script>
@@ -333,7 +335,8 @@ function mealCard(meal, key) {
   card.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;">
       <span style="font-size:11px;color:var(--ink-soft);font-weight:700;text-transform:uppercase;letter-spacing:0.03em;">${escapeHtml(meal.label)}</span>
-      <span style="font-size:11px;color:var(--ink-soft);font-weight:600;">${Math.round(meal.totals.kcal)} kcal</span>
+      <span style="display:flex;align-items:center;gap:8px;"><span style="font-size:11px;color:var(--ink-soft);font-weight:600;">${Math.round(meal.totals.kcal)} kcal</span>
+        ${meal.score ? `<button type="button" class="score-pill l-${meal.score.label}" data-score aria-label="Ver la puntuación nutricional de ${escapeHtml(meal.label)}: ${meal.score.points}, ${meal.score.label}">${meal.score.points}</button>` : ''}</span>
     </div>
     ${mealRowsHtml(meal.items, key)}
     ${addLabel ? `
@@ -342,6 +345,8 @@ function mealCard(meal, key) {
       <span style="font-size:12px;font-weight:600;">Agregar otro alimento ${addLabel}</span>
     </a>` : ''}
   `;
+  const pill = card.querySelector('[data-score]');
+  if (pill) pill.addEventListener('click', () => { if (window.sfx) sfx.play('open'); openMealDetail(meal, latestToday); });
   return card;
 }
 

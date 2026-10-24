@@ -90,6 +90,7 @@ def _connect() -> sqlite3.Connection:
         ("entry_meta", "logged_on", "TEXT"),  # day the entry was really registered (streaks need it)
         ("entry_meta", "user_id", "INTEGER"),  # whose entry it is
         ("plates", "user_id", "INTEGER"),
+        ("custom_foods", "fibre", "REAL"),  # optional: grams of fibre per 100 g
     ):
         columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in columns:
@@ -465,20 +466,20 @@ def claim_entry(entry_id: str, user_id: int) -> None:
 # entries that use it too. A custom food has ingredient id -<id> everywhere; its entries are "c<id>".
 
 def create_custom_food(user_id: int, name: str, kcal: float, protein: float, carbs: float, fat: float,
-                       barcode: str | None = None) -> int:
+                       barcode: str | None = None, fibre: float | None = None) -> int:
     with closing(_connect()) as conn, conn:
         cur = conn.execute(
-            "INSERT INTO custom_foods (user_id, name, kcal, protein, carbs, fat, barcode, created_at) VALUES (?,?,?,?,?,?,?,?)",
-            (user_id, name.strip(), kcal, protein, carbs, fat, barcode or None, _now()))
+            "INSERT INTO custom_foods (user_id, name, kcal, protein, carbs, fat, barcode, created_at, fibre) VALUES (?,?,?,?,?,?,?,?,?)",
+            (user_id, name.strip(), kcal, protein, carbs, fat, barcode or None, _now(), fibre))
         return cur.lastrowid
 
 
 def _food(row) -> dict:
     return {"id": -row[0], "user_id": row[1], "name": row[2], "energy": row[3], "protein": row[4],
-            "carbohydrates": row[5], "fat": row[6], "barcode": row[7], "source": "custom"}
+            "carbohydrates": row[5], "fat": row[6], "barcode": row[7], "source": "custom", "fibres": row[8]}
 
 
-_FOOD_COLUMNS = "id, user_id, name, kcal, protein, carbs, fat, barcode"
+_FOOD_COLUMNS = "id, user_id, name, kcal, protein, carbs, fat, barcode, fibre"
 
 
 def get_custom_food(ingredient_id: int, user_id: int | None = None) -> dict | None:

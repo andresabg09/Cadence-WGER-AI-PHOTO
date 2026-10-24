@@ -258,7 +258,7 @@ async function handleCode(code) {
     if (found.found && found.id != null) {
       addScannedFood({ id: found.id, name: found.name, energy_kcal_100g: found.kcal });
     } else if (found.found) {
-      openFoodSheet({ name: found.name, kcal: found.kcal, protein: found.protein, carbs: found.carbs, fat: found.fat, barcode: code },
+      openFoodSheet({ name: found.name, kcal: found.kcal, protein: found.protein, carbs: found.carbs, fat: found.fat, fibre: found.fibre, barcode: code },
         addScannedFood);
       afterSheet();
     } else {

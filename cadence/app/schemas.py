@@ -120,6 +120,10 @@ class MealItem(BaseModel):
     has_crop: bool = False  # a stored crop is served at /api/media/crop/{diary_entry_id}
     plate_key: str | None = None  # the plate photo, served at /api/media/plate/{plate_key}
     box: list[float] | None = None
+    # Extra nutrients of this portion (None = wger does not know them); they feed the nutrition score.
+    fibre_g: float | None = None
+    sugar_g: float | None = None
+    sat_fat_g: float | None = None
 
 
 class DiaryUpdate(BaseModel):
@@ -127,11 +131,40 @@ class DiaryUpdate(BaseModel):
     meal: str | None = None  # moves the entry into that meal's time window, same day
 
 
+class ScorePart(BaseModel):
+    key: str
+    label: str
+    points: float
+    max: int
+    note: str
+
+
+class ScoreOut(BaseModel):
+    points: int
+    label: str  # Excelente | Buena | Regular | Mejorable
+    parts: list[ScorePart] = []
+    partial: list[str] = []  # criteria that could not be judged for lack of data
+
+
+class LevelOut(BaseModel):
+    value_g: float
+    target_g: float
+    pct: int
+    label: str  # bajo | medio | alto
+
+
+class LevelsOut(BaseModel):
+    protein: LevelOut | None = None
+    fibre: LevelOut | None = None  # None: no food has fibre data
+
+
 class MealGroup(BaseModel):
     key: str
     label: str
     totals: MacroTotals
     items: list[MealItem]
+    score: ScoreOut | None = None
+    levels: LevelsOut | None = None
 
 
 class WorkoutOut(BaseModel):
@@ -153,6 +186,8 @@ class TodayResponse(BaseModel):
     streak_days: int
     user_name: str
     water_ml: int = 0
+    score: ScoreOut | None = None  # the day: its meals' scores averaged by calories
+    levels: LevelsOut | None = None
 
 
 class WaterAdd(BaseModel):
@@ -222,6 +257,7 @@ class FoodIn(BaseModel):
     protein: float = 0
     carbs: float = 0
     fat: float = 0
+    fibre: float | None = None  # optional; it only improves the nutrition score
     barcode: str | None = None
 
 
@@ -234,6 +270,7 @@ class BarcodeResult(BaseModel):
     protein: float | None = None
     carbs: float | None = None
     fat: float | None = None
+    fibre: float | None = None
     barcode: str
     # When nothing was found: not_listed (the databases answered: not there) | no_nutrition (listed without values, `name` is its name) | unreachable
     reason: str | None = None

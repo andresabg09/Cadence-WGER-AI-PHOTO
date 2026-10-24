@@ -229,3 +229,24 @@ def test_barcode_not_found_says_why(wger, monkeypatch):
     monkeypatch.setattr(main, "_off_lookup", lambda code: (None, "not_listed", None))
     monkeypatch.setattr(wger.__class__, "get_ingredient_by_code", lambda self, code: (_ for _ in ()).throw(RuntimeError("wger caido")), raising=False)
     assert admin.get("/api/barcode/1234567890123").json()["reason"] == "unreachable"
+
+
+def test_today_scores_each_meal_and_the_day_with_partial_data(wger):
+    admin, ana = two_people()
+    rich = admin.post("/api/foods", json={**FOOD, "name": "Lentejas de la casa", "kcal": 116, "protein": 9, "carbs": 20, "fat": 0.4, "fibre": 7.9}).json()
+    plain = admin.post("/api/foods", json={**FOOD, "name": "Galletas", "kcal": 450, "protein": 6, "carbs": 70, "fat": 16}).json()
+    assert admin.post("/api/foods", json={**FOOD, "fibre": 140}).status_code == 422
+    admin.post("/api/confirm", json={"items": [{"ingredient_id": rich["id"], "amount_grams": 250}, {"ingredient_id": plain["id"], "amount_grams": 40}], "meal": "almuerzo"})
+    day = admin.get("/api/today").json()
+    meal = day["meals"][0]
+    assert meal["score"]["points"] > 0 and meal["score"]["label"] in ("Excelente", "Buena", "Regular", "Mejorable")
+    keys = [p["key"] for p in meal["score"]["parts"]]
+    assert "macros" in keys and "protein" in keys and "fibre" in keys
+    assert meal["score"]["partial"] == ["fibra de Galletas", "azúcar y grasa saturada"]  # own foods have no sugar or sat. fat: reported, not punished
+    by_name = {i["name"]: i for i in meal["items"]}
+    assert by_name["Lentejas de la casa"]["fibre_g"] == 19.75 and by_name["Galletas"]["fibre_g"] is None
+    assert meal["levels"]["protein"]["label"] in ("bajo", "medio", "alto") and meal["levels"]["fibre"]["target_g"] > 0
+    assert day["score"]["points"] == meal["score"]["points"]  # one meal: the day is that meal
+    assert day["levels"]["protein"]["value_g"] > 0
+    # nothing logged: no score
+    assert ana.get("/api/today").json()["score"] is None

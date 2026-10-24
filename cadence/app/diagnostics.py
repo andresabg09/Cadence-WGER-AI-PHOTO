@@ -138,3 +138,20 @@ def _wger_checks(checks: list[dict], found: dict[str, int], wger: WgerClient, de
         _run(checks, "Registrar y borrar una comida de prueba",
              "wger rechazo el registro: avisame con este mensaje (probablemente un campo de /nutritiondiary/ distinto en tu version).",
              write_test)
+
+    if deep and "plan" in found:
+        def staple_write_test() -> str:
+            from datetime import timedelta
+
+            from .meals import datetime_for_meal, local_now
+
+            staples = wger.list_staples()
+            _require(bool(staples), "no hay alimentos basicos cargados (seed_staples.py)")
+            # Same shape as a real confirm: a basic food, dated yesterday inside the breakfast window.
+            when = datetime_for_meal("desayuno", local_now() - timedelta(days=1))
+            entry_id = wger.log_diary_entry(found["plan"], staples[0]["id"], 1, when)
+            wger.delete_diary_entry(entry_id)
+            return f"registro de prueba con '{staples[0]['name']}' creado y borrado"
+
+        _run(checks, "Registrar un alimento basico de cadence (fecha de ayer)",
+             "wger rechazo registrar un alimento basico: copiame este mensaje completo.", staple_write_test)

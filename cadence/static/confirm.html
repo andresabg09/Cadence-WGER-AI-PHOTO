@@ -72,6 +72,7 @@
       <span style="font-size:12px;color:var(--ink-soft);font-weight:600;">TOTAL DEL PLATO</span>
       <span class="disp" id="totalKcal" style="font-size:19px;font-weight:700;">0 kcal</span>
     </div>
+    <div class="save-error" id="saveError" role="alert"></div>
     <button class="btn-primary" id="confirmBtn">
       Confirmar y registrar
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
@@ -437,6 +438,8 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
 
   const payload = { items, meal, taken_at: takenAt };
   const btn = document.getElementById('confirmBtn');
+  const errorBox = document.getElementById('saveError');
+  errorBox.classList.remove('show');
   btn.disabled = true;
   btn.textContent = 'Guardando…';
 
@@ -455,7 +458,10 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
       setTimeout(() => { window.location.href = 'index.html'; }, 1400);
       return;
     }
-    showToast(`No se pudo guardar en wger: ${err.message}`);
+    // Shown twice on purpose: the toast disappears, the box stays until the next try.
+    errorBox.textContent = `No se pudo guardar: ${err.message || 'error desconocido'}`;
+    errorBox.classList.add('show');
+    showToast(`No se pudo guardar: ${err.message || 'error desconocido'}`);
     btn.disabled = false;
     btn.innerHTML = 'Confirmar y registrar';
   }

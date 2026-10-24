@@ -8,12 +8,24 @@ async function apiGet(path) {
   return response.json();
 }
 
-async function apiPost(path, body, { isFormData = false } = {}) {
-  const response = await fetch(path, {
-    method: 'POST',
-    headers: isFormData ? undefined : { 'Content-Type': 'application/json' },
-    body: isFormData ? body : JSON.stringify(body),
-  });
+async function apiPost(path, body, { isFormData = false, timeoutMs = 90000 } = {}) {
+  // A request that never answers must end in a visible error, not a button that does nothing.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetch(path, {
+      method: 'POST',
+      headers: isFormData ? undefined : { 'Content-Type': 'application/json' },
+      body: isFormData ? body : JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err && err.name === 'AbortError') throw new Error('El servidor tardó demasiado en responder');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!response.ok) throw new Error(await safeText(response));
   return response.json();
 }

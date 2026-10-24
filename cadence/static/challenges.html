@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="cadence">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>cadence · Retos</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
+<link rel="stylesheet" href="static/css/pulse.css">
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body class="with-shell" data-page="retos">
+<div class="app">
+  <div class="page-head" style="padding:22px 20px 12px;display:flex;align-items:center;gap:12px;">
+    <a href="index.html" id="backLink" aria-label="Volver" class="icon-btn" style="width:44px;height:44px;border-radius:13px;flex-shrink:0;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
+    </a>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:10.5px;color:var(--ink-soft);font-weight:700;letter-spacing:.06em;" id="kicker">TUS RETOS</div>
+      <h1 class="disp" style="margin:0;font-size:20px;font-weight:700;">Retos</h1>
+    </div>
+    <div class="coin-pill" aria-label="Tus monedas"><span id="coinIco"></span><b class="mono" id="coins">–</b></div>
+  </div>
+  <div class="app-content progress-grid" style="padding-bottom:60px;">
+    <div class="col">
+      <div class="card" id="dailyCard"><div class="skeleton" style="height:180px;"></div></div>
+      <div class="card" id="weeklyCard"><div class="skeleton" style="height:240px;"></div></div>
+      <div class="rule-note"><span>✓</span><span>Los retos premian registrar, ser constante y comer con equilibrio. Ninguno te pide comer menos de lo que necesitas.</span></div>
+    </div>
+    <div class="col">
+      <div class="card" id="shopCard"><div class="skeleton" style="height:200px;"></div></div>
+      <a class="menu-row card" href="awards.html" style="border:1px solid var(--card-border);border-radius:18px;"><span class="ico">🏆</span><span class="label">Mis premios</span><span class="chev">›</span></a>
+    </div>
+  </div>
+</div>
+
+<script src="static/js/api.js"></script>
+<script src="static/js/bits.js"></script>
+<script src="static/js/sfx.js"></script>
+<script src="static/js/theme.js"></script>
+<script src="static/js/shell.js"></script>
+<script>
+
+const $ = (id) => document.getElementById(id);
+$('coinIco').innerHTML = bits.coin(24);
+let data = null;
+const ART_ON = { todo: false, ready: true, claimed: true };
+
+function rowHtml(c) {
+  const pct = c.total ? Math.min(100, (c.now / c.total) * 100) : 0;
+  const left = bits.award(c.art, 52, c.state !== 'todo');
+  const info = c.note ? `<div class="ch-note">${bits.esc(c.note)}</div>`
+    : c.state === 'ready' ? `<button type="button" class="claim-btn" data-claim="${c.key}">Reclamar +${c.reward} ${bits.coin(16)}</button>`
+    : c.state === 'claimed' ? '<div class="ch-done">Reclamado ✓</div>'
+    : `<div class="ch-bar"><div class="track"><i style="width:${pct.toFixed(0)}%"></i></div><span class="mono">${c.now} / ${c.total}</span></div>`;
+  const reward = c.state === 'ready' ? '' : `<div class="ch-reward"><span class="mono">+${c.reward}</span>${bits.coin(17)}</div>`;
+  return `<div class="ch-row ${c.state}">${left}<div class="ch-main"><div class="ch-title">${bits.esc(c.title)}</div><div class="ch-hint">${bits.esc(c.hint)}</div>${info}</div>${reward}</div>`;
+}
+
+function section(title, list, when) {
+  const done = list.filter((c) => c.state !== 'todo').length;
+  return `<div class="card-head"><b>${title} <span class="count-chip mono">${done}/${list.length}</span></b><span class="when">${when}</span></div>${list.map(rowHtml).join('')}`;
+}
+
+function paint(d) {
+  data = d;
+  $('coins').textContent = d.coins;
+  $('dailyCard').innerHTML = section('Diario', d.daily, `${d.hours_left} h restantes`);
+  $('weeklyCard').innerHTML = section('Semanal', d.weekly, `${d.days_left} ${d.days_left === 1 ? 'día restante' : 'días restantes'}`);
+  $('shopCard').innerHTML = `<div class="card-head"><b>Tienda</b><span class="when">Solo cosas de adorno</span></div>${d.shop.map(shopRow).join('')}
+    <p class="shop-note">Las monedas no cambian tus datos ni tu meta: solo el aspecto de cadence.</p>`;
+  document.querySelectorAll('[data-claim]').forEach((b) => b.addEventListener('click', () => claim(b)));
+  document.querySelectorAll('[data-buy]').forEach((b) => b.addEventListener('click', () => buy(b.dataset.buy)));
+  document.querySelectorAll('[data-equip]').forEach((b) => b.addEventListener('click', () => equip(b.dataset.slot, b.dataset.equip || null)));
+}
+
+const SWATCH = {
+  tema_aurora: 'linear-gradient(135deg,#07100F,#8F78FF 55%,#5CF2B0)', tema_atardecer: 'linear-gradient(135deg,#120B10,#FF7A59 55%,#FFC27A)',
+  marco_dorado: 'radial-gradient(circle,#15151D 52%,#F5B942 54%,#FFE08A)',
+};
+function shopRow(it) {
+  const btn = it.owned
+    ? `<button type="button" class="shop-btn${it.equipped ? ' on' : ''}" data-equip="${it.equipped ? '' : it.key}" data-slot="${it.slot}" data-item="${it.key}">${it.equipped ? 'Quitar' : 'Usar'}</button>`
+    : `<button type="button" class="shop-btn buy" data-buy="${it.key}">${it.price} ${bits.coin(15)}</button>`;
+  return `<div class="shop-row"><span class="shop-sw" style="background:${SWATCH[it.key] || '#444'};"></span><div style="flex:1;min-width:0;"><div class="ch-title">${bits.esc(it.title)}</div><div class="ch-hint">${bits.esc(it.hint)}</div></div>${btn}</div>`;
+}
+
+async function claim(btn) {
+  btn.disabled = true;
+  try {
+    const out = await apiPost('api/challenges/claim', { key: btn.dataset.claim });
+    if (window.sfx) sfx.play('coin');
+    showToast(`+${out.amount} monedas`, 'ok');
+    await reload();
+  } catch (err) { showToast(err.message); btn.disabled = false; }
+}
+
+// A bought theme is worn on this device right away; taking it off goes back to dark.
+function wear(list) {
+  const worn = list.find((i) => i.slot === 'theme' && i.equipped);
+  let current = 'dark';
+  try { current = localStorage.getItem('cadence_theme') || 'dark'; } catch { /* no storage */ }
+  const next = worn ? worn.key.replace('tema_', '') : (['aurora', 'atardecer'].includes(current) ? 'dark' : current);
+  if (next !== current) { try { localStorage.setItem('cadence_theme', next); } catch { /* no storage */ } applyTheme(next); }
+}
+
+async function buy(item) {
+  try {
+    const list = await apiPost('api/shop/buy', { item });
+    if (window.sfx) sfx.play('award');
+    await refreshMe();
+    wear(list);
+    showToast('¡Es tuyo! Ya lo estás usando', 'ok');
+    await reload();
+  } catch (err) { showToast(err.message); }
+}
+
+async function equip(slot, item) {
+  try {
+    const list = await apiPost('api/shop/equip', { slot, item });
+    if (window.sfx) sfx.play('pick');
+    await refreshMe();
+    wear(list);
+    await reload();
+  } catch (err) { showToast(err.message); }
+}
+
+// The bought themes and the frame come with the profile: refresh them on this device.
+async function refreshMe() { rememberUser(await apiGet('api/auth/me')); }
+
+async function reload() { paint(await apiGet('api/challenges')); }
+
+(async function start() {
+  try { await apiGetSWR('api/challenges', paint); } catch (err) { $('dailyCard').innerHTML = `<p style="color:var(--bad);font-size:13px;">${bits.esc(err.message)}</p>`; }
+})();
+
+</script>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

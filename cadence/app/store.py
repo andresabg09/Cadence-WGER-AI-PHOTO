@@ -59,6 +59,14 @@ CREATE TABLE IF NOT EXISTS avatars (user_id INTEGER PRIMARY KEY, data BLOB NOT N
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS water_log (user_id INTEGER NOT NULL, day TEXT NOT NULL, ml INTEGER NOT NULL, PRIMARY KEY (user_id, day));
 CREATE TABLE IF NOT EXISTS water_goals (user_id INTEGER PRIMARY KEY, ml INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS awards (
+  user_id INTEGER NOT NULL, key TEXT NOT NULL, day TEXT NOT NULL, ref TEXT NOT NULL DEFAULT '', PRIMARY KEY (user_id, key, day, ref)
+);
+CREATE TABLE IF NOT EXISTS coin_ledger (
+  user_id INTEGER NOT NULL, key TEXT NOT NULL, period TEXT NOT NULL, amount INTEGER NOT NULL, created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, key, period)
+);
+CREATE TABLE IF NOT EXISTS equipped (user_id INTEGER NOT NULL, slot TEXT NOT NULL, item TEXT NOT NULL, PRIMARY KEY (user_id, slot));
 CREATE TABLE IF NOT EXISTS push_subs (
   endpoint TEXT PRIMARY KEY, user_id INTEGER NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL
 );
@@ -420,6 +428,100 @@ def set_water_goal(user_id: int, ml: int | None) -> None:
             conn.execute("DELETE FROM water_goals WHERE user_id = ?", (user_id,))
         else:
             conn.execute("INSERT OR REPLACE INTO water_goals (user_id, ml) VALUES (?, ?)", (user_id, ml))
+
+
+def water_range(user_id: int, start_day: str, end_day: str) -> dict[str, int]:
+    with closing(_connect()) as conn:
+        rows = conn.execute("SELECT day, ml FROM water_log WHERE user_id = ? AND day >= ? AND day <= ?", (user_id, start_day, end_day)).fetchall()
+    return {day: ml for day, ml in rows}
+
+
+# ------------------------------------------------------------------ awards, coins and the shop
+def record_awards(user_id: int, rows: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
+    """Saves (key, day, ref) awards; returns the ones that were new (already saved ones stay as they were)."""
+    new = []
+    with closing(_connect()) as conn, conn:
+        for key, day, ref in rows:
+            if conn.execute("INSERT OR IGNORE INTO awards (user_id, key, day, ref) VALUES (?,?,?,?)", (user_id, key, day, ref)).rowcount:
+                new.append((key, day, ref))
+    return new
+
+
+def awards_summary(user_id: int) -> dict[str, dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute("SELECT key, COUNT(*), MIN(day), MAX(day) FROM awards WHERE user_id = ? GROUP BY key", (user_id,)).fetchall()
+    return {key: {"count": n, "first_day": first, "last_day": last} for key, n, first, last in rows}
+
+
+def awards_on(user_id: int, day: str) -> list[tuple[str, str]]:
+    """(key, ref) of the awards saved for a day (ref = the meal for meal awards)."""
+    with closing(_connect()) as conn:
+        return conn.execute("SELECT key, ref FROM awards WHERE user_id = ? AND day = ?", (user_id, day)).fetchall()
+
+
+def coin_balance(user_id: int) -> int:
+    with closing(_connect()) as conn:
+        return conn.execute("SELECT COALESCE(SUM(amount), 0) FROM coin_ledger WHERE user_id = ?", (user_id,)).fetchone()[0]
+
+
+def claimed_periods(user_id: int, keys: list[str], periods: list[str]) -> set[tuple[str, str]]:
+    if not keys:
+        return set()
+    marks = ",".join("?" * len(keys))
+    pmarks = ",".join("?" * len(periods))
+    with closing(_connect()) as conn:
+        rows = conn.execute(f"SELECT key, period FROM coin_ledger WHERE user_id = ? AND key IN ({marks}) AND period IN ({pmarks})",
+                            [user_id, *keys, *periods]).fetchall()
+    return {(k, p) for k, p in rows}
+
+
+def add_coins(user_id: int, key: str, period: str, amount: int) -> bool:
+    """One coin entry per (key, period): False when it was already there (a reward cannot be claimed twice)."""
+    with closing(_connect()) as conn, conn:
+        return bool(conn.execute("INSERT OR IGNORE INTO coin_ledger (user_id, key, period, amount, created_at) VALUES (?,?,?,?,?)",
+                                 (user_id, key, period, amount, _now())).rowcount)
+
+
+def owned_items(user_id: int) -> set[str]:
+    with closing(_connect()) as conn:
+        rows = conn.execute("SELECT key FROM coin_ledger WHERE user_id = ? AND key LIKE 'shop:%'", (user_id,)).fetchall()
+    return {k[5:] for (k,) in rows}
+
+
+def buy_item(user_id: int, item: str, price: int) -> bool:
+    """Spends coins on a shop item in one go: False when it was bought already or the coins are not enough."""
+    with closing(_connect()) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            have = conn.execute("SELECT COALESCE(SUM(amount), 0) FROM coin_ledger WHERE user_id = ?", (user_id,)).fetchone()[0]
+            if have < price:
+                conn.execute("ROLLBACK")
+                return False
+            ok = bool(conn.execute("INSERT OR IGNORE INTO coin_ledger (user_id, key, period, amount, created_at) VALUES (?,?,?,?,?)",
+                                   (user_id, f"shop:{item}", "", -price, _now())).rowcount)
+            conn.execute("COMMIT" if ok else "ROLLBACK")
+            return ok
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
+
+def equipped_items(user_id: int) -> dict[str, str]:
+    with closing(_connect()) as conn:
+        return dict(conn.execute("SELECT slot, item FROM equipped WHERE user_id = ?", (user_id,)).fetchall())
+
+
+def equip_item(user_id: int, slot: str, item: str | None) -> None:
+    with closing(_connect()) as conn, conn:
+        if item is None:
+            conn.execute("DELETE FROM equipped WHERE user_id = ? AND slot = ?", (user_id, slot))
+        else:
+            conn.execute("INSERT OR REPLACE INTO equipped (user_id, slot, item) VALUES (?,?,?)", (user_id, slot, item))
+
+
+def workouts_count(user_id: int) -> int:
+    with closing(_connect()) as conn:
+        return conn.execute("SELECT COUNT(*) FROM workouts WHERE user_id = ?", (user_id,)).fetchone()[0]
 
 
 def import_water(user_id: int, days: dict[str, int]) -> None:

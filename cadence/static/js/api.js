@@ -85,6 +85,8 @@ function rememberUser(me) {
     }
     localStorage.setItem(UID_KEY, String(me.id));
     if (me.avatar_v) localStorage.setItem('cadence_avatar_v', String(me.avatar_v)); else localStorage.removeItem('cadence_avatar_v');
+    if (me.frame) localStorage.setItem('cadence_frame', me.frame); else localStorage.removeItem('cadence_frame');
+    localStorage.setItem('cadence_owned_themes', JSON.stringify((me.themes || []).map((t) => t.replace('tema_', ''))));
   } catch { /* no storage */ }
   paintAvatars();
 }
@@ -94,6 +96,9 @@ function paintAvatars() {
   let v = null;
   try { v = localStorage.getItem('cadence_avatar_v'); } catch { /* no storage */ }
   const img = () => `<img src="api/avatar?v=${encodeURIComponent(v)}" alt="" style="width:100%;height:100%;border-radius:inherit;object-fit:cover;display:block;">`;
+  let frame = null;
+  try { frame = localStorage.getItem('cadence_frame'); } catch { /* no storage */ }
+  document.querySelectorAll('#profileBtn, .avatar-big, .side-nav a.item[href="profile.html"]').forEach((el) => el.classList.toggle('frame-gold', frame === 'marco_dorado'));
   const btn = document.getElementById('profileBtn');
   if (btn && v && btn.dataset.avatar !== v) { btn.dataset.avatar = v; btn.style.padding = '0'; btn.style.overflow = 'hidden'; btn.innerHTML = img(); }
   document.querySelectorAll('.side-nav a.item[href="profile.html"] svg').forEach((svg) => {

@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import accounts, auth, nutrition, reminders, scoring, store
+from . import accounts, auth, gamify, nutrition, reminders, scoring, store
 from .config import settings
 from .diagnostics import run_diagnostics
 from .progress import achievements as build_achievements, day_totals, streak_runs
@@ -36,6 +36,16 @@ from .meals import (
     parse_taken_at,
 )
 from .schemas import (
+    AwardBrief,
+    AwardOut,
+    AwardsResponse,
+    ChallengeOut,
+    ChallengesResponse,
+    ClaimIn,
+    ClaimOut,
+    ShopBuyIn,
+    ShopEquipIn,
+    ShopItemOut,
     LevelOut,
     LevelsOut,
     ScoreOut,
@@ -382,6 +392,16 @@ def voice_page():
     return FileResponse("static/voice.html")
 
 
+@app.get("/challenges.html")
+def challenges_page():
+    return FileResponse("static/challenges.html")
+
+
+@app.get("/awards.html")
+def awards_page():
+    return FileResponse("static/awards.html")
+
+
 @app.get("/history.html")
 def history_page():
     return FileResponse("static/history.html")
@@ -450,6 +470,11 @@ def _burn(eaten: float, goal_kcal: float, workouts: list[dict], weight_kg: float
     left = max(0, over - worked)
     kg = weight_kg or 70.0
     return BurnOut(over_kcal=over, worked_kcal=worked, kcal=left, minutes=int(-(-left // (JOG_MET * kg / 60))) if left else 0)
+
+
+def _brief(key: str) -> AwardBrief:
+    title, _hint, art, _category = gamify.MEAL_AWARDS[key]
+    return AwardBrief(key=key, title=title, art=art)
 
 
 def _scoring_food(item: MealItem) -> scoring.Food:
@@ -579,6 +604,7 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
         goal_for_score = scoring.Goal(goal.kcal, goal.protein_g, goal.carbs_g, goal.fat_g)
         scored: list[tuple[float, int]] = []
         day_foods: list[scoring.Food] = []
+        day_awards: list[tuple[str, str, str]] = []
         for key in MEAL_ORDER:
             items = groups[key]
             if not items:
@@ -588,8 +614,11 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
             meal_score = scoring.score_meal(foods, goal_for_score, key)
             if meal_score:
                 scored.append((sum(f.kcal for f in foods), meal_score.points))
+            earned = gamify.meal_awards(gamify.MealFacts(key, foods, meal_score), goal_for_score)
+            day_awards += [(k, shown_date.isoformat(), key) for k in earned]
             meals.append(
                 MealGroup(
+                    awards=[_brief(k) for k in earned],
                     score=_score_out(meal_score),
                     levels=_levels_out(foods, goal_for_score, key),
                     key=key,
@@ -604,7 +633,10 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
                 )
             )
 
+        fresh = store.record_awards(user.id, day_awards) if day_awards else []
+        new_awards = list({k: _brief(k) for k, _d, _r in fresh}.values()) if shown_date == real_today else []
         return TodayResponse(
+            awards_new=new_awards,
             workouts=[WorkoutOut(**w) for w in store.workouts_between(user.id, shown_date.isoformat(), shown_date.isoformat())],
             date=shown_date.isoformat(),
             today=real_today.isoformat(),
@@ -781,6 +813,192 @@ def progress(user: store.User = Depends(current_user)):
             target_weight_kg=user.target_weight_kg, achievements=medals, unlocked=sum(m.unlocked for m in medals))
     finally:
         wger.close()
+
+
+# ------------------------------------------------------------------ awards, challenges and the coin shop
+def _goal_obj(user: store.User) -> scoring.Goal:
+    return scoring.Goal(user.goal_kcal or settings.fallback_goal_kcal, user.goal_protein or settings.fallback_goal_protein_g,
+                        user.goal_carbs or settings.fallback_goal_carbs_g, user.goal_fat or settings.fallback_goal_fat_g)
+
+
+def _food_from(ingredient: dict, grams: float) -> scoring.Food:
+    name = ingredient.get("name", "?")
+    ratio = grams / 100.0
+    fibre, sugar, sat = scoring.per_100g(name, ingredient)
+    n = lambda key: (scoring.number(ingredient.get(key)) or 0.0) * ratio  # noqa: E731
+    return scoring.Food(name, grams, n("energy"), n("protein"), n("carbohydrates"), n("fat"),
+                        None if fibre is None else fibre * ratio, None if sugar is None else sugar * ratio, None if sat is None else sat * ratio)
+
+
+def _day_facts(wger: WgerClient, user: store.User, entries: list[dict], counting: set[date_type], start: date_type, end: date_type) -> dict[date_type, gamify.DayFacts]:
+    """What happened each day between start and end (diary, water, workouts, weight): the base of awards and challenges."""
+    goal = _goal_obj(user)
+    ids = {e["ingredient"] for e in entries}
+
+    def load(ingredient_id: int):
+        try:
+            return ingredient_id, ingredient_info(wger, user, ingredient_id)
+        except Exception:  # noqa: BLE001 - one unreadable food must not sink the page
+            return ingredient_id, {}
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        infos = dict(pool.map(load, ids))
+    days: dict[date_type, gamify.DayFacts] = {}
+    for entry in entries:
+        day = entry_date(entry)
+        if day is None or not start <= day <= end:
+            continue
+        facts = days.setdefault(day, gamify.DayFacts(day, counts=day in counting))
+        meal = facts.meals.setdefault(meal_key_for_entry(entry), gamify.MealFacts(meal_key_for_entry(entry), [], None))
+        meal.foods.append(_food_from(infos.get(entry["ingredient"], {}), float(entry["amount"])))
+        when = entry_datetime(entry)
+        clock = when.strftime("%H:%M") if when else None
+        if clock and (meal.first_time is None or clock < meal.first_time):
+            meal.first_time = clock
+    for facts in days.values():
+        for key, meal in facts.meals.items():
+            meal.score = scoring.score_meal(meal.foods, goal, key)
+    water = store.water_range(user.id, start.isoformat(), end.isoformat())
+    for iso, ml in water.items():
+        days.setdefault(date_type.fromisoformat(iso), gamify.DayFacts(date_type.fromisoformat(iso))).water_ml = ml
+    for workout in store.workouts_between(user.id, start.isoformat(), end.isoformat()):
+        day = date_type.fromisoformat(workout["day"])
+        days.setdefault(day, gamify.DayFacts(day)).workouts += 1
+    for weight in store.weights_since(user.id, start.isoformat()):
+        day = date_type.fromisoformat(weight["day"])
+        if day <= end:
+            days.setdefault(day, gamify.DayFacts(day)).weights += 1
+    return days
+
+
+def _counting_days(entries: list[dict]) -> set[date_type]:
+    try:
+        logged_on = store.get_logged_on([str(e["id"]) for e in entries])
+    except Exception:  # noqa: BLE001
+        logger.exception("no se pudo leer el almacen local (racha)")
+        logged_on = {}
+    return {d for d in (entry_date(e) for e in counts_for_streak(entries, logged_on)) if d is not None}
+
+
+@app.get("/api/awards", response_model=AwardsResponse)
+def awards(user: store.User = Depends(current_user)):
+    """Every award with its progress. Earned ones are kept (with their date) the first time they are seen."""
+    now = local_now()
+    today_ = now.date()
+    wger = get_wger_client()
+    try:
+        plan_id = plan_for(wger, user, create=False)
+        entries = _year_entries(wger, user, plan_id, now)
+        counting = _counting_days(entries)
+        current, previous = streak_runs(counting, today_)
+        best = max([r.length for r in previous] + ([current.length] if current else []), default=0)
+        facts = _day_facts(wger, user, entries, counting, today_ - timedelta(days=366), today_)
+    finally:
+        wger.close()
+    goal = _goal_obj(user)
+    water_goal = water_goal_for(user)[0]
+    stats = gamify.milestone_stats(
+        list(facts.values()), total_logged=len(entries), photos=store.photo_count(user.id), best_streak=best,
+        weights=len(store.weights_since(user.id, "0000-00-00")), workouts=store.workouts_count(user.id), goal=goal, water_goal=water_goal)
+    meal_rows = [(k, d.day.isoformat(), key) for d in facts.values() for key, m in d.meals.items() for k in gamify.meal_awards(m, goal)]
+    milestones = gamify.milestone_states(stats)
+    unlocked_now = [(m["key"], today_.isoformat(), "") for m in milestones if m["unlocked"]]
+    fresh = store.record_awards(user.id, meal_rows + unlocked_now)
+    saved = store.awards_summary(user.id)
+    out: list[AwardOut] = []
+    for m in milestones:
+        info = saved.get(m["key"])
+        out.append(AwardOut(**m, count=1 if info else 0, last_day=info["first_day"] if info else None))
+    for key, (title, hint, art, category) in gamify.MEAL_AWARDS.items():
+        info = saved.get(key)
+        out.append(AwardOut(key=key, title=title, hint=hint, art=art, category=category, kind="meal", unlocked=bool(info), value=1 if info else 0,
+                            target=1, count=info["count"] if info else 0, last_day=info["last_day"] if info else None))
+    titles = {a.key: a for a in out}
+    new = list({k: AwardBrief(key=k, title=titles[k].title, art=titles[k].art) for k, _d, _r in fresh if k in titles}.values())
+    return AwardsResponse(unlocked=sum(a.unlocked for a in out), total=len(out), awards=out, new=new)
+
+
+def _shop_items(user: store.User) -> list[ShopItemOut]:
+    owned = store.owned_items(user.id)
+    worn = store.equipped_items(user.id)
+    return [ShopItemOut(key=k, title=t, hint=h, price=p, slot=slot, owned=k in owned, equipped=worn.get(slot) == k)
+            for k, (t, h, p, slot) in gamify.SHOP.items()]
+
+
+def _challenge_states(user: store.User) -> tuple[list[gamify.Challenge], list[gamify.Challenge], date_type, date_type]:
+    now = local_now()
+    today_ = now.date()
+    monday = gamify.week_start(today_)
+    wger = get_wger_client()
+    try:
+        plan_id = plan_for(wger, user, create=False)
+        entries = user_entries(wger, user, plan_id, datetime.combine(monday, time.min, tzinfo=now.tzinfo), datetime.combine(today_, time.max, tzinfo=now.tzinfo))
+        counting = _counting_days(entries)
+        facts = _day_facts(wger, user, entries, counting, monday, today_)
+    finally:
+        wger.close()
+    goal_kcal = _goal_obj(user).kcal
+    week = [facts.get(monday + timedelta(days=i), gamify.DayFacts(monday + timedelta(days=i))) for i in range((today_ - monday).days + 1)]
+    daily = gamify.daily_challenges(facts.get(today_, gamify.DayFacts(today_)), goal_kcal)
+    weekly = gamify.weekly_challenges(week, goal_kcal, water_goal_for(user)[0])
+    return daily, weekly, today_, monday
+
+
+@app.get("/api/challenges", response_model=ChallengesResponse)
+def challenges(user: store.User = Depends(current_user)):
+    daily, weekly, today_, monday = _challenge_states(user)
+    periods = [today_.isoformat(), monday.isoformat()]
+    taken = store.claimed_periods(user.id, [c.key for c in daily + weekly], periods)
+
+    def out(c: gamify.Challenge) -> ChallengeOut:
+        state = "claimed" if (c.key, gamify.period_id(c.key, today_)) in taken else "ready" if c.complete else "todo"
+        return ChallengeOut(key=c.key, period=c.period, title=c.title, hint=c.hint, art=c.art, now=c.now, total=c.total, reward=c.reward, state=state, note=c.note)
+
+    daily_out, weekly_out = [out(c) for c in daily], [out(c) for c in weekly]
+    now = local_now()
+    midnight = datetime.combine(today_ + timedelta(days=1), time.min, tzinfo=now.tzinfo)
+    return ChallengesResponse(
+        coins=store.coin_balance(user.id), daily=daily_out, weekly=weekly_out, hours_left=max(1, int((midnight - now).total_seconds() // 3600)),
+        days_left=7 - today_.weekday(), claimable=sum(c.state == "ready" for c in daily_out + weekly_out), shop=_shop_items(user))
+
+
+@app.post("/api/challenges/claim", response_model=ClaimOut)
+def claim_challenge(body: ClaimIn, user: store.User = Depends(current_user)):
+    """Collect a finished challenge's coins. The server re-checks it and pays once per day (or week)."""
+    daily, weekly, today_, _monday = _challenge_states(user)
+    challenge = next((c for c in daily + weekly if c.key == body.key), None)
+    if challenge is None:
+        raise HTTPException(404, "Ese reto no existe")
+    if not challenge.complete:
+        raise HTTPException(409, "Todavía no completas este reto")
+    if not store.add_coins(user.id, challenge.key, gamify.period_id(challenge.key, today_), challenge.reward):
+        raise HTTPException(409, "Ya reclamaste este reto")
+    return ClaimOut(coins=store.coin_balance(user.id), amount=challenge.reward)
+
+
+@app.post("/api/shop/buy", response_model=list[ShopItemOut])
+def shop_buy(body: ShopBuyIn, user: store.User = Depends(current_user)):
+    item = gamify.SHOP.get(body.item)
+    if item is None:
+        raise HTTPException(404, "Ese artículo no existe")
+    if body.item in store.owned_items(user.id):
+        raise HTTPException(409, "Ya lo tienes")
+    if not store.buy_item(user.id, body.item, item[2]):
+        raise HTTPException(402, "Te faltan monedas para este artículo")
+    store.equip_item(user.id, item[3], body.item)  # a new thing is worn right away
+    return _shop_items(user)
+
+
+@app.post("/api/shop/equip", response_model=list[ShopItemOut])
+def shop_equip(body: ShopEquipIn, user: store.User = Depends(current_user)):
+    if body.slot not in {slot for *_x, slot in gamify.SHOP.values()}:
+        raise HTTPException(422, "Esa ranura no existe")
+    if body.item is not None:
+        item = gamify.SHOP.get(body.item)
+        if item is None or item[3] != body.slot or body.item not in store.owned_items(user.id):
+            raise HTTPException(403, "Primero consigue ese artículo")
+    store.equip_item(user.id, body.slot, body.item)
+    return _shop_items(user)
 
 
 @app.get("/api/history", response_model=HistoryResponse)

@@ -2,11 +2,6 @@
 // Everything shown here comes from the server (/api/today): scores are fixed formulas over wger's values, never AI.
 (function () {
   const { icon, segBar, hex, esc } = window.bits;
-  const AWARD_ART = {
-    protein: ['dumbbell', '#7C5CFF', '#4A6BFF'], fibre: ['wheat', '#F0873A', '#FFD08A'], variety: ['leaf', '#2FB57F', '#8DF7C8'],
-    balance: ['bolt', '#2DD4FF', '#4A6BFF'], water: ['drop', '#2DD4FF', '#4A6BFF'], early: ['sun', '#F5B942', '#FFE08A'], streak: ['flame', '#FF8A5B', '#FFD08A'],
-  };
-
   function close(after) { dismissOverlay(after); }
 
   function layer(html, top) {
@@ -52,7 +47,7 @@
     const share = { desayuno: 25, almuerzo: 35, merienda: 10, cena: 30, otro: 10 }[meal.key] || 10;
     const rows = meal.items.map((it) => `<div style="display:flex;align-items:center;gap:12px;"><div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:700;">${esc(it.name)}</div><div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">${Math.round(it.amount_grams)} g</div></div><div class="mono" style="font-size:12.5px;font-weight:700;">${Math.round(it.kcal)} <span style="color:var(--ink-soft);font-weight:600;font-size:10px;">KCAL</span></div></div>`).join('');
     const score = meal.score;
-    const awards = (meal.awards || []).map((a) => { const [ic, c1, c2] = AWARD_ART[a.art] || AWARD_ART.balance; return `<div class="hex-cell">${hex(ic, c1, c2, 58)}<span>${esc(a.title)}</span></div>`; }).join('');
+    const awards = (meal.awards || []).map((a) => `<div class="hex-cell">${bits.award(a.art, 58)}<span>${esc(a.title)}</span></div>`).join('');
     const sheet = layer(`
       <div class="md-head"><div><h3 class="disp" style="font-size:19px;">${esc(meal.label)}</h3><div class="when">${day && day.date === day.today ? 'Hoy' : esc(day ? day.date : '')}${timeOf(meal) ? ` · ${timeOf(meal)}` : ''}</div></div>
         <button type="button" id="mdClose" class="icon-btn" aria-label="Cerrar">${icon('x', 18)}</button></div>

@@ -141,7 +141,8 @@ $('installRow').addEventListener('click', () => {
   if (window.cadenceInstall) window.cadenceInstall.open();
 });
 $('themeRow').addEventListener('click', () => {
-  const next = THEME_CYCLE[(THEME_CYCLE.indexOf(getStoredTheme()) + 1) % THEME_CYCLE.length];
+  const cycle = themeCycle();
+  const next = cycle[(cycle.indexOf(getStoredTheme()) + 1) % cycle.length];
   localStorage.setItem(STORAGE_KEY, next);
   applyTheme(next);
   themeSound(next);

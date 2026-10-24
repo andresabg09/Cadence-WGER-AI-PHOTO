@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="cadence">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>cadence · Premios</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
+<link rel="stylesheet" href="static/css/pulse.css">
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body class="with-shell" data-page="premios">
+<div class="app">
+  <div class="page-head" style="padding:22px 20px 12px;display:flex;align-items:center;gap:12px;">
+    <a href="index.html" id="backLink" aria-label="Volver" class="icon-btn" style="width:44px;height:44px;border-radius:13px;flex-shrink:0;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
+    </a>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:10.5px;color:var(--ink-soft);font-weight:700;letter-spacing:.06em;" id="kicker">PREMIOS</div>
+      <h1 class="disp" style="margin:0;font-size:20px;font-weight:700;">Premios</h1>
+    </div>
+    
+  </div>
+  <div class="app-content" style="padding-bottom:60px;display:flex;flex-direction:column;gap:16px;">
+    <div class="chips" id="chips" role="tablist" aria-label="Categorías"></div>
+    <div class="award-grid" id="grid"><div class="skeleton" style="height:220px;grid-column:1/-1;"></div></div>
+    <div class="card" id="nextCard" style="display:none;"></div>
+    <p class="shop-note" style="text-align:center;">Los premios se calculan con tus registros y, al ganarlos, quedan guardados con su fecha en tu cuenta.</p>
+  </div>
+</div>
+
+<script src="static/js/api.js"></script>
+<script src="static/js/bits.js"></script>
+<script src="static/js/sfx.js"></script>
+<script src="static/js/theme.js"></script>
+<script src="static/js/shell.js"></script>
+<script>
+
+const $ = (id) => document.getElementById(id);
+const CATS = [['todos', 'Todos'], ['comida', 'Comida'], ['constancia', 'Constancia'], ['agua', 'Agua'], ['movimiento', 'Movimiento']];
+let all = []; let cat = 'todos';
+const shortDate = (iso) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('es', { day: 'numeric', month: 'short' }).replace('.', '') : '');
+
+function cell(a) {
+  const sub = a.unlocked ? (a.kind === 'meal' && a.count > 1 ? `×${a.count} · ${shortDate(a.last_day)}` : shortDate(a.last_day)) : `${a.value} / ${a.target}`;
+  return `<button type="button" class="award-cell${a.unlocked ? ' on' : ''}" data-k="${a.key}" aria-label="${bits.esc(a.title)}: ${bits.esc(a.hint)}">${bits.award(a.art, 70, a.unlocked)}<b>${bits.esc(a.title)}</b><small>${sub}</small></button>`;
+}
+
+function paint() {
+  const shown = all.filter((a) => cat === 'todos' || a.category === cat);
+  $('chips').innerHTML = CATS.map(([k, l]) => `<button type="button" role="tab" class="chip${k === cat ? ' on' : ''}" data-c="${k}" aria-selected="${k === cat}">${l}</button>`).join('');
+  $('chips').querySelectorAll('.chip').forEach((b) => b.addEventListener('click', () => { cat = b.dataset.c; if (window.sfx) sfx.play('tick'); paint(); }));
+  $('grid').innerHTML = shown.map(cell).join('');
+  $('grid').querySelectorAll('.award-cell').forEach((b) => b.addEventListener('click', () => { if (window.sfx) sfx.play('open'); detail(all.find((a) => a.key === b.dataset.k)); }));
+  const next = all.filter((a) => !a.unlocked && a.kind === 'milestone').sort((x, y) => y.value / y.target - x.value / x.target)[0];
+  const card = $('nextCard');
+  card.style.display = next ? 'flex' : 'none';
+  if (next) card.innerHTML = `${bits.award(next.art, 58, false)}<div style="flex:1;"><div class="ch-title">Lo próximo: ${bits.esc(next.title)}</div><div class="ch-hint">${bits.esc(next.hint)}</div><div class="ch-bar"><div class="track"><i style="width:${(next.value / next.target * 100).toFixed(0)}%"></i></div><span class="mono">${next.value} / ${next.target}</span></div></div>`;
+}
+
+function detail(a) {
+  const scrim = document.createElement('div'); scrim.className = 'sheet-scrim';
+  const sheet = document.createElement('div'); sheet.className = 'entry-sheet'; sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-label', a.title);
+  sheet.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;">${bits.award(a.art, 96, a.unlocked)}
+    <h3 class="disp" style="font-size:20px;">${bits.esc(a.title)}</h3><div style="font-size:13px;color:var(--ink-soft);line-height:1.5;">${bits.esc(a.hint)}</div>
+    <div class="mono" style="font-size:13px;font-weight:700;color:${a.unlocked ? 'var(--good)' : 'var(--ink-soft)'};">${a.unlocked ? `Ganado${a.last_day ? ` · ${shortDate(a.last_day)}` : ''}${a.kind === 'meal' ? ` · ${a.count} ${a.count === 1 ? 'vez' : 'veces'}` : ''}` : `Progreso ${a.value} / ${a.target}`}</div></div>
+    <div class="sheet-actions"><button class="btn-primary" id="aOk">Cerrar</button></div>`;
+  document.body.append(scrim, sheet);
+  pushOverlay(() => { scrim.remove(); sheet.remove(); });
+  scrim.addEventListener('click', () => dismissOverlay());
+  sheet.querySelector('#aOk').addEventListener('click', () => dismissOverlay());
+}
+
+function onData(d, stale) {
+  all = d.awards;
+  $('kicker').textContent = `${d.unlocked} DE ${d.total} GANADOS`;
+  paint();
+  if (!stale && d.new && d.new.length) {
+    if (window.sfx) sfx.play('award');
+    showToast(d.new.length === 1 ? `🏆 ¡Premio nuevo: ${d.new[0].title}!` : `🏆 ¡${d.new.length} premios nuevos!`, 'ok');
+  }
+}
+apiGetSWR('api/awards', onData).catch((err) => { $('grid').innerHTML = `<p style="color:var(--bad);font-size:13px;grid-column:1/-1;">${bits.esc(err.message)}</p>`; });
+
+</script>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

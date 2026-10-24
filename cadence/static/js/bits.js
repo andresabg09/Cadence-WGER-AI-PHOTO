@@ -72,5 +72,16 @@
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="#F5B942" stroke="#FFE08A" stroke-width="1.5"/><circle cx="12" cy="12" r="7" fill="none" stroke="#B9801A" stroke-width="1.3"/><path d="M12 7.5v9M9.5 10c0-1 1-1.6 2.5-1.6s2.5.6 2.5 1.6-1 1.5-2.5 1.8-2.5.8-2.5 1.8 1 1.6 2.5 1.6 2.5-.6 2.5-1.6" fill="none" stroke="#B9801A" stroke-width="1.2" stroke-linecap="round"/></svg>`;
   }
 
-  window.bits = { ICONS, icon, segBar, ring, hex, coin, esc };
+  // The picture of each award: [icon, colour 1, colour 2].
+  const ART = {
+    protein: ['dumbbell', '#7C5CFF', '#4A6BFF'], fibre: ['wheat', '#F0873A', '#FFD08A'], variety: ['leaf', '#2FB57F', '#8DF7C8'],
+    balance: ['bolt', '#2DD4FF', '#4A6BFF'], water: ['drop', '#2DD4FF', '#4A6BFF'], early: ['sun', '#F5B942', '#FFE08A'],
+    streak: ['flame', '#FF8A5B', '#FFD08A'], camera: ['camera', '#B27BC4', '#FF9EC0'], scale: ['scale', '#8DF7C8', '#2DD4FF'],
+    trophy: ['trophy', '#F5B942', '#FF8A5B'], move: ['shoe', '#2FB57F', '#8DF7C8'], target: ['star', '#FF6A9A', '#FFB45C'],
+    fork: ['fork', '#4A6BFF', '#9B82FF'], bolt: ['bolt', '#F5B942', '#FFE08A'],
+    sun: ['sun', '#F5B942', '#FFE08A'], leaf: ['leaf', '#2FB57F', '#8DF7C8'],
+  };
+  const award = (art, size = 56, on = true) => { const [ic, c1, c2] = ART[art] || ART.balance; return hex(ic, c1, c2, size, on); };
+
+  window.bits = { ICONS, icon, segBar, ring, hex, coin, esc, ART, award };
 })();

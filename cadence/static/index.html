@@ -613,16 +613,28 @@ function portionStep(grams, direction) {
 function openLightbox(src, box) {
   const box_ = document.createElement('div');
   box_.className = 'lightbox';
-  box_.innerHTML = `<button class="lb-close" aria-label="Cerrar">✕</button><div class="lb-scroll"><img alt="" src="${src}"></div>
+  // The zone is drawn on the frame that wraps the photo exactly, so it stays on the ingredient when zoomed in.
+  const zone = box ? `<div class="zone" style="left:${box[0] * 100}%;top:${box[1] * 100}%;width:${box[2] * 100}%;height:${box[3] * 100}%;"></div>` : '';
+  box_.innerHTML = `<button class="lb-close" aria-label="Cerrar">✕</button><div class="lb-scroll"><div class="lb-frame"><img alt="" src="${src}">${zone}</div></div>
     <div class="lb-hint">Toca la foto para acercar · pellizca para más zoom</div>`;
   document.body.appendChild(box_);
-  pushOverlay(() => box_.remove());
   const scroller = box_.querySelector('.lb-scroll');
+  const frame = box_.querySelector('.lb-frame');
   const img = box_.querySelector('img');
+  const fit = () => { // the photo as large as fits the screen, in px, so the frame is exactly the photo
+    if (!img.naturalWidth) return;
+    const k = Math.min(scroller.clientWidth / img.naturalWidth, scroller.clientHeight / img.naturalHeight);
+    frame.style.setProperty('--fit', `${Math.round(img.naturalWidth * k)}px`);
+  };
+  const watch = window.ResizeObserver ? new ResizeObserver(fit) : null;
+  if (watch) watch.observe(scroller);
+  img.addEventListener('load', fit);
+  if (img.complete) fit();
+  pushOverlay(() => { if (watch) watch.disconnect(); box_.remove(); });
   const centerOnZone = () => {
     const c = box ? [box[0] + box[2] / 2, box[1] + box[3] / 2] : [0.5, 0.5];
-    scroller.scrollLeft = c[0] * img.clientWidth - scroller.clientWidth / 2;
-    scroller.scrollTop = c[1] * img.clientHeight - scroller.clientHeight / 2;
+    scroller.scrollLeft = c[0] * frame.clientWidth - scroller.clientWidth / 2;
+    scroller.scrollTop = c[1] * frame.clientHeight - scroller.clientHeight / 2;
   };
   img.addEventListener('click', () => { box_.classList.toggle('zoomed'); if (box_.classList.contains('zoomed')) centerOnZone(); });
   box_.querySelector('.lb-close').addEventListener('click', () => dismissOverlay());

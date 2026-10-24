@@ -128,6 +128,18 @@
       tone(hit + 0.02, N(16), 1.4, { gain: 0.08, bell: true });                    // C#6: the major third
       if (big) { tone(hit + 0.2, N(28), 1.6, { gain: 0.09, bell: true }); air(hit + 0.05, 0.9, 6000, 12000, { gain: 0.03, type: 'highpass', q: 0.4 }); }
     },
+    // Arriving at a screen: short and quiet, each with its own character.
+    // Perfil: a warm hello, two soft notes going up with a speck of glitter.
+    enterProfile(t) { tone(t, N(5), 0.55, { type: 'triangle', gain: 0.11, send: 0.6 }); tone(t + 0.1, N(9), 0.7, { type: 'triangle', gain: 0.09, send: 0.6 }); tone(t + 0.11, N(21), 0.7, { gain: 0.04, bell: true }); },
+    // Ajustes: a precise little dial, two clicks and a soft low settle.
+    enterSettings(t) { tone(t, 1250, 0.04, { gain: 0.09, send: 0.2 }); tone(t + 0.055, 1880, 0.05, { gain: 0.08, send: 0.25 }); pluck(t + 0.11, N(-5), 0.3, { gain: 0.1, send: 0.3 }); },
+    // Progreso: a quick rise that lands on a bright fifth, the feeling of arriving at your own results.
+    enterProgress(t) {
+      riser(t, 0.2, 300, 1000, { gain: 0.05 });
+      tone(t + 0.2, A5, 0.9, { gain: 0.12, bell: true });
+      tone(t + 0.25, E6, 1.0, { gain: 0.09, bell: true });
+      air(t + 0.2, 0.35, 6000, 11000, { gain: 0.02, type: 'highpass', q: 0.5 });
+    },
     shutter(t) { air(t, 0.03, 3600, 2600, { gain: 0.16, q: 2 }); air(t + 0.05, 0.05, 2200, 1500, { gain: 0.1, q: 2 }); },
     photo(t) { air(t, 0.03, 3600, 2600, { gain: 0.16, q: 2 }); air(t + 0.05, 0.05, 2200, 1500, { gain: 0.1, q: 2 }); [E5, B5, E6].forEach((f, i) => tone(t + 0.16 + i * 0.085, f, 0.9, { gain: 0.17 - i * 0.03, bell: true })); },
     water(t) { tone(t, 980, 0.16, { glideTo: 310, gain: 0.26, send: 0.6 }); tone(t + 0.09, 620, 0.1, { glideTo: 1100, gain: 0.09, send: 0.5 }); air(t, 0.05, 2800, 1200, { gain: 0.05 }); },
@@ -151,7 +163,7 @@
     error(t) { tone(t, 247, 0.22, { gain: 0.14 }); tone(t + 0.13, 196, 0.3, { gain: 0.13 }); },
   };
 
-  const BUZZ = { streakOpen: [12, 70, 40], add: 10, pick: 6, open: 8, save: [14, 40, 14], photo: [10, 30, 18], water: 10, goal: [20, 50, 20, 50, 40], streak: [16, 40, 30], error: [30, 40, 30], remove: 12 };
+  const BUZZ = { enterProgress: 8, streakOpen: [12, 70, 40], add: 10, pick: 6, open: 8, save: [14, 40, 14], photo: [10, 30, 18], water: 10, goal: [20, 50, 20, 50, 40], streak: [16, 40, 30], error: [30, 40, 30], remove: 12 };
 
   function play(name, opts) {
     const s = settings();
@@ -164,6 +176,25 @@
       if (ctx.state === 'suspended') { pending = pending.concat([[name, opts, Date.now()]]).slice(-2); return; }
     }
     SOUNDS[name](ctx.currentTime + 0.01, opts || {});
+  }
+
+  // Sound for arriving at a page. A new page only gets to make sound if the browser allows it (the tap that brought us
+  // here usually counts); if it does not, say nothing: a welcome that plays at some later tap would be odd.
+  function enter(name) {
+    const s = settings();
+    if (!s.on || !SOUNDS[name]) return;
+    try {
+      const nav = performance.getEntriesByType('navigation')[0];
+      if (nav && nav.type === 'reload') return;
+    } catch { /* no navigation timing */ }
+    if (!build()) return;
+    const started = Date.now();
+    const go = () => {
+      if (Date.now() - started > 900 || ctx.state !== 'running') return;
+      try { if (navigator.vibrate && BUZZ[name] && navigator.userActivation && navigator.userActivation.hasBeenActive) navigator.vibrate(BUZZ[name]); } catch { /* no haptics */ }
+      SOUNDS[name](ctx.currentTime + 0.01, {});
+    };
+    if (ctx.state === 'running') go(); else ctx.resume().then(go).catch(() => {});
   }
 
   function unlock() {
@@ -181,6 +212,7 @@
 
   window.sfx = {
     play,
+    enter,
     unlock,
     isOn: () => settings().on,
     volume: () => settings().volume,

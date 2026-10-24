@@ -389,6 +389,10 @@ La app debe sentirse como app nativa. Reglas que la logran, no deshacerlas:
 - Foto de perfil: `PUT/GET/DELETE /api/avatar` (tabla `avatars`, recorte cuadrado 360 px hecho en el navegador;
   `me.avatar_v` versiona la URL). Se pinta en Perfil, en la cabecera del diario y en la barra lateral (`paintAvatars`).
 - Sonidos nuevos: `add` (anadir alimento), `pick` (elegir opcion), `streakOpen` (intro al abrir la racha).
+- Sonidos de llegada (`sfx.enter('enterProfile'|'enterSettings'|'enterProgress')`, una linea al inicio de cada pagina): cortos y
+  bajitos; si el navegador no deja sonar en la pagina nueva se omiten (nunca se encolan para el primer toque) y no suenan al recargar.
+- La foto ampliada del detalle (`openLightbox` en index.html) dibuja la zona azul del ingrediente sobre un marco (`.lb-frame`)
+  que mide exactamente la foto, asi la zona sigue en su sitio al acercar.
 - iOS: no hay WebKit en el entorno de pruebas, asi que NO esta probado en iPhone. Lo que se cuido por revision de
   codigo: `-webkit-backdrop-filter`, campos de 16 px (si no, iOS hace zoom), desbloqueo de audio en `click/touchend`,
   metas `apple-mobile-web-app-*`, push solo con la app instalada, lector de codigos con ZXing (sin BarcodeDetector).

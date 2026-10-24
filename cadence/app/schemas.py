@@ -7,6 +7,9 @@ class DetectedComponent(BaseModel):
     # DB (language 2). Falls back to `name` when the model doesn't provide it.
     search_name: str | None = None
     confidence: float | None = None
+    # Portion the model sees on the plate. Only a starting point for the
+    # quantity stepper - the user always confirms, calories come from wger.
+    estimated_grams: int | None = None
 
 
 class IngredientCandidate(BaseModel):
@@ -23,6 +26,7 @@ class IngredientCandidate(BaseModel):
 class ComponentMatch(BaseModel):
     detected_name: str
     confidence: float | None = None
+    estimated_grams: int | None = None
     candidates: list[IngredientCandidate]
 
 

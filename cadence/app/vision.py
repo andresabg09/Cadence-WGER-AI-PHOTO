@@ -19,12 +19,16 @@ Reglas estrictas:
 - Usa nombres genericos de alimento (los que usarias para buscarlo en una
   base de datos nutricional), no nombres de marcas ni platos compuestos.
 - Da un valor de confianza entre 0 y 1 para cada componente.
+- "estimated_grams": peso aproximado en gramos de ESA porcion tal como se ve
+  en la foto (entero). Si el plato es una sola unidad (una paleta, una barra,
+  una manzana), reparte su peso total entre los componentes que la forman.
+  Es solo una estimacion de porcion: NO es un dato nutricional.
 - "name" va en espanol (es lo que ve el usuario). "search_name" es el mismo
   alimento como nombre generico corto en ingles (ej: "grilled chicken breast",
   "white rice"), porque la base de datos nutricional esta en ingles.
 
 Responde UNICAMENTE con un JSON array, sin texto adicional, con esta forma:
-[{"name": "pollo a la plancha", "search_name": "grilled chicken breast", "confidence": 0.9}, ...]
+[{"name": "pollo a la plancha", "search_name": "grilled chicken breast", "confidence": 0.9, "estimated_grams": 120}, ...]
 """
 
 
@@ -54,6 +58,16 @@ def _parse_components(raw_text: str) -> list[DetectedComponent]:
             name=item["name"],
             search_name=item.get("search_name"),
             confidence=item.get("confidence"),
+            estimated_grams=_sane_grams(item.get("estimated_grams")),
         )
         for item in data
     ]
+
+
+def _sane_grams(value) -> int | None:
+    """Keep the model's portion guess only when it is a plausible single-plate weight."""
+    try:
+        grams = int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+    return grams if 5 <= grams <= 1500 else None

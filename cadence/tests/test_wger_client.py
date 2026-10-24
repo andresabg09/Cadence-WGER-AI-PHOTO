@@ -148,3 +148,36 @@ def test_today_with_no_plan_is_an_empty_day_not_an_error(monkeypatch):
     _stub_wger(monkeypatch, lambda request: httpx.Response(200, json={"results": []}))
     body = TestClient(main.app).get("/api/today").json()
     assert body["meals"] == [] and body["streak_days"] == 0 and body["goal"]["kcal"] > 0
+
+
+def test_unexpected_errors_report_their_cause(monkeypatch):
+    def boom(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<html>not json</html>")  # wger answering HTML
+
+    _stub_wger(monkeypatch, boom)
+    response = TestClient(main.app, raise_server_exceptions=False).post(
+        "/api/confirm", json={"items": [{"ingredient_id": 3, "amount_grams": 50}]}
+    )
+    assert response.status_code == 500
+    assert "Error interno" in response.json()["detail"]
+
+
+def test_today_survives_an_unreadable_plan_and_missing_ingredient(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/api/v2/nutritionplan/":
+            return httpx.Response(200, json={"results": [{"id": 4}]})
+        if path == "/api/v2/nutritionplan/4/":
+            return httpx.Response(500)
+        if path == "/api/v2/nutritiondiary/":
+            from app.meals import local_now
+
+            return httpx.Response(200, json={"results": [
+                {"id": 1, "plan": 4, "ingredient": 9, "amount": "50.00", "datetime": local_now().isoformat()}]})
+        return httpx.Response(404)  # ingredient detail gone
+
+    _stub_wger(monkeypatch, handler)
+    body = TestClient(main.app).get("/api/today").json()
+    assert body["goal"]["kcal"] > 0
+    items = [i for m in body["meals"] for i in m["items"]]
+    assert items and items[0]["name"] == "(alimento no disponible)"

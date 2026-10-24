@@ -217,13 +217,17 @@ function renderInsight(totals, goal) {
 }
 
 function mealItemRow(item, mealKey) {
+  const photo = readThumbs()[item.diary_entry_id];
+  const thumbStyle = photo
+    ? `background-image:url('${photo}');background-size:cover;background-position:center;`
+    : `background:${MEAL_ICON_BG[mealKey] || MEAL_ICON_BG.otro};`;
   return `
     <div class="swipe-row" data-entry-id="${item.diary_entry_id}">
       <button class="swipe-del" aria-label="Borrar ${escapeHtml(item.name)}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2m-9 0l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
       <div class="swipe-content meal-item-row" style="padding:2px 0;">
-        <div style="width:44px;height:44px;border-radius:14px;background:${MEAL_ICON_BG[mealKey] || MEAL_ICON_BG.otro};flex-shrink:0;position:relative;">
+        <div style="width:44px;height:44px;border-radius:14px;${thumbStyle}flex-shrink:0;position:relative;">
           <span style="position:absolute;bottom:-4px;right:-4px;background:var(--good);border-radius:100px;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px;border:2px solid var(--card);">✓</span>
         </div>
         <div style="flex:1;">

@@ -29,7 +29,8 @@ async function safeText(response) {
     const data = await response.json();
     return data.detail || JSON.stringify(data);
   } catch {
-    return response.statusText;
+    // Not JSON (a proxy page, a crash): statusText is empty on HTTP/2, so say the code.
+    return response.statusText || `Error ${response.status} del servidor`;
   }
 }
 
@@ -133,4 +134,39 @@ async function prepareImage(file, maxDim = 1280) {
 const SCAN_SESSION_KEYS = ['cadence_analyze_result', 'cadence_photo', 'cadence_meal'];
 function clearScanSession() {
   SCAN_SESSION_KEYS.forEach((key) => sessionStorage.removeItem(key));
+}
+
+// ---- Thumbnails: the user's own photo next to each diary entry it created ----
+const THUMBS_KEY = 'cadence_thumbs';
+
+function readThumbs() {
+  try { return JSON.parse(localStorage.getItem(THUMBS_KEY) || '{}'); } catch { return {}; }
+}
+
+function shrinkDataUrl(dataUrl, size = 96) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const scale = Math.max(size / img.width, size / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      canvas.getContext('2d').drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
+async function rememberThumbs(created, photoDataUrl) {
+  if (!photoDataUrl || !created || !created.length) return;
+  const small = await shrinkDataUrl(photoDataUrl);
+  if (!small) return;
+  const map = readThumbs();
+  created.forEach((entry) => { map[entry.diary_entry_id] = small; });
+  const ids = Object.keys(map);
+  if (ids.length > 150) ids.slice(0, ids.length - 150).forEach((id) => delete map[id]); // keep storage small
+  try { localStorage.setItem(THUMBS_KEY, JSON.stringify(map)); } catch { /* storage full or unavailable */ }
 }

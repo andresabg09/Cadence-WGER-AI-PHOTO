@@ -87,7 +87,8 @@ const state = analyzeResult.components.map((component) => {
     candidates: component.candidates,
     selectedId: selected ? selected.id : null,
     energyPer100g: selected ? (selected.energy_kcal_100g || 0) : 0,
-    grams: component.grams || 100,
+    // The model's portion guess (if any) is only a starting point; the stepper is the truth.
+    grams: component.grams || component.estimated_grams || 100,
   };
 });
 
@@ -183,6 +184,17 @@ function emptyState() {
     </div>`;
 }
 
+// The photo the user just took, as the item thumbnail; gradient chip when there is none.
+function thumbHtml() {
+  const photo = sessionStorage.getItem('cadence_photo');
+  if (photo) return `<div class="thumb-photo" style="width:52px;height:52px;border-radius:14px;flex-shrink:0;background-image:url('${photo}');"></div>`;
+  return '<div style="width:52px;height:52px;border-radius:14px;background:linear-gradient(140deg,#7C5CFF,#2DD4FF);flex-shrink:0;opacity:0.35;"></div>';
+}
+
+function stepFor(grams) {
+  return grams >= 100 ? 10 : 5;
+}
+
 function renderItems() {
   const wrap = document.getElementById('itemsWrap');
   wrap.innerHTML = '';
@@ -213,7 +225,7 @@ function renderItems() {
 
     card.innerHTML = `
       <div style="display:flex;gap:11px;">
-        <div style="width:52px;height:52px;border-radius:14px;background:linear-gradient(140deg,#7C5CFF,#2DD4FF);flex-shrink:0;opacity:0.35;"></div>
+        ${thumbHtml()}
         <div style="flex:1;min-width:0;">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
             <span style="font-size:14px;font-weight:700;">${escapeHtml(item.detected_name)}</span>
@@ -225,9 +237,9 @@ function renderItems() {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:11px;padding-top:11px;border-top:1px solid var(--card-border);">
         <span style="font-size:11.5px;color:var(--ink-soft);font-weight:600;">Cantidad</span>
         <div style="display:flex;align-items:center;gap:10px;">
-          <button data-idx="${idx}" data-delta="-10" class="gram-btn" aria-label="Menos" style="border:1px solid var(--card-border);background:var(--bg);color:var(--ink);">−</button>
+          <button data-idx="${idx}" data-delta="-1" class="gram-btn" aria-label="Menos" style="border:1px solid var(--card-border);background:var(--bg);color:var(--ink);">−</button>
           <span class="mono" id="grams-${idx}" style="font-size:13px;font-weight:700;min-width:54px;text-align:center;">${item.grams} g</span>
-          <button data-idx="${idx}" data-delta="10" class="gram-btn" aria-label="Más" style="border:none;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));color:#fff;">+</button>
+          <button data-idx="${idx}" data-delta="1" class="gram-btn" aria-label="Más" style="border:none;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));color:#fff;">+</button>
         </div>
       </div>
     `;
@@ -254,8 +266,10 @@ function renderItems() {
   wrap.querySelectorAll('.gram-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const idx = Number(btn.dataset.idx);
-      const delta = Number(btn.dataset.delta);
-      state[idx].grams = Math.max(10, state[idx].grams + delta);
+      const direction = Number(btn.dataset.delta);
+      const current = state[idx].grams;
+      // Finer steps for small portions (a 60 g popsicle), coarser for a plate of rice.
+      state[idx].grams = Math.min(1500, Math.max(5, current + direction * stepFor(direction < 0 ? current - 1 : current)));
       document.getElementById(`grams-${idx}`).textContent = `${state[idx].grams} g`;
       document.getElementById(`kcal-${idx}`).textContent = `${Math.round(itemKcal(state[idx]))} kcal`;
       renderTotal();
@@ -300,7 +314,8 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
   btn.textContent = 'Guardando…';
 
   try {
-    await apiPost('api/confirm', payload);
+    const saved = await apiPost('api/confirm', payload);
+    await rememberThumbs(saved.created, sessionStorage.getItem('cadence_photo'));
     clearScanSession();
     window.location.href = 'index.html';
   } catch (err) {

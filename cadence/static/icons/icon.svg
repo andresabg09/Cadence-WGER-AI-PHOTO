@@ -5,12 +5,11 @@
       <stop offset="100%" stop-color="#2DD4FF"/>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="112" fill="#0A0A0F"/>
-  <rect x="48" y="48" width="416" height="416" rx="96" fill="url(#bg)"/>
-  <g transform="translate(256 256)">
-    <path d="M-96 -48a40 40 0 0140-40h24l18-30a40 40 0 0134-20h80a40 40 0 0138 20l18 30h24a40 40 0 0140 40v180a40 40 0 01-40 40h-240a40 40 0 01-40-40z"
-          fill="none" stroke="#fff" stroke-width="22"/>
-    <circle cx="0" cy="40" r="62" fill="none" stroke="#fff" stroke-width="22"/>
-    <path d="M0 10v60M-30 40h60" stroke="#fff" stroke-width="16" stroke-linecap="round"/>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <g transform="translate(256 237) scale(1)" fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="-160" y="-70" width="320" height="220" rx="44"/>
+    <path d="M-84 -70L-58 -112H58L84 -70"/>
+    <circle cx="0" cy="40" r="62"/>
+    <path d="M0 12v56M-28 40h56" stroke-width="16"/>
   </g>
 </svg>

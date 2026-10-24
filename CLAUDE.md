@@ -219,6 +219,12 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   (`static/js/install.js`), `/api/wger-status`, `/api/meal-now`, y el diagnostico profundo
   (`/api/diagnostics?deep=1`) crea y borra un registro de prueba en wger. Pendiente: probar
   con una foto real y ajustar campos de wger si el diagnostico lo pide.
+  Prueba de campo 1 (24 oct): primera foto real (helados) -> arreglado: icono de apariencia
+  invisible en oscuro (los `<button>` no heredan `color`), icono de instalar descentrado,
+  porciones iniciales (la IA estima gramos en `estimated_grams`; solo punto de partida),
+  ranking de candidatos (trae 100 de wger y puntua `WRatio + ratio`), miniaturas con la foto
+  del usuario (localStorage, `cadence_thumbs`), y errores 500 ahora dicen la causa en vez de
+  quedar en blanco (`/api/today` ya no cae si el plan o un alimento no se pueden leer).
 - **Bloque 3 - Datos personales.** Perfil, Objetivos (Mifflin-St Jeor, guarda goal_* del
   plan), Progreso (racha, peso desde weightentry, logros), Historial.
 - **Bloque 4 - Ajustes y habitos.** Ajustes (hub), Apariencia (toggle ya hecho),

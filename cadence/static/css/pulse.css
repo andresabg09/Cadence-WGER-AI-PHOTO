@@ -108,6 +108,7 @@ button { font-family: inherit; }
 .app-header h1 { margin: 2px 0 0; font-size: 21px; font-weight: 700; }
 
 .icon-btn {
+  color: var(--ink-soft); /* <button> does not inherit color: the theme icon (currentColor) was black on dark */
   width: 40px; height: 40px; border-radius: 13px;
   background: var(--card); border: 1px solid var(--card-border);
   display: flex; align-items: center; justify-content: center;
@@ -458,3 +459,6 @@ button { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .hero-card, .fab, .flame, .value-live, .bottle-fill, .install-sheet { animation: none; }
 }
+
+/* Item thumbnail: the user's own photo when we have one, else the gradient chip. */
+.thumb-photo { background-size: cover; background-position: center; background-repeat: no-repeat; }

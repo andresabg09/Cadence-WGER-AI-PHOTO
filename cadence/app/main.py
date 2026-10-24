@@ -1,4 +1,5 @@
 from time import monotonic
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, time, timedelta
 
@@ -9,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .diagnostics import run_diagnostics
-from .matching import rank_candidates
+from .matching import rank_candidates, rank_matches
 from .meals import (
     MEAL_LABELS,
     MEAL_ORDER,
@@ -37,10 +38,20 @@ from .schemas import (
 from .vision import GeminiVisionClient
 from .wger_client import WgerClient, WgerError
 
+logger = logging.getLogger("cadence")
 app = FastAPI(title="cadence", version="0.1.0")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 _vision_client: GeminiVisionClient | None = None
+
+
+@app.exception_handler(Exception)
+async def unexpected_error_handler(request: Request, exc: Exception):
+    # A bare "Internal Server Error" tells the user (and us) nothing. Log the full
+    # traceback for the container logs and return the cause in the JSON `detail`
+    # that the UI already shows in its error banner.
+    logger.exception("error no controlado en %s", request.url.path)
+    return JSONResponse(status_code=500, content={"detail": f"Error interno ({type(exc).__name__}): {exc}"[:300]})
 
 
 @app.exception_handler(WgerError)
@@ -174,7 +185,11 @@ def today():
                 streak_days=0,
                 user_name=settings.user_name,
             )
-        plan = wger.get_nutrition_plan(plan_id)
+        try:
+            plan = wger.get_nutrition_plan(plan_id)
+        except Exception:  # noqa: BLE001 - goals fall back to defaults, the diary still shows
+            logger.exception("no se pudo leer el plan %s", plan_id)
+            plan = {}
 
         now = local_now()
         today_date = now.date()
@@ -189,7 +204,11 @@ def today():
 
         def macros_for(ingredient_id: int) -> dict:
             if ingredient_id not in ingredient_cache:
-                ingredient_cache[ingredient_id] = wger.get_ingredient(ingredient_id)
+                try:
+                    ingredient_cache[ingredient_id] = wger.get_ingredient(ingredient_id)
+                except Exception:  # noqa: BLE001
+                    logger.exception("no se pudo leer el alimento %s", ingredient_id)
+                    ingredient_cache[ingredient_id] = {"name": "(alimento no disponible)"}
             return ingredient_cache[ingredient_id]
 
         groups: dict[str, list[MealItem]] = {key: [] for key in MEAL_ORDER}
@@ -282,12 +301,12 @@ async def analyze(image: UploadFile):
             # Search/rank with the English generic name (wger's DB language);
             # detected_name stays the Spanish label the user sees.
             term = component.search_name or component.name
-            raw_matches = wger.search_ingredients(term)
+            raw_matches = wger.search_ingredients(term, limit=settings.search_fetch_limit)
             candidates = rank_candidates(term, raw_matches, settings.match_candidate_count)
-            if candidates:
-                # Only the top pick, to keep this endpoint's latency bounded -
-                # other candidates' macros are fetched on demand if the user
-                # switches to them (GET /api/ingredient/{id}).
+            if candidates and candidates[0].energy_kcal_100g is None:
+                # Older wger versions don't send nutrition values with the search
+                # hit; fetch the top pick only (others load on demand through
+                # GET /api/ingredient/{id}) to keep this endpoint's latency bounded.
                 try:
                     top = wger.get_ingredient(candidates[0].id)
                     candidates[0].energy_kcal_100g = float(top.get("energy", 0) or 0)
@@ -297,6 +316,7 @@ async def analyze(image: UploadFile):
                 ComponentMatch(
                     detected_name=component.name,
                     confidence=component.confidence,
+                    estimated_grams=component.estimated_grams,
                     candidates=candidates,
                 )
             )
@@ -331,27 +351,17 @@ def search_foods(term: str):
         return []
     wger = get_wger_client()
     try:
-        matches = wger.search_ingredients(term, limit=8)
-
-        def with_energy(match: dict) -> SearchResult | None:
-            if match.get("energy") is not None:  # ingredientinfo returns it inline
-                return SearchResult(
-                    id=match["id"],
-                    name=match["name"],
-                    energy_kcal_100g=float(match["energy"] or 0),
-                )
-            try:
-                data = wger.get_ingredient(match["id"])
-            except Exception:
-                return None
-            return SearchResult(
-                id=match["id"],
-                name=data.get("name") or match["name"],
-                energy_kcal_100g=float(data.get("energy", 0) or 0),
-            )
-
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            return [r for r in pool.map(with_energy, matches) if r is not None]
+        matches = wger.search_ingredients(term, limit=settings.search_fetch_limit)
+        results: list[SearchResult] = []
+        for _score, match in rank_matches(term, matches, 8):
+            energy = match.get("energy")
+            if energy is None:  # older wger: nutrition values need a second call
+                try:
+                    energy = wger.get_ingredient(match["id"]).get("energy")
+                except Exception:
+                    continue
+            results.append(SearchResult(id=match["id"], name=match["name"], energy_kcal_100g=float(energy or 0)))
+        return results
     finally:
         wger.close()
 

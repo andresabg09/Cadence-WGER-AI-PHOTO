@@ -49,6 +49,27 @@
   @keyframes shutterPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0), 0 0 0 6px rgba(255,255,255,0.12); } 50% { box-shadow: 0 0 0 0 rgba(255,255,255,0), 0 0 0 10px rgba(255,255,255,0.22); } }
   .shutter { animation: shutterPulse 2s ease-in-out infinite; }
   .shutter:disabled { animation: none; opacity: 0.5; }
+  /* Analyzing screen: shown from the moment a photo is taken or chosen until the result is ready */
+  .az { position: fixed; inset: 0; z-index: 130; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 24px; box-sizing: border-box; background: rgba(5,5,10,0.84); -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px); color: #fff; opacity: 0; transition: opacity 0.3s ease; }
+  .az.on { opacity: 1; }
+  .az-photo { position: relative; width: min(66vw, 264px); aspect-ratio: 1; border-radius: 30px; overflow: hidden; background: #0d0b12; box-shadow: 0 34px 80px -24px rgba(124,92,255,0.6), 0 0 0 1px rgba(255,255,255,0.14); animation: azFloat 4.2s ease-in-out infinite alternate; }
+  .az-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .az-sweep { position: absolute; left: 0; right: 0; top: -45%; height: 45%; background: linear-gradient(180deg, transparent, rgba(45,212,255,0.20) 62%, rgba(45,212,255,0.62) 98%, transparent); animation: azSweep 2.3s cubic-bezier(.55,0,.45,1) infinite; }
+  .az-check { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(5,5,10,0.38); opacity: 0; transition: opacity 0.25s; }
+  .az-check span { width: 62px; height: 62px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); transform: scale(0.6); transition: transform 0.4s cubic-bezier(.2,1.4,.4,1); box-shadow: 0 0 40px -4px rgba(45,212,255,0.6); }
+  .az.done .az-check { opacity: 1; }
+  .az.done .az-check span { transform: scale(1); }
+  .az.done .az-sweep { display: none; }
+  .az-title { margin: 0; font-size: 19px; font-weight: 700; text-align: center; }
+  .az-step { margin: 8px 0 0; min-height: 18px; font-size: 13px; color: rgba(255,255,255,0.62); text-align: center; transition: opacity 0.25s; }
+  .az-step.swap { opacity: 0; }
+  .az-bar { width: 148px; height: 3px; border-radius: 3px; background: rgba(255,255,255,0.12); overflow: hidden; }
+  .az-bar i { display: block; height: 100%; width: 38%; border-radius: 3px; background: linear-gradient(90deg, var(--accent-from), var(--accent-to)); animation: azBar 1.5s ease-in-out infinite; }
+  .az.done .az-bar i { width: 100%; animation: none; }
+  @keyframes azSweep { 0% { top: -45%; } 100% { top: 100%; } }
+  @keyframes azBar { 0% { transform: translateX(-110%); } 100% { transform: translateX(290%); } }
+  @keyframes azFloat { from { transform: translateY(0) scale(1); } to { transform: translateY(-5px) scale(1.012); } }
+  @media (prefers-reduced-motion: reduce) { .az-sweep, .az-bar i, .az-photo { animation: none; } .az-bar i { width: 100%; } }
 </style>
 </head>
 <body class="with-shell" data-page="escanear">
@@ -367,8 +388,49 @@ function storePlate(newComponents, thumb, takenAt, waterMl = 0) {
   if (takenAt && !sessionStorage.getItem('cadence_taken_at')) sessionStorage.setItem('cadence_taken_at', takenAt);
 }
 
+// ---- The analyzing screen: the photo itself, a light sweeping over it, and what is happening in plain words ----
+function showAnalyzing(source) {
+  const url = URL.createObjectURL(source);
+  const box = document.createElement('div');
+  box.className = 'az';
+  box.setAttribute('role', 'status');
+  box.setAttribute('aria-live', 'polite');
+  box.innerHTML = `<div class="az-photo"><img alt="" src="${url}"><div class="az-sweep"></div><div class="az-check"><span><svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#0A0A0F" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div>
+    <div><h2 class="disp az-title" id="azTitle">Analizando tu plato</h2><p class="az-step" id="azStep">Preparando la foto…</p></div>
+    <div class="az-bar"><i></i></div>`;
+  document.body.appendChild(box);
+  requestAnimationFrame(() => box.classList.add('on'));
+  const img = box.querySelector('img');
+  img.onerror = () => { img.style.display = 'none'; }; // a format the browser cannot draw: the sweep still shows
+  const step = box.querySelector('#azStep');
+  const timers = [];
+  const phase = (text) => {
+    step.classList.add('swap');
+    setTimeout(() => { step.textContent = text; step.classList.remove('swap'); }, 220);
+  };
+  timers.push(setTimeout(() => phase('Identificando los alimentos…'), 900));
+  timers.push(setTimeout(() => phase('Buscando cada uno en tu catálogo…'), 4500));
+  timers.push(setTimeout(() => phase('Casi listo, un momento más…'), 10000));
+  const stop = () => timers.forEach(clearTimeout);
+  return {
+    phase,
+    done(count) {
+      stop();
+      box.classList.add('done');
+      box.querySelector('#azTitle').textContent = count === 1 ? '1 alimento detectado' : `${count} alimentos detectados`;
+      step.textContent = 'Abriendo tu plato…';
+    },
+    hide() {
+      stop();
+      box.classList.remove('on');
+      setTimeout(() => { box.remove(); URL.revokeObjectURL(url); }, 320);
+    },
+  };
+}
+
 async function runAnalysis(source) {
   setBusy(true);
+  const analyzing = showAnalyzing(source);
   const takenAt = await readTakenAt(source); // before prepareImage: re-encoding drops the EXIF
   const { blob, thumb } = await prepareImage(source);
 
@@ -377,18 +439,22 @@ async function runAnalysis(source) {
 
   try {
     const data = await apiPost('api/analyze', formData, { isFormData: true });
+    analyzing.done(data.components.length);
+    if (window.sfx) sfx.play('add');
     renderLiveChips(data.components);
     storePlate(data.components, thumb, takenAt, data.water_ml || 0);
-    setTimeout(() => { window.location.replace('confirm.html'); }, 600);
+    setTimeout(() => { window.location.replace('confirm.html'); }, 900);
   } catch (err) {
-    setBusy(false);
     if (/identific/i.test(err.message || '')) {
       // The AI saw no food: the confirm screen has the "No logramos identificar el plato" state
-      // (or, when appending, the plate we already had).
+      // (or, when appending, the plate we already had). The analyzing screen stays up until it opens.
+      analyzing.phase('No vimos alimentos: abriendo para que lo busques…');
       storePlate([], thumb, takenAt);
       window.location.replace('confirm.html');
       return;
     }
+    analyzing.hide();
+    setBusy(false);
     caption.textContent = 'No pudimos analizar la foto — intenta de nuevo';
     showToast(err.message || 'No se pudo analizar la foto');
   }

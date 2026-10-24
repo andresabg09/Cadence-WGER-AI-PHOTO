@@ -242,6 +242,14 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   agrega ~60 basicos preparados en en/es (source_name=`cadence`, valores tipo USDA); la busqueda
   los trae siempre (`candidate_pool`), les da +20 puntos, muestra el gemelo en/es una sola vez en
   el idioma del usuario, y el prompt pide `search_name` "tal como se come" (cooked/grilled).
+  Prueba de campo 2 (24 oct): el guardado SI funcionaba; las fotos viejas se registran en su dia
+  (la del 10 oct) y el diario solo mostraba hoy. Ahora: flechas/selector de dia en el diario
+  (`/api/today?date=`), al guardar se abre el dia del plato con aviso "Guardado en ...", tocar un
+  registro abre su detalle (foto del plato con la zona, macros, cantidad y comida editables via
+  `PATCH /api/diary/{id}`, observacion, borrar). Observaciones, recortes y fotos viven en
+  localStorage del dispositivo (`cadence_notes`, `cadence_thumbs`, `cadence_plates`): wger no tiene
+  campo de nota; guardarlas en servidor es decision del Bloque 3. La barra inferior tapaba/era tapada
+  por las filas (`.tab-bar` sin z-index): corregido. Avisos (toast) ahora opacos + caja de error fija.
 - **Bloque 3 - Datos personales.** Perfil, Objetivos (Mifflin-St Jeor, guarda goal_* del
   plan), Progreso (racha, peso desde weightentry, logros), Historial.
 - **Bloque 4 - Ajustes y habitos.** Ajustes (hub), Apariencia (toggle ya hecho),

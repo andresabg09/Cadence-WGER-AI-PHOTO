@@ -100,7 +100,12 @@
     <!-- Meals -->
     <div style="display:flex;flex-direction:column;gap:10px;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:0 2px;">
-        <h2 class="disp" style="margin:0;font-size:15px;font-weight:700;">Hoy</h2>
+        <div class="day-nav" id="dayNav">
+          <button class="nav-arrow" id="dayPrev" aria-label="Día anterior">‹</button>
+          <button class="day-label disp" id="dayLabel" aria-label="Elegir otro día">Hoy</button>
+          <button class="nav-arrow" id="dayNext" aria-label="Día siguiente">›</button>
+          <input type="date" id="dayPicker" tabindex="-1" aria-hidden="true">
+        </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span class="mono" id="todayKcalLabel" style="font-size:10.5px;color:var(--ink-soft);">0 KCAL</span>
           <a href="search.html" aria-label="Buscar alimento manualmente" style="width:26px;height:26px;border-radius:9px;background:var(--card);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;">
@@ -231,7 +236,7 @@ function mealItemRow(item, mealKey) {
           <span style="position:absolute;bottom:-4px;right:-4px;background:var(--good);border-radius:100px;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px;border:2px solid var(--card);">✓</span>
         </div>
         <div style="flex:1;">
-          <div style="font-size:13px;font-weight:700;">${escapeHtml(item.name)}</div>
+          <div style="font-size:13px;font-weight:700;">${escapeHtml(item.name)}${readNotes()[item.diary_entry_id] ? '<span class="note-dot" title="Tiene una observación">📝</span>' : ''}</div>
           <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${Math.round(item.amount_grams)} g · ${Math.round(item.kcal)} kcal</div>
         </div>
         <button class="row-del" aria-label="Borrar ${escapeHtml(item.name)}">
@@ -287,9 +292,9 @@ function renderMeals(meals) {
     container.innerHTML = `
       <div class="empty-state">
         <span style="font-size:36px;">🍽️</span>
-        <h3 class="disp" style="margin:14px 0 6px;font-size:15.5px;font-weight:700;">Aún no registras nada hoy</h3>
-        <p style="margin:0 0 18px;font-size:12px;color:var(--ink-soft);line-height:1.5;">Toma una foto de tu primer plato del día y empieza tu racha.</p>
-        <a href="scan.html" class="btn-primary" style="display:inline-flex;width:auto;padding:13px 22px;">✨ Escanear mi primer plato</a>
+        <h3 class="disp" style="margin:14px 0 6px;font-size:15.5px;font-weight:700;">${isViewingToday() ? 'Aún no registras nada hoy' : 'No hay nada registrado este día'}</h3>
+        <p style="margin:0 0 18px;font-size:12px;color:var(--ink-soft);line-height:1.5;">${isViewingToday() ? 'Toma una foto de tu primer plato del día y empieza tu racha.' : 'Usa las flechas para ver otros días. Si subes la foto de un plato de ese día, se guarda en su fecha.'}</p>
+        <a href="scan.html" class="btn-primary" style="display:inline-flex;width:auto;padding:13px 22px;">✨ Escanear un plato</a>
       </div>`;
     list.appendChild(container);
     return;
@@ -312,13 +317,20 @@ function wireSwipeToDelete() {
     const content = row.querySelector('.swipe-content');
     const delBtn = row.querySelector('.swipe-del');
     let startX = null;
+    let swiped = false;
 
-    content.addEventListener('pointerdown', (e) => { startX = e.clientX; });
+    content.addEventListener('pointerdown', (e) => { startX = e.clientX; swiped = false; });
     content.addEventListener('pointermove', (e) => {
       if (startX === null) return;
       const dx = e.clientX - startX;
+      if (Math.abs(dx) > 8) swiped = true;
       if (dx < -20) content.classList.add('open');
       if (dx > 20) content.classList.remove('open');
+    });
+    content.addEventListener('click', (e) => {
+      if (swiped || e.target.closest('.row-del')) return;
+      if (content.classList.contains('open')) { content.classList.remove('open'); return; }
+      openEntryDetail(row.dataset.entryId);
     });
     ['pointerup', 'pointercancel', 'pointerleave'].forEach((type) => {
       content.addEventListener(type, () => { startX = null; });
@@ -340,16 +352,189 @@ function wireSwipeToDelete() {
   });
 }
 
+
+// ---- Entry detail: photo, numbers, portion, meal and a note ----
+const MEAL_CHOICES = [['desayuno', 'Desayuno'], ['almuerzo', 'Almuerzo'], ['merienda', 'Merienda'], ['cena', 'Cena']];
+
+function findEntry(entryId) {
+  if (!latestToday) return null;
+  for (const meal of latestToday.meals) {
+    const item = meal.items.find((i) => String(i.diary_entry_id) === String(entryId));
+    if (item) return { item, mealKey: meal.key };
+  }
+  return null;
+}
+
+function portionStep(grams, direction) {
+  const base = direction < 0 ? grams - 1 : grams;
+  return base < 50 ? 5 : base < 200 ? 10 : 25;
+}
+
+function closeEntryDetail() {
+  document.querySelectorAll('.sheet-scrim, .entry-sheet').forEach((el) => el.remove());
+}
+
+function openEntryDetail(entryId) {
+  const found = findEntry(entryId);
+  if (!found) return;
+  const { item } = found;
+  let grams = item.amount_grams;
+  let mealKey = found.mealKey;
+  const perGram = (value) => (item.amount_grams > 0 ? value / item.amount_grams : 0);
+  const plate = readEntryPlate(entryId);
+  const crop = readThumbs()[entryId];
+  const when = item.taken_at ? new Date(item.taken_at) : null;
+  const whenText = when
+    ? when.toLocaleString('es', { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' })
+    : '';
+
+  closeEntryDetail();
+  const scrim = document.createElement('div');
+  scrim.className = 'sheet-scrim';
+  const sheet = document.createElement('div');
+  sheet.className = 'entry-sheet';
+  sheet.setAttribute('role', 'dialog');
+  sheet.setAttribute('aria-label', item.name);
+
+  let photoHtml = '';
+  if (plate) {
+    const b = plate.box;
+    const zone = b ? `<div class="zone" style="left:${b[0] * 100}%;top:${b[1] * 100}%;width:${b[2] * 100}%;height:${b[3] * 100}%;"></div>` : '';
+    photoHtml = `<div class="plate-photo"><img alt="Foto del plato" src="${plate.photo}">${zone}</div>`;
+  } else if (crop) {
+    photoHtml = `<div class="plate-photo"><img alt="Foto del alimento" src="${crop}" style="max-height:200px;"></div>`;
+  }
+
+  sheet.innerHTML = `
+    ${photoHtml}
+    <h3 class="disp">${escapeHtml(item.name)}</h3>
+    <div class="when">${escapeHtml(whenText)}</div>
+    <div class="macro-tiles">
+      <div class="macro-tile"><b id="sKcal">0</b><span>KCAL</span></div>
+      <div class="macro-tile"><b id="sProt">0</b><span>PROT g</span></div>
+      <div class="macro-tile"><b id="sCarb">0</b><span>CARB g</span></div>
+      <div class="macro-tile"><b id="sFat">0</b><span>GRASA g</span></div>
+    </div>
+    <label class="field">CANTIDAD</label>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <button class="step-btn remove" id="sMinus" aria-label="Menos">−</button>
+      <span class="mono" id="sGrams" style="font-size:16px;font-weight:700;min-width:70px;text-align:center;"></span>
+      <button class="step-btn add" id="sPlus" aria-label="Más">+</button>
+    </div>
+    <label class="field">COMIDA</label>
+    <div class="meal-pick" id="sMeals" role="group" aria-label="Comida"></div>
+    <label class="field" for="sNote">OBSERVACIÓN <span style="font-weight:500;text-transform:none;letter-spacing:0;">(se guarda en este dispositivo)</span></label>
+    <textarea id="sNote" placeholder="Ej.: con poca sal, porción del restaurante…"></textarea>
+    <div class="sheet-actions">
+      <button class="btn-danger" id="sDelete">Borrar</button>
+      <button class="btn-primary" id="sSave">Guardar</button>
+    </div>
+    <div class="save-error" id="sError" role="alert" style="margin:10px 0 0;"></div>
+  `;
+  document.body.appendChild(scrim);
+  document.body.appendChild(sheet);
+  const $ = (id) => sheet.querySelector(`#${id}`);
+
+  $('sNote').value = readNotes()[entryId] || '';
+
+  const renderNumbers = () => {
+    $('sGrams').textContent = `${Math.round(grams)} g`;
+    $('sKcal').textContent = Math.round(perGram(item.kcal) * grams);
+    $('sProt').textContent = (perGram(item.protein_g) * grams).toFixed(1);
+    $('sCarb').textContent = (perGram(item.carbs_g) * grams).toFixed(1);
+    $('sFat').textContent = (perGram(item.fat_g) * grams).toFixed(1);
+  };
+  const renderMeals = () => {
+    $('sMeals').innerHTML = MEAL_CHOICES.map(([key, label]) =>
+      `<button type="button" data-meal="${key}" aria-pressed="${key === mealKey}">${label}</button>`).join('');
+    $('sMeals').querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => { mealKey = btn.dataset.meal; renderMeals(); }));
+  };
+  renderNumbers();
+  renderMeals();
+
+  $('sMinus').addEventListener('click', () => { grams = Math.max(5, grams - portionStep(grams, -1)); renderNumbers(); });
+  $('sPlus').addEventListener('click', () => { grams = Math.min(2000, grams + portionStep(grams, 1)); renderNumbers(); });
+  scrim.addEventListener('click', closeEntryDetail);
+
+  $('sDelete').addEventListener('click', async () => {
+    try {
+      await apiDelete(`api/diary/${entryId}`);
+      closeEntryDetail();
+      loadToday();
+    } catch (err) {
+      $('sError').textContent = `No se pudo borrar: ${err.message}`;
+      $('sError').classList.add('show');
+    }
+  });
+
+  $('sSave').addEventListener('click', async () => {
+    const btn = $('sSave');
+    btn.disabled = true;
+    $('sError').classList.remove('show');
+    writeNote(entryId, $('sNote').value);
+    const changes = {};
+    if (Math.round(grams) !== Math.round(item.amount_grams)) changes.amount_grams = Math.round(grams);
+    if (mealKey !== found.mealKey) changes.meal = mealKey;
+    try {
+      if (Object.keys(changes).length) await apiPatch(`api/diary/${entryId}`, changes);
+      closeEntryDetail();
+      loadToday();
+    } catch (err) {
+      btn.disabled = false;
+      $('sError').textContent = `No se pudo guardar: ${err.message}`;
+      $('sError').classList.add('show');
+    }
+  });
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeEntryDetail(); });
+
 let latestToday = null;
+let viewDate = new URLSearchParams(window.location.search).get('date'); // null = today
+
+function isViewingToday() {
+  return !latestToday || !latestToday.today || latestToday.date === latestToday.today;
+}
+
+function shiftDate(iso, days) {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function goToDate(iso) {
+  viewDate = iso && latestToday && iso >= latestToday.today ? null : iso;
+  const url = new URL(window.location.href);
+  if (viewDate) url.searchParams.set('date', viewDate); else url.searchParams.delete('date');
+  history.replaceState(null, '', url);
+  loadToday();
+}
+
+function renderDayNav(data) {
+  const label = document.getElementById('dayLabel');
+  const isToday = data.date === data.today;
+  const yesterday = shiftDate(data.today, -1);
+  label.textContent = isToday ? 'Hoy' : data.date === yesterday ? 'Ayer'
+    : new Date(`${data.date}T12:00:00`).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '');
+  document.getElementById('dayNext').disabled = isToday;
+  document.getElementById('dayPrev').onclick = () => goToDate(shiftDate(data.date, -1));
+  document.getElementById('dayNext').onclick = () => goToDate(shiftDate(data.date, 1));
+  const picker = document.getElementById('dayPicker');
+  picker.max = data.today;
+  picker.value = data.date;
+  picker.onchange = () => { if (picker.value) goToDate(picker.value); };
+  label.onclick = () => { try { picker.showPicker(); } catch { picker.click(); } };
+}
 
 async function loadToday() {
   const dateLabel = document.getElementById('todayLabel');
 
   try {
     await flushPending().catch(() => {});
-    const data = await apiGet('api/today');
+    const data = await apiGet(viewDate ? `api/today?date=${encodeURIComponent(viewDate)}` : 'api/today');
     latestToday = data;
     hideBanner('wger');
+    renderDayNav(data);
 
     // Label from the server's "today" (user's timezone), not the device clock.
     dateLabel.textContent = new Date(`${data.date}T12:00:00`)
@@ -373,6 +558,12 @@ async function loadToday() {
 }
 
 loadToday();
+
+// "Guardado en 10 de octubre": said once, right after saving a plate.
+try {
+  const flash = sessionStorage.getItem('cadence_flash');
+  if (flash) { sessionStorage.removeItem('cadence_flash'); showToast(flash, 'ok'); }
+} catch { /* no flash */ }
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});

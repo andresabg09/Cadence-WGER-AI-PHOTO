@@ -21,6 +21,7 @@ const SHELL_FILES = [
   'static/js/api.js',
   'static/js/bits.js',
   'static/js/meal-detail.js',
+  'static/js/workouts.js',
   'static/js/theme.js',
   'static/js/shell.js',
   'static/js/install.js',

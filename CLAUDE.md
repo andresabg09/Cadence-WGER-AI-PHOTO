@@ -368,7 +368,7 @@ fotos de stock, tienda de monedas con dinero.
   3 entrenamientos), recompensa en monedas (`coin_ledger`, una vez por reto y periodo, se reclama con un toque). Pestana nueva "Retos".
   DECISION PENDIENTE de Andres: para que sirven las monedas (recomendado: solo cosmeticos: temas, sonidos, marcos de foto; NO
   escudos de racha, porque la racha ya no se recupera por decision suya). Los retos no pueden premiar comer de menos. Depende del 8. Tamano L.
-- **Bloque 11 - Entrenamientos con buscador.** Mas actividades (tabla MET ampliada en `nutrition.py`), lista con busqueda e
+- **Bloque 11 - Entrenamientos con buscador (HECHO, 25 oct 2026).** `nutrition.ACTIVITIES` (34 actividades con MET del Compendio; las claves antiguas siguen valiendo), `GET /api/activities` (kcal por minuto con tu peso), `POST/PATCH/DELETE /api/workouts` (hora `at` y edicion que recalcula), `static/js/workouts.js` (buscador, hoja con duraciones 15/30/60/otro, tocar un entrenamiento lo edita). Texto original del plan: Mas actividades (tabla MET ampliada en `nutrition.py`), lista con busqueda e
   iconos, hoja con kcal estimadas y kcal/min (MET x peso), duraciones 15/30/60/otra, hora y nota, editar y borrar. Sigue siendo
   estimacion y no cambia la meta. Independiente. Tamano S-M.
 - **Bloque 12 - Ideas de comidas y favoritas.** "Repetir una comida" desde tu historial (con tus propias fotos) y "Ideas para

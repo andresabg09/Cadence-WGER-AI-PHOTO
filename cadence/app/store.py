@@ -92,6 +92,7 @@ def _connect() -> sqlite3.Connection:
         ("entry_meta", "user_id", "INTEGER"),  # whose entry it is
         ("plates", "user_id", "INTEGER"),
         ("custom_foods", "fibre", "REAL"),  # optional: grams of fibre per 100 g
+        ("workouts", "at", "TEXT"),  # local time (HH:MM) the workout was done
     ):
         columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in columns:
@@ -579,18 +580,24 @@ def delete_local_entry(entry_id: str) -> None:
 
 # ------------------------------------------------------------------ workouts (own log, per person)
 
-def add_workout(user_id: int, day: str, kind: str, minutes: int, kcal: float, note: str | None) -> int:
+def add_workout(user_id: int, day: str, kind: str, minutes: int, kcal: float, note: str | None, at: str | None = None) -> int:
     with closing(_connect()) as conn, conn:
-        cur = conn.execute("INSERT INTO workouts (user_id, day, kind, minutes, kcal, note, created_at) VALUES (?,?,?,?,?,?,?)",
-                           (user_id, day, kind, minutes, kcal, (note or "").strip() or None, _now()))
+        cur = conn.execute("INSERT INTO workouts (user_id, day, kind, minutes, kcal, note, created_at, at) VALUES (?,?,?,?,?,?,?,?)",
+                           (user_id, day, kind, minutes, kcal, (note or "").strip() or None, _now(), at))
         return cur.lastrowid
+
+
+def update_workout(user_id: int, workout_id: int, kind: str, minutes: int, kcal: float, note: str | None, at: str | None) -> bool:
+    with closing(_connect()) as conn, conn:
+        return conn.execute("UPDATE workouts SET kind = ?, minutes = ?, kcal = ?, note = ?, at = ? WHERE id = ? AND user_id = ?",
+                            (kind, minutes, kcal, (note or "").strip() or None, at, workout_id, user_id)).rowcount > 0
 
 
 def workouts_between(user_id: int, start_day: str, end_day: str) -> list[dict]:
     with closing(_connect()) as conn:
-        rows = conn.execute("SELECT id, day, kind, minutes, kcal, note FROM workouts WHERE user_id = ? AND day >= ? AND day <= ? ORDER BY id",
+        rows = conn.execute("SELECT id, day, kind, minutes, kcal, note, at FROM workouts WHERE user_id = ? AND day >= ? AND day <= ? ORDER BY id",
                             (user_id, start_day, end_day)).fetchall()
-    return [{"id": r[0], "day": r[1], "kind": r[2], "minutes": r[3], "kcal": r[4], "note": r[5]} for r in rows]
+    return [{"id": r[0], "day": r[1], "kind": r[2], "minutes": r[3], "kcal": r[4], "note": r[5], "at": r[6]} for r in rows]
 
 
 def delete_workout(user_id: int, workout_id: int) -> bool:

@@ -1064,3 +1064,43 @@ body.nav-leaving { opacity: 0; transition: opacity 0.2s ease-in 0.12s; }
 .pg-swipe:has(.pg-photo.open) .pg-del { opacity: 1; }
 .pg-trash { position: absolute; z-index: 2; top: 8px; right: 8px; width: 36px; height: 36px; border: 0; border-radius: 12px; background: rgba(10, 10, 15, 0.62); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); transition: opacity 0.2s; }
 .pg-swipe:has(.pg-photo.open) .pg-trash { opacity: 0; pointer-events: none; }
+
+/* ---- Day bar: the day on screen, the week, the way back to today (sticky, always visible) ---- */
+.day-bar { position: sticky; top: 0; z-index: 12; padding: 10px 22px 8px; background: color-mix(in srgb, var(--bg) 90%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.db-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.db-title { min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.db-label { font-size: 19px; font-weight: 700; }
+.db-date { font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.db-cal { flex-shrink: 0; height: 36px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--card-border); background: var(--card); color: var(--ink); display: flex; align-items: center; gap: 7px; font: 700 12px 'Inter', sans-serif; cursor: pointer; }
+.db-cal svg { color: var(--accent-to); }
+.db-strip { display: flex; align-items: center; gap: 2px; margin-top: 10px; touch-action: pan-y; }
+.db-days { flex: 1; min-width: 0; display: flex; gap: 2px; }
+.db-nav { flex-shrink: 0; width: 22px; height: 44px; border: 0; background: none; color: var(--ink-soft); font-size: 22px; cursor: pointer; padding: 0; }
+.db-nav:disabled { opacity: 0.25; cursor: default; }
+.db-day { flex: 1; min-width: 0; background: none; border: 0; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; color: var(--ink-soft); cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent; }
+.db-day:disabled { cursor: default; opacity: 0.4; }
+.db-dow { font-size: 10.5px; font-weight: 700; }
+.db-num { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; background: var(--card); border: 1px solid var(--card-border); color: var(--ink); transition: transform 0.15s; }
+.db-day:active .db-num { transform: scale(0.92); }
+.db-day.today .db-num { background: transparent; border: 2px solid var(--accent-to); color: var(--accent-to); font-weight: 800; }
+.db-day.sel .db-num { background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); border: 2px solid transparent; color: #0A0A0F; font-weight: 800; }
+.db-day.sel .db-dow { color: var(--ink); }
+.db-mark { display: flex; align-items: center; justify-content: center; height: 14px; }
+.db-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-soft); opacity: 0.4; }
+.db-away { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 8px 8px 8px 14px; border-radius: 16px; background: rgba(124, 92, 255, 0.14); border: 1px solid rgba(124, 92, 255, 0.38); }
+.db-away[hidden] { display: none; }
+.db-away span { flex: 1; font-size: 12.5px; font-weight: 600; line-height: 1.35; }
+.db-back { flex-shrink: 0; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 100px; padding: 8px 14px; background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); color: #0A0A0F; font: 800 12px 'Inter', sans-serif; cursor: pointer; }
+@media (min-width: 600px) {
+  .day-bar { padding: 12px 36px 10px; }
+  .db-label { font-size: 22px; }
+  .db-strip { max-width: 640px; }
+  .db-num { width: 42px; height: 42px; font-size: 15px; }
+}
+@media (min-width: 1024px) {
+  body.with-shell .day-bar { max-width: 1160px; margin-left: auto; margin-right: auto; width: 100%; box-sizing: border-box; padding: 10px 40px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 28px; }
+  .db-top { flex: 0 0 auto; justify-content: flex-start; gap: 16px; }
+  .db-strip { flex: 1 1 420px; max-width: 640px; margin: 0 0 0 auto; }
+  .db-away { flex-basis: 100%; margin-top: 4px; }
+}
+@media (prefers-reduced-motion: reduce) { .db-num { transition: none; } }

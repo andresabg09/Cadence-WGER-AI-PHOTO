@@ -122,7 +122,10 @@ def test_deep_diagnostics_writes_and_deletes_a_test_entry():
     assert ("DELETE", "/api/v2/nutritiondiary/77/") in calls
 
 
-def test_confirm_creates_the_plan_when_wger_has_none(monkeypatch):
+def test_confirm_creates_the_plan_when_wger_has_none(monkeypatch, signed_in):
+    from app import store
+
+    store.update_user(signed_in.id, plan_id=None)  # a user who has not logged anything yet
     posted = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -139,7 +142,7 @@ def test_confirm_creates_the_plan_when_wger_has_none(monkeypatch):
     _stub_wger(monkeypatch, handler)
     response = TestClient(main.app).post("/api/confirm", json={"items": [{"ingredient_id": 3, "amount_grams": 50}]})
     assert response.status_code == 200
-    assert posted[0]["description"] == "cadence"
+    assert posted[0]["description"] == f"cadence:{signed_in.id}"  # one plan per person
     assert posted[1]["plan"] == 8
 
 

@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     # Where cadence keeps its own small extras (notes, photos). A volume in Docker.
     data_dir: str = "/data"
 
+    # Accounts. The first account is the administrator; with ADMIN_EMAIL set, only that address can
+    # claim it. Everyone else needs an invite code unless OPEN_REGISTRATION is turned on.
+    admin_email: str = ""
+    open_registration: bool = False
+    analyze_daily_limit: int = 40  # photo analyses per person per day (the administrator is exempt); 0 = no limit
+
     # Behavior
     user_name: str = "Andrés"  # shown in the dashboard greeting
     # IANA zone used to decide "today" and which meal slot an entry falls in.

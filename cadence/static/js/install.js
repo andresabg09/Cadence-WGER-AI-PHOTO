@@ -21,9 +21,13 @@
     document.querySelectorAll('.install-scrim, .install-sheet').forEach((el) => el.remove());
   }
 
-  function show() {
-    if (document.querySelector('.install-sheet') || !eligible()) return;
-    if (!deferredPrompt && !isIos()) return;
+  // force = the person asked for it (Perfil > Instalar app): no waiting, and always some instructions.
+  function show(force) {
+    if (document.querySelector('.install-sheet')) return;
+    if (!force) {
+      if (!eligible()) return;
+      if (!deferredPrompt && !isIos()) return;
+    }
 
     const scrim = document.createElement('div');
     scrim.className = 'install-scrim';
@@ -39,13 +43,14 @@
         <p style="margin:0;font-size:13px;color:var(--ink-soft);line-height:1.5;padding:0 10px;">Añádela a tu pantalla de inicio: carga al instante, pantalla completa sin barra del navegador, y acceso directo a la cámara desde el ícono.</p>
       </div>
       ${deferredPrompt ? '<button class="btn-primary" id="installNow">Instalar ahora</button>' : ''}
-      <button id="installLater" style="display:block;width:100%;min-height:44px;margin-top:10px;background:none;border:none;color:var(--ink-soft);font-size:12.5px;font-weight:600;cursor:pointer;">Ahora no</button>
+      <button id="installLater" style="display:block;width:100%;min-height:44px;margin-top:10px;background:none;border:none;color:var(--ink-soft);font-size:12.5px;font-weight:600;cursor:pointer;">${force ? 'Cerrar' : 'Ahora no'}</button>
+      ${!deferredPrompt && !isIos() ? '<div style="margin-top:12px;background:rgba(127,127,140,0.08);border:1px solid var(--card-border);border-radius:14px;padding:11px 13px;font-size:11.5px;color:var(--ink-soft);line-height:1.45;"><strong style="color:var(--ink);">Desde el menú del navegador</strong> (⋮ o ⋯) elige "Instalar app" o "Añadir a la pantalla de inicio".</div>' : ''}
       ${isIos() && !deferredPrompt ? '<div style="margin-top:12px;background:rgba(127,127,140,0.08);border:1px solid var(--card-border);border-radius:14px;padding:11px 13px;font-size:11.5px;color:var(--ink-soft);line-height:1.45;"><strong style="color:var(--ink);">¿En iPhone?</strong> Toca Compartir y luego "Añadir a pantalla de inicio".</div>' : ''}
     `;
     document.body.append(scrim, sheet);
     pushOverlay(close);
 
-    const later = () => { set(DISMISSED_KEY, String(Date.now())); dismissOverlay(); };
+    const later = () => { if (!force) set(DISMISSED_KEY, String(Date.now())); dismissOverlay(); };
     scrim.addEventListener('click', later);
     sheet.querySelector('#installLater').addEventListener('click', later);
     const now = sheet.querySelector('#installNow');
@@ -58,6 +63,12 @@
       });
     }
   }
+
+  // Used by the profile screen.
+  window.cadenceInstall = {
+    isInstalled: standalone,
+    open: () => show(true),
+  };
 
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();

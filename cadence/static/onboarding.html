@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>cadence · Bienvenida</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="static/css/pulse.css">
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<style>
+  .ob-top { display: flex; align-items: center; justify-content: space-between; padding: 22px 0 6px; min-height: 44px; }
+  .ob-back { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--card-border); background: var(--card); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .ob-main { flex: 1; display: flex; flex-direction: column; }
+  .ob-title { margin: 14px 0 6px; font-size: 24px; font-weight: 700; line-height: 1.25; }
+  .ob-sub { margin: 0 0 22px; font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
+  .ob-foot { padding-top: 18px; display: flex; flex-direction: column; gap: 18px; }
+  .plan-card { background: linear-gradient(165deg, var(--card), var(--bg)); border: 1px solid var(--card-border); border-radius: 24px; padding: 22px 20px; text-align: center; }
+  .plan-kcal { font-family: 'Space Mono', monospace; font-size: 46px; font-weight: 700; line-height: 1; }
+  .macro-chips { display: flex; gap: 8px; margin-top: 18px; }
+  .macro-chips div { flex: 1; background: rgba(127,127,140,0.1); border-radius: 12px; padding: 10px 4px; }
+  .macro-chips b { display: block; font-family: 'Space Mono', monospace; font-size: 15px; }
+  .macro-chips span { font-size: 9.5px; color: var(--ink-soft); font-weight: 700; letter-spacing: 0.04em; }
+  .nudge { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 16px; }
+  .nudge button { width: 44px; height: 44px; border-radius: 14px; border: 1px solid var(--card-border); background: var(--card); color: var(--ink); font-size: 20px; font-weight: 700; cursor: pointer; }
+  @keyframes floatSlow { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-10px) rotate(3deg); } }
+  .float { animation: floatSlow 4.5s ease-in-out infinite; }
+</style>
+</head>
+<body>
+<div class="plain-page">
+  <div class="plain-body">
+    <div class="ob-top">
+      <button class="ob-back" id="back" aria-label="Volver" style="visibility:hidden;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <div class="step-dots" id="dots" aria-hidden="true"></div>
+      <span style="width:40px;"></span>
+    </div>
+    <div class="ob-main" id="main"></div>
+    <div class="ob-foot">
+      <div class="form-error" id="error" role="alert" style="margin:0;"></div>
+      <button class="btn-primary" id="next">Empezar</button>
+    </div>
+  </div>
+</div>
+
+<script src="static/js/api.js"></script>
+<script src="static/js/theme.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const STEPS = ['intro', 'about', 'body', 'activity', 'goal', 'plan'];
+const data = { sex: null, birthdate: '', height_cm: '', weight_kg: '', activity: null, goal: null };
+let step = 0;
+let me = null;
+let plan = null;      // what the server calculated for the answers so far
+let nudged = null;    // calories the user changed by hand (null = keep the calculation)
+
+const ACTIVITY = [
+  ['low', 'Poco movimiento', 'Trabajo sentado, casi nada de ejercicio.'],
+  ['moderate', 'Activo', 'Ejercicio o deporte 3 a 5 días por semana.'],
+  ['high', 'Muy activo', 'Entrenas casi a diario o tu trabajo es físico.'],
+];
+const GOALS = [
+  ['lose', 'Bajar de peso', 'Un déficit moderado y seguro.'],
+  ['maintain', 'Mantener mi peso', 'Comer lo justo para quedarte como estás.'],
+  ['gain', 'Subir de peso', 'Un pequeño superávit de calorías.'],
+  ['muscle', 'Ganar músculo', 'Más calorías y más proteína.'],
+];
+
+function maxBirthdate() {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 13);
+  return d.toISOString().slice(0, 10);
+}
+
+function showError(message) {
+  $('error').textContent = message || '';
+  $('error').classList.toggle('show', Boolean(message));
+}
+
+function choices(list, key) {
+  return `<div class="choice-grid">${list.map(([value, title, text]) =>
+    `<button type="button" class="choice" data-key="${key}" data-value="${value}" aria-pressed="${data[key] === value}"><b>${title}</b>${text ? `<small>${text}</small>` : ''}</button>`).join('')}</div>`;
+}
+
+const VIEWS = {
+  intro: () => `
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:30px;padding:10px 6px;">
+      <div class="float brand-mark" style="width:104px;height:104px;border-radius:34px;">
+        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8a2 2 0 012-2h1.2l.9-1.5A2 2 0 0110 3.5h4a2 2 0 011.9 1l.9 1.5H18a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="13" r="3.6" stroke="#fff" stroke-width="1.8"/></svg>
+      </div>
+      <div>
+        <h1 class="disp ob-title" style="font-size:26px;">Hola${me ? `, ${escapeHtml(me.name)}` : ''}. Conoce tu comida al instante</h1>
+        <p class="ob-sub" style="margin:0;">Toma una foto de tu plato: la IA reconoce cada alimento y cadence calcula las calorías. Primero, unas preguntas rápidas para calcular cuánto necesitas tú.</p>
+      </div>
+    </div>`,
+  about: () => `
+    <h1 class="disp ob-title">Cuéntanos de ti</h1>
+    <p class="ob-sub">Con esto calculamos tu gasto diario. Es privado y solo lo usa cadence.</p>
+    ${choices([['female', 'Mujer', ''], ['male', 'Hombre', ''], ['other', 'Prefiero no decir', '']], 'sex').replace('choice-grid', 'choice-grid two')}
+    <label class="field" style="margin-top:18px;"><span>FECHA DE NACIMIENTO</span>
+      <input class="input" id="birthdate" type="date" max="${maxBirthdate()}" value="${data.birthdate}" autocomplete="bday">
+    </label>`,
+  body: () => `
+    <h1 class="disp ob-title">Tu cuerpo</h1>
+    <p class="ob-sub">Tu estatura y tu peso de hoy. Después podrás actualizarlos.</p>
+    <label class="field"><span>ESTATURA</span><div class="input-unit"><input class="input" id="height" type="number" inputmode="decimal" min="100" max="250" step="0.5" placeholder="170" value="${data.height_cm}"><i>cm</i></div></label>
+    <label class="field"><span>PESO</span><div class="input-unit"><input class="input" id="weight" type="number" inputmode="decimal" min="30" max="300" step="0.1" placeholder="70" value="${data.weight_kg}"><i>kg</i></div></label>`,
+  activity: () => `
+    <h1 class="disp ob-title">¿Cuánto te mueves?</h1>
+    <p class="ob-sub">Elige lo que más se parezca a tu semana normal.</p>
+    ${choices(ACTIVITY, 'activity')}`,
+  goal: () => `
+    <h1 class="disp ob-title">¿Cuál es tu objetivo?</h1>
+    <p class="ob-sub">Puedes cambiarlo cuando quieras.</p>
+    ${choices(GOALS, 'goal')}`,
+  plan: () => `
+    <h1 class="disp ob-title">Tu punto de partida</h1>
+    <p class="ob-sub">Calculado con la fórmula Mifflin-St Jeor. Es un buen comienzo: ajústalo si quieres.</p>
+    <div class="plan-card">
+      <div style="font-size:10.5px;color:var(--ink-soft);font-weight:700;letter-spacing:0.05em;margin-bottom:8px;">META DIARIA</div>
+      <div class="plan-kcal" id="planKcal">${plan ? plan.kcal : '…'}</div>
+      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">kcal por día</div>
+      <div class="macro-chips">
+        <div><b id="planP" style="color:#7C5CFF;">${plan ? plan.protein_g : '–'}g</b><span>PROTEÍNA</span></div>
+        <div><b id="planC" style="color:#2DD4FF;">${plan ? plan.carbs_g : '–'}g</b><span>CARBOS</span></div>
+        <div><b id="planF" style="color:#FF8A5B;">${plan ? plan.fat_g : '–'}g</b><span>GRASA</span></div>
+      </div>
+      <div class="nudge"><button type="button" id="less" aria-label="Menos calorías">−</button><span style="font-size:11.5px;color:var(--ink-soft);">Ajustar de 50 en 50</span><button type="button" id="more" aria-label="Más calorías">+</button></div>
+    </div>
+    <p id="planNote" style="margin:14px 2px 0;font-size:12px;color:var(--ink-soft);line-height:1.5;">${plan && plan.note ? escapeHtml(plan.note) : ''}</p>
+    <p style="margin:auto 2px 0;padding-top:14px;font-size:11px;color:var(--ink-soft);line-height:1.5;">Es una estimación general, no un consejo médico.</p>`,
+};
+
+function payload() {
+  return {
+    sex: data.sex, birthdate: data.birthdate, height_cm: Number(data.height_cm), weight_kg: Number(data.weight_kg),
+    activity: data.activity, goal: data.goal, kcal: nudged,
+  };
+}
+
+async function loadPlan() {
+  try {
+    plan = await apiPost('api/plan/preview', payload());
+    $('planKcal').textContent = plan.kcal;
+    $('planP').textContent = `${plan.protein_g}g`;
+    $('planC').textContent = `${plan.carbs_g}g`;
+    $('planF').textContent = `${plan.fat_g}g`;
+    $('planNote').textContent = plan.note || '';
+    showError('');
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+function bind() {
+  document.querySelectorAll('.choice').forEach((btn) => btn.addEventListener('click', () => {
+    data[btn.dataset.key] = btn.dataset.value;
+    document.querySelectorAll(`.choice[data-key="${btn.dataset.key}"]`).forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+    showError('');
+  }));
+  const birth = $('birthdate'); if (birth) birth.addEventListener('input', () => { data.birthdate = birth.value; });
+  const height = $('height'); if (height) height.addEventListener('input', () => { data.height_cm = height.value; });
+  const weight = $('weight'); if (weight) weight.addEventListener('input', () => { data.weight_kg = weight.value; });
+  const less = $('less'); const more = $('more');
+  if (less) {
+    const nudge = (delta) => async () => {
+      if (!plan) return;
+      nudged = Math.max(800, Math.round(((nudged || plan.kcal) + delta) / 10) * 10);
+      await loadPlan();
+    };
+    less.addEventListener('click', nudge(-50));
+    more.addEventListener('click', nudge(50));
+  }
+}
+
+function render() {
+  const name = STEPS[step];
+  $('main').innerHTML = VIEWS[name]();
+  $('dots').innerHTML = STEPS.slice(1).map((_, i) => `<span class="${i < step ? 'on' : ''}"></span>`).join('');
+  $('dots').style.visibility = step === 0 ? 'hidden' : 'visible';
+  $('back').style.visibility = step === 0 ? 'hidden' : 'visible';
+  $('next').textContent = name === 'intro' ? 'Empezar' : name === 'plan' ? 'Empezar a registrar' : 'Siguiente';
+  showError('');
+  bind();
+  if (name === 'plan') loadPlan();
+  window.scrollTo(0, 0);
+}
+
+function validate() {
+  const name = STEPS[step];
+  if (name === 'about') {
+    if (!data.sex) return 'Elige una opción.';
+    if (!data.birthdate) return 'Escribe tu fecha de nacimiento.';
+    const age = (Date.now() - new Date(data.birthdate)) / 31557600000;
+    if (age < 13) return 'cadence es para personas de 13 años o más.';
+    if (age > 110) return 'Revisa tu fecha de nacimiento.';
+  }
+  if (name === 'body') {
+    const h = Number(data.height_cm); const w = Number(data.weight_kg);
+    if (!(h >= 100 && h <= 250)) return 'Escribe tu estatura en centímetros (entre 100 y 250).';
+    if (!(w >= 30 && w <= 300)) return 'Escribe tu peso en kilos (entre 30 y 300).';
+  }
+  if (name === 'activity' && !data.activity) return 'Elige una opción.';
+  if (name === 'goal' && !data.goal) return 'Elige una opción.';
+  return '';
+}
+
+function go(delta, pushed) {
+  step = Math.max(0, Math.min(STEPS.length - 1, step + delta));
+  if (delta > 0 && !pushed) history.pushState({ ob: step }, '');
+  render();
+}
+
+$('next').addEventListener('click', async () => {
+  const problem = validate();
+  if (problem) { showError(problem); return; }
+  if (STEPS[step] !== 'plan') { go(1); return; }
+  $('next').disabled = true;
+  try {
+    const saved = await apiPut('api/profile', payload());
+    rememberUser(saved);
+    window.location.replace('index.html');
+  } catch (err) {
+    showError(err.message);
+    $('next').disabled = false;
+  }
+});
+
+// The system Back button walks the steps backwards instead of leaving the questionnaire.
+$('back').addEventListener('click', () => history.back());
+window.addEventListener('popstate', (e) => {
+  const target = (e.state && e.state.ob) || 0;
+  step = target;
+  render();
+});
+
+(async function init() {
+  try {
+    me = await ensureSession({ needOnboarded: false });
+  } catch { return; }
+  if (me.onboarded) { window.location.replace('index.html'); return; }
+  const p = me.profile || {};
+  data.sex = p.sex || null; data.birthdate = p.birthdate || ''; data.height_cm = p.height_cm || '';
+  data.weight_kg = p.weight_kg || ''; data.activity = p.activity || null; data.goal = p.goal || null;
+  history.replaceState({ ob: 0 }, '');
+  render();
+})();
+</script>
+</body>
+</html>

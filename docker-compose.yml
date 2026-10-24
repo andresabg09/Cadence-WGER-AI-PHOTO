@@ -142,6 +142,10 @@ services:
       TIMEZONE: ${TIMEZONE:-America/Panama}
       USER_NAME: ${USER_NAME:-Andrés}
       DATA_DIR: /data
+      # Cuentas: el primer registro es el administrador. Con ADMIN_EMAIL solo ese correo puede crearlo.
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      OPEN_REGISTRATION: ${OPEN_REGISTRATION:-false}
+      ANALYZE_DAILY_LIMIT: ${ANALYZE_DAILY_LIMIT:-40}
     volumes:
       # Notas y fotos de cadence (lo que wger no guarda): sobreviven a cada Implementar.
       - cadence-data:/data

@@ -19,15 +19,15 @@
     { key: 'historial', label: 'Historial', href: null },
   ];
   const BOTTOM = [
-    { key: 'perfil', label: 'Perfil', href: null },
-    { key: 'ajustes', label: 'Ajustes', href: null },
+    { key: 'perfil', label: 'Perfil', href: 'profile.html' },
+    { key: 'ajustes', label: 'Ajustes', href: 'profile.html#ajustes' },
   ];
 
   function itemHtml(item, current) {
     if (item.key === 'scan') {
       return `<a class="scan" href="${item.href}" ${current === 'escanear' ? 'aria-current="page"' : ''}>${svg('camara', 19)} ${item.label}</a>`;
     }
-    const active = (item.key === 'diario' && current === 'diario') ? 'aria-current="page"' : '';
+    const active = (item.key === 'diario' && current === 'diario') || (item.key === 'perfil' && current === 'perfil') ? 'aria-current="page"' : '';
     const attrs = item.href ? `href="${item.href}"` : `href="#" data-soon="${item.label}"`;
     return `<a class="item" ${attrs} ${active}>${svg(item.key, 18)}${item.label}</a>`;
   }
@@ -42,7 +42,7 @@
       ${ITEMS.map((i) => itemHtml(i, current)).join('')}
       <div class="grow"></div>
       ${BOTTOM.map((i) => itemHtml(i, current)).join('')}
-      <div class="conn" id="wgerConn"><span class="dot"></span><span id="wgerConnText">Comprobando wger…</span></div>
+      <div class="conn" id="wgerConn"><span class="dot"></span><span id="wgerConnText">Comprobando conexión…</span></div>
     `;
     nav.addEventListener('click', (e) => {
       const soon = e.target.closest('[data-soon]');
@@ -61,7 +61,7 @@
     try {
       const status = await apiGet('api/wger-status');
       box.className = `conn ${status.ok ? 'ok' : 'bad'}`;
-      text.textContent = status.ok ? 'Conectado a wger' : 'Sin conexión con wger';
+      text.textContent = status.ok ? 'Conectado' : 'Sin conexión con el servidor';
     } catch {
       box.className = 'conn bad';
       text.textContent = 'Sin conexión';

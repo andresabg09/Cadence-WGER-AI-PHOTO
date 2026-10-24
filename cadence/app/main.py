@@ -4,14 +4,17 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date as date_type, datetime, time, timedelta
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, UploadFile
+import threading
+
+from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import store
+from . import accounts, auth, store
 from .config import settings
 from .diagnostics import run_diagnostics
 from .matching import rank_candidates, rank_matches
+from .auth import current_user, require_admin
 from .meals import (
     MEAL_LABELS,
     MEAL_ORDER,
@@ -52,6 +55,7 @@ from .wger_client import WgerClient, WgerError
 
 logger = logging.getLogger("cadence")
 app = FastAPI(title="cadence", version="0.1.0")
+app.include_router(accounts.router)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 _vision_client: GeminiVisionClient | None = None
@@ -97,6 +101,49 @@ def get_wger_client() -> WgerClient:
     if not settings.wger_api_token:
         raise HTTPException(500, "WGER_API_TOKEN no esta configurado")
     return WgerClient(settings.wger_base_url, settings.wger_api_token, settings.wger_language_id, settings.wger_language_code)
+
+
+_plan_lock = threading.Lock()
+
+
+def plan_ref(plan_id: str | int) -> int | str:
+    return int(plan_id) if str(plan_id).isdigit() else plan_id
+
+
+def plan_for(wger: WgerClient, user: store.User, create: bool = True) -> int | str | None:
+    """The user's own wger nutrition plan (one per person, made on first use).
+
+    The administrator adopts the plan that existed before accounts, so their earlier diary stays.
+    """
+    if user.plan_id:
+        return plan_ref(user.plan_id)
+    with _plan_lock:
+        fresh = store.get_user(user.id)
+        if fresh and fresh.plan_id:  # another request just made it
+            user.plan_id = fresh.plan_id
+            return plan_ref(fresh.plan_id)
+        plan = wger.find_legacy_plan_id() if user.is_admin else None
+        if plan is None and create:
+            plan = wger.create_nutrition_plan(f"cadence:{user.id}")
+        if plan is not None:
+            store.update_user(user.id, plan_id=str(plan))
+            user.plan_id = str(plan)
+        return plan
+
+
+def owns_entry(wger: WgerClient, user: store.User, entry_id: str) -> bool:
+    """Is this diary entry in the user's own plan? (Every write goes through here.)"""
+    owner = store.entry_owner(entry_id)
+    if owner is not None:
+        return owner == user.id
+    try:
+        entry = wger.get_diary_entry(entry_id)
+    except WgerError:
+        return False
+    if user.plan_id and str(entry.get("plan")) == str(user.plan_id):
+        store.claim_entry(entry_id, user.id)
+        return True
+    return False
 
 
 @app.get("/health")
@@ -157,7 +204,7 @@ def wger_status():
 
 
 @app.get("/api/diagnostics")
-def diagnostics(deep: bool = False):
+def diagnostics(deep: bool = False, _: store.User = Depends(require_admin)):
     """Checklist of everything cadence needs; ?deep=1 also calls Gemini once."""
     wger = None
     if settings.wger_api_token:
@@ -198,8 +245,28 @@ def search_page():
     return FileResponse("static/search.html")
 
 
+@app.get("/login.html")
+def login_page():
+    return FileResponse("static/login.html")
+
+
+@app.get("/onboarding.html")
+def onboarding_page():
+    return FileResponse("static/onboarding.html")
+
+
+@app.get("/profile.html")
+def profile_page():
+    return FileResponse("static/profile.html")
+
+
+@app.get("/goals.html")
+def goals_page():
+    return FileResponse("static/goals.html")
+
+
 @app.get("/api/today", response_model=TodayResponse)
-def today(date: str | None = None):
+def today(date: str | None = None, user: store.User = Depends(current_user)):
     """The diary of one day (default: today in the user's timezone)."""
     real_today = local_now().date()
     try:
@@ -209,29 +276,24 @@ def today(date: str | None = None):
     shown_date = min(shown_date, real_today)  # nothing can be logged in the future
     wger = get_wger_client()
     try:
-        plan_id = settings.default_nutrition_plan_id or wger.find_default_nutrition_plan_id()
+        plan_id = plan_for(wger, user, create=False)
+        goal = MacroTotals(
+            kcal=user.goal_kcal or settings.fallback_goal_kcal,
+            protein_g=user.goal_protein or settings.fallback_goal_protein_g,
+            carbs_g=user.goal_carbs or settings.fallback_goal_carbs_g,
+            fat_g=user.goal_fat or settings.fallback_goal_fat_g,
+        )
         if plan_id is None:
             # Nothing logged yet: show an empty day instead of creating a plan on a read.
             return TodayResponse(
                 date=shown_date.isoformat(),
                 today=real_today.isoformat(),
                 totals=MacroTotals(),
-                goal=MacroTotals(
-                    kcal=settings.fallback_goal_kcal,
-                    protein_g=settings.fallback_goal_protein_g,
-                    carbs_g=settings.fallback_goal_carbs_g,
-                    fat_g=settings.fallback_goal_fat_g,
-                ),
+                goal=goal,
                 meals=[],
                 streak_days=0,
-                user_name=settings.user_name,
+                user_name=user.name,
             )
-        try:
-            plan = wger.get_nutrition_plan(plan_id)
-        except Exception:  # noqa: BLE001 - goals fall back to defaults, the diary still shows
-            logger.exception("no se pudo leer el plan %s", plan_id)
-            plan = {}
-
         now = local_now()
         today_date = real_today
         history_start = datetime.combine(today_date - timedelta(days=30), time.min, tzinfo=now.tzinfo)
@@ -323,13 +385,6 @@ def today(date: str | None = None):
                 )
             )
 
-        goal = MacroTotals(
-            kcal=float(plan.get("goal_energy") or settings.fallback_goal_kcal),
-            protein_g=float(plan.get("goal_protein") or settings.fallback_goal_protein_g),
-            carbs_g=float(plan.get("goal_carbohydrates") or settings.fallback_goal_carbs_g),
-            fat_g=float(plan.get("goal_fat") or settings.fallback_goal_fat_g),
-        )
-
         return TodayResponse(
             date=shown_date.isoformat(),
             today=real_today.isoformat(),
@@ -342,7 +397,7 @@ def today(date: str | None = None):
             goal=goal,
             meals=meals,
             streak_days=streak_days,
-            user_name=settings.user_name,
+            user_name=user.name,
         )
     finally:
         wger.close()
@@ -371,7 +426,7 @@ def diary_days(wger: WgerClient, plan_id: int, now: datetime, start: date_type, 
 
 
 @app.get("/api/calendar", response_model=CalendarResponse)
-def calendar(month: str | None = None):
+def calendar(month: str | None = None, user: store.User = Depends(current_user)):
     """Days with something logged in a month, each with the streak it belongs to."""
     now = local_now()
     real_today = now.date()
@@ -383,7 +438,7 @@ def calendar(month: str | None = None):
 
     wger = get_wger_client()
     try:
-        plan_id = settings.default_nutrition_plan_id or wger.find_default_nutrition_plan_id()
+        plan_id = plan_for(wger, user, create=False)
         if plan_id is None:
             return CalendarResponse(month=first.strftime("%Y-%m"), today=real_today.isoformat(), days=[])
 
@@ -413,13 +468,13 @@ def calendar(month: str | None = None):
 
 
 @app.get("/api/streaks", response_model=StreaksResponse)
-def streaks():
+def streaks(user: store.User = Depends(current_user)):
     """The streak in progress and the ones before it (last 12 months)."""
     now = local_now()
     real_today = now.date()
     wger = get_wger_client()
     try:
-        plan_id = settings.default_nutrition_plan_id or wger.find_default_nutrition_plan_id()
+        plan_id = plan_for(wger, user, create=False)
         counting: set[date_type] = set()
         if plan_id is not None:
             # Three reads of ~4 months keep each wger page small.
@@ -455,7 +510,9 @@ def streaks():
 
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)
-async def analyze(image: UploadFile):
+async def analyze(image: UploadFile, user: store.User = Depends(current_user)):
+    if not user.is_admin and not store.bump_usage(user.id, local_now().date().isoformat(), settings.analyze_daily_limit):
+        raise HTTPException(429, f"Llegaste al límite de {settings.analyze_daily_limit} fotos por día. Mañana puedes seguir; mientras tanto, busca el alimento a mano.")
     image_bytes = await image.read()
     if not image_bytes:
         raise HTTPException(400, "Imagen vacia")
@@ -499,7 +556,7 @@ async def analyze(image: UploadFile):
 
 
 @app.get("/api/ingredient/{ingredient_id}", response_model=IngredientDetail)
-def ingredient_detail(ingredient_id: int):
+def ingredient_detail(ingredient_id: int, _: store.User = Depends(current_user)):
     wger = get_wger_client()
     try:
         data = wger.get_ingredient(ingredient_id)
@@ -516,7 +573,7 @@ def ingredient_detail(ingredient_id: int):
 
 
 @app.get("/api/search", response_model=list[SearchResult])
-def search_foods(term: str):
+def search_foods(term: str, _: store.User = Depends(current_user)):
     """Manual food search (search.html): wger hits + their kcal/100g."""
     term = term.strip()
     if len(term) < 2:
@@ -539,11 +596,11 @@ def search_foods(term: str):
 
 
 @app.get("/api/recent", response_model=list[SearchResult])
-def recent_foods():
+def recent_foods(user: store.User = Depends(current_user)):
     """Distinct foods logged in the last 30 days, newest first."""
     wger = get_wger_client()
     try:
-        plan_id = settings.default_nutrition_plan_id or wger.find_default_nutrition_plan_id()
+        plan_id = plan_for(wger, user, create=False)
         if plan_id is None:
             return []
         now = local_now()
@@ -579,9 +636,11 @@ def recent_foods():
 
 
 @app.delete("/api/diary/{entry_id}")
-def delete_diary_entry(entry_id: str):
+def delete_diary_entry(entry_id: str, user: store.User = Depends(current_user)):
     wger = get_wger_client()
     try:
+        if not owns_entry(wger, user, entry_id):
+            raise HTTPException(404, "Registro no encontrado")
         wger.delete_diary_entry(entry_id)
         try:
             store.delete_entry(entry_id)
@@ -595,50 +654,67 @@ def delete_diary_entry(entry_id: str):
 
 
 @app.put("/api/diary/{entry_id}/note")
-def save_note(entry_id: str, body: NoteUpdate):
-    store.set_note(entry_id, body.note)
+def save_note(entry_id: str, body: NoteUpdate, user: store.User = Depends(current_user)):
+    wger = get_wger_client()
+    try:
+        if not owns_entry(wger, user, entry_id):
+            raise HTTPException(404, "Registro no encontrado")
+    finally:
+        wger.close()
+    store.set_note(entry_id, body.note, user.id)
     return {"status": "saved"}
 
 
 @app.post("/api/entry-media")
-def save_entry_media(upload: MediaUpload):
+def save_entry_media(upload: MediaUpload, user: store.User = Depends(current_user)):
     """Photos of a plate and each ingredient's crop, filed under the diary entries."""
+    wger = get_wger_client()
+    try:
+        mine = {item.entry_id for item in upload.items if owns_entry(wger, user, item.entry_id)}
+    finally:
+        wger.close()
+    if not mine:
+        raise HTTPException(404, "Registro no encontrado")
     keys: dict[int, str] = {}
     for index, data_url in enumerate(upload.photos):
         raw = store.decode_image(data_url)
         if raw:
-            keys[index] = f"{upload.plate_id}:{index}"
-            store.put_plate(keys[index], raw)
+            keys[index] = f"{user.id}-{upload.plate_id}:{index}"
+            store.put_plate(keys[index], raw, user.id)
     saved = 0
     for item in upload.items:
+        if item.entry_id not in mine:
+            continue
         crop = store.decode_image(item.crop)
         plate_key = keys.get(item.photo) if item.photo is not None else None
         if crop or plate_key:
-            store.set_media(item.entry_id, crop, plate_key, item.box)
+            store.set_media(item.entry_id, crop, plate_key, item.box, user.id)
             saved += 1
     return {"saved": saved}
 
 
 @app.get("/api/media/crop/{entry_id}")
-def media_crop(entry_id: str):
-    data = store.get_crop(entry_id)
+def media_crop(entry_id: str, user: store.User = Depends(current_user)):
+    data = store.get_crop(entry_id) if store.entry_owner(entry_id) == user.id else None
     if data is None:
         raise HTTPException(404, "Sin recorte")
     return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.get("/api/media/plate/{key}")
-def media_plate(key: str):
-    data = store.get_plate(key)
+def media_plate(key: str, user: store.User = Depends(current_user)):
+    data = store.get_plate(key) if store.plate_owner(key) == user.id else None
     if data is None:
         raise HTTPException(404, "Sin foto")
     return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.patch("/api/diary/{entry_id}")
-def update_diary_entry(entry_id: str, update: DiaryUpdate):
+def update_diary_entry(entry_id: str, update: DiaryUpdate, user: store.User = Depends(current_user)):
     wger = get_wger_client()
     try:
+        if not owns_entry(wger, user, entry_id):
+            raise HTTPException(404, "Registro no encontrado")
         when = None
         if update.meal:
             entry = wger.get_diary_entry(entry_id)
@@ -655,10 +731,10 @@ def update_diary_entry(entry_id: str, update: DiaryUpdate):
 
 
 @app.post("/api/confirm", response_model=ConfirmResponse)
-def confirm(request: ConfirmRequest):
+def confirm(request: ConfirmRequest, user: store.User = Depends(current_user)):
     wger = get_wger_client()
     try:
-        plan_id = request.plan_id or settings.default_nutrition_plan_id or wger.get_default_nutrition_plan_id()
+        plan_id = plan_for(wger, user)  # always the caller's own plan, never one sent by the client
 
         when = datetime_for_meal(request.meal, parse_taken_at(request.taken_at, local_now()))
         created = []
@@ -677,7 +753,7 @@ def confirm(request: ConfirmRequest):
         entry_day = when.astimezone(local_tz()).date()
         real_today = local_now().date()
         try:
-            store.set_logged_on([c.diary_entry_id for c in created], real_today.isoformat())
+            store.set_logged_on([c.diary_entry_id for c in created], real_today.isoformat(), user.id)
         except Exception:  # noqa: BLE001 - the plate is already in wger; only the streak bookkeeping is lost
             logger.exception("no se pudo anotar el dia de registro")
         return ConfirmResponse(created=created, date=entry_day.isoformat(), counts_for_streak=entry_day >= real_today)

@@ -198,6 +198,35 @@ para nada: todo lo que wger exija (plan de nutricion, etc.) lo crea cadence solo
 la alternativa es base propia en cadence + wger solo como catalogo (reescritura mayor,
 decision de Andres; no hecha).
 
+## Cuentas multiusuario (decision de Andres, 25 oct 2026)
+
+cadence se va a dar a mas personas (y quiza a alquilar o vender): NADIE debe pasar por el registro
+de wger. Diseno:
+- **Cuentas propias de cadence** en el almacen SQLite (`app/store.py`: users, sessions, invites,
+  weights, usage): correo + contrasena (scrypt), cookie de sesion `cadence_session` (HttpOnly,
+  SameSite=Lax, 60 dias). Sin SMTP: el administrador crea codigos de invitacion de un solo uso y
+  restablece contrasenas desde Perfil. El PRIMER registro es el administrador (y con `ADMIN_EMAIL`
+  solo ese correo puede crearlo). `OPEN_REGISTRATION=true` abre el registro sin codigo.
+- **Una sola cuenta de wger (el token de servicio) y UN PLAN DE NUTRICION POR PERSONA** (descripcion
+  `cadence:<id>`, `plan_for` en main.py). El administrador adopta el plan anterior a las cuentas
+  (`find_legacy_plan_id`). wger no ve usuarios. Metas, perfil, peso, notas y fotos viven en
+  cadence (wger no tiene donde guardarlos por persona).
+- **Aislamiento (lo mas importante):** todo endpoint de datos depende de `current_user`; el plan
+  sale SIEMPRE del usuario, nunca del cliente (`plan_id` del request se ignora); todo cambio/borrado
+  de un registro pasa por `owns_entry` (dueno guardado en `entry_meta.user_id` o plan de wger);
+  las fotos se sirven solo a su dueno. Cubierto por `tests/test_accounts.py`: AL AGREGAR UN ENDPOINT
+  NUEVO, exigir `current_user` y verificar la propiedad, y agregar su prueba de aislamiento.
+- **Costo de IA:** `ANALYZE_DAILY_LIMIT` (40 fotos/dia por persona; el admin no tiene limite).
+- **Primer uso:** `login.html` (entrar / crear cuenta con codigo, `?invite=CODIGO`), `onboarding.html`
+  (sexo, fecha de nacimiento, estatura, peso, actividad, objetivo -> meta calculada con
+  Mifflin-St Jeor en `app/nutrition.py`, ajustable de 50 en 50 kcal; guardas de seguridad: minimos
+  de kcal, menores de 18 sin deficit, peso bajo no baja). Pocas opciones a la vez: lo demas se va
+  mostrando de a poco. `profile.html` = Perfil + Ajustes (Instalar app siempre disponible,
+  apariencia, peso, invitaciones y personas para el admin); `goals.html` = Objetivos.
+- Al cambiar de persona en un dispositivo se borran sus caches locales (`rememberUser`).
+- Pendiente para vender/alquilar: terminos y privacidad reales, recuperacion de contrasena por correo,
+  respaldo del volumen `cadence-data`, y revisar AGPL de wger si se modifica su codigo (rebranding).
+
 ## Plan por bloques (fuente de verdad del avance)
 
 Mockup aprobado: artifact "cadence — Diseño" (claude.ai/artifact/VtU9UcFoBkUS7g7Nry3Exc),
@@ -270,8 +299,9 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   Panel de rachas (25 oct): la pastilla del fueguito de la cabecera es un boton (`openStreaks`,
   `GET /api/streaks`): racha actual con sus dias (cada llama crece segun el dia de la racha),
   mejor racha y rachas anteriores (ultimos 12 meses); tocar un dia/racha abre ese dia.
-- **Bloque 3 - Datos personales.** Perfil, Objetivos (Mifflin-St Jeor, guarda goal_* del
-  plan), Progreso (racha, peso desde weightentry, logros), Historial.
+- **Bloque 3 - Cuentas y primer uso (HECHO 25 oct).** Ver "Cuentas multiusuario": registro propio,
+  bienvenida/cuestionario, Perfil (con Instalar app), Objetivos, peso.
+- **Bloque 3b - Progreso e Historial.** Grafica de peso, logros, Historial completo (usa `weights`).
 - **Bloque 4 - Ajustes y habitos.** Ajustes (hub), Apariencia (toggle ya hecho),
   Bienvenida, Recordatorios, registro por voz.
 - **Bloque 5 - Integraciones wger.** Puente de entrenamiento (workoutsession/workoutlog),

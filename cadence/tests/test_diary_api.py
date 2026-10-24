@@ -16,13 +16,6 @@ from app.config import settings
 from app.meals import local_now
 
 
-@pytest.fixture(autouse=True)
-def data_dir(monkeypatch):
-    with tempfile.TemporaryDirectory() as tmp:
-        monkeypatch.setattr(settings, "data_dir", tmp)
-        yield tmp
-
-
 class FakeWger:
     def __init__(self, entries):
         self.entries = entries
@@ -36,7 +29,7 @@ class FakeWger:
         return [e for e in self.entries if start.isoformat() <= e["datetime"] <= end.isoformat() or True]
     def get_ingredient(self, ingredient_id):
         return {"name": "Arroz", "energy": 130, "protein": 2.7, "carbohydrates": 28, "fat": 0.3}
-    def get_diary_entry(self, entry_id): return self.entries[0]
+    def get_diary_entry(self, entry_id): return {**self.entries[0], "plan": 1}  # it lives in the user's plan
     def update_diary_entry(self, entry_id, amount_grams=None, when=None): self.updated = (entry_id, amount_grams, when)
     def log_diary_entry(self, plan, ingredient, grams, when): self.logged.append(when); return "uuid-1"
     def close(self): pass

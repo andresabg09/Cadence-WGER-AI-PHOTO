@@ -1,8 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, time, timedelta
 
-from fastapi import FastAPI, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+import httpx
+from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
@@ -38,6 +39,24 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 _vision_client: GeminiVisionClient | None = None
 
 
+@app.exception_handler(WgerError)
+async def wger_error_handler(request: Request, exc: WgerError):
+    return JSONResponse(status_code=502, content={"detail": str(exc)})
+
+
+@app.exception_handler(httpx.HTTPError)
+async def wger_http_error_handler(request: Request, exc: httpx.HTTPError):
+    # Without this any wger failure (bad token, wrong URL, 404...) surfaced as
+    # an opaque "Internal Server Error" with no hint of what to fix.
+    if isinstance(exc, httpx.HTTPStatusError):
+        detail = f"wger respondio {exc.response.status_code} en {exc.request.url.path}"
+        if exc.response.status_code in (401, 403):
+            detail += " - revisa WGER_API_TOKEN"
+    else:
+        detail = f"No se pudo conectar con wger ({type(exc).__name__}) - revisa WGER_BASE_URL"
+    return JSONResponse(status_code=502, content={"detail": detail})
+
+
 def get_vision_client() -> GeminiVisionClient:
     global _vision_client
     if _vision_client is None:
@@ -50,7 +69,7 @@ def get_vision_client() -> GeminiVisionClient:
 def get_wger_client() -> WgerClient:
     if not settings.wger_api_token:
         raise HTTPException(500, "WGER_API_TOKEN no esta configurado")
-    return WgerClient(settings.wger_base_url, settings.wger_api_token, settings.wger_language_id)
+    return WgerClient(settings.wger_base_url, settings.wger_api_token, settings.wger_language_id, settings.wger_language_code)
 
 
 @app.get("/health")
@@ -252,6 +271,12 @@ def search_foods(term: str):
         matches = wger.search_ingredients(term, limit=8)
 
         def with_energy(match: dict) -> SearchResult | None:
+            if match.get("energy") is not None:  # ingredientinfo returns it inline
+                return SearchResult(
+                    id=match["id"],
+                    name=match["name"],
+                    energy_kcal_100g=float(match["energy"] or 0),
+                )
             try:
                 data = wger.get_ingredient(match["id"])
             except Exception:

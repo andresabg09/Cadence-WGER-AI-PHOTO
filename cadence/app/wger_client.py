@@ -14,9 +14,10 @@ class WgerClient:
     database via this client; the vision model never supplies one.
     """
 
-    def __init__(self, base_url: str, api_token: str, language_id: int = 2):
+    def __init__(self, base_url: str, api_token: str, language_id: int = 2, language_code: str = "en"):
         self._base_url = base_url.rstrip("/")
         self._language_id = language_id
+        self._language_code = language_code
         self._client = httpx.Client(
             base_url=self._base_url,
             headers={"Authorization": f"Token {api_token}"},
@@ -24,6 +25,37 @@ class WgerClient:
         )
 
     def search_ingredients(self, term: str, limit: int = 15) -> list[dict]:
+        """Text search in wger's ingredient DB.
+
+        Recent wger versions dropped /ingredient/search/ (404) in favour of
+        /ingredientinfo/?name__search= (what wger's own mobile app uses), which
+        also returns the nutrition values inline. The legacy endpoint is kept
+        as a fallback for older instances.
+        """
+        response = self._client.get(
+            "/api/v2/ingredientinfo/",
+            params={
+                "name__search": term,
+                "language__code": self._language_code,
+                "limit": limit,
+                "format": "json",
+            },
+        )
+        if response.status_code != 404:
+            response.raise_for_status()
+            return [
+                {
+                    "id": item.get("id"),
+                    "name": item.get("name"),
+                    "image": item.get("image"),
+                    "energy": item.get("energy"),
+                }
+                for item in response.json().get("results", [])
+                if item.get("id") is not None
+            ]
+        return self._search_ingredients_legacy(term, limit)
+
+    def _search_ingredients_legacy(self, term: str, limit: int) -> list[dict]:
         response = self._client.get(
             "/api/v2/ingredient/search/",
             params={"term": term, "language": self._language_id, "format": "json"},

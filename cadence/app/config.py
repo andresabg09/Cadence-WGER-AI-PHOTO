@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     wger_base_url: str = "https://crm-wger.cjauws.easypanel.host"
     wger_api_token: str = ""
     wger_language_id: int = 2  # 2 = English in wger's default fixtures
+    wger_language_code: str = "en"  # same language, as ISO code (new search endpoint)
 
     # Behavior
     user_name: str = "Andrés"  # shown in the dashboard greeting

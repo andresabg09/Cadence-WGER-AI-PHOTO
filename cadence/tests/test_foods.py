@@ -150,3 +150,24 @@ def test_voice_turns_speech_into_the_same_candidates_a_photo_gives(wger, monkeyp
     assert admin.post("/api/voice", files={"audio": ("v.wav", b"", "audio/wav")}).status_code == 400
     assert admin.post("/api/voice", files={"audio": ("v.wav", b"x" * 4_100_000, "audio/wav")}).status_code == 413
     assert new_client().post("/api/voice", files={"audio": ("v.wav", b"x", "audio/wav")}).status_code == 401
+
+
+def test_plain_water_goes_to_the_water_bar_not_the_diary(wger, monkeypatch):
+    from app.schemas import DetectedComponent
+
+    class Sees:
+        def identify_components(self, data, mime):
+            return [DetectedComponent(name="pan de la abuela", search_name="bread", estimated_grams=100),
+                    DetectedComponent(name="agua", water_ml=300), DetectedComponent(name="Agua", water_ml=None)]
+
+        def identify_from_audio(self, data, mime):
+            return [DetectedComponent(name="agua", water_ml=500)]
+
+    admin, _ = two_people()
+    admin.post("/api/foods", json=FOOD)
+    monkeypatch.setattr(main, "get_vision_client", lambda: Sees())
+    seen = admin.post("/api/analyze", files={"image": ("p.jpg", b"x", "image/jpeg")}).json()
+    assert [c["detected_name"] for c in seen["components"]] == ["pan de la abuela"]
+    assert seen["water_ml"] == 550  # 300 measured + one unmeasured glass (250)
+    heard = admin.post("/api/voice", files={"audio": ("v.wav", b"RIFFxxxx", "audio/wav")}).json()
+    assert heard == {"components": [], "water_ml": 500}

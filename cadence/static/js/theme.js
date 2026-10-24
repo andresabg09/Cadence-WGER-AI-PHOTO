@@ -31,6 +31,11 @@ function applyTheme(theme) {
   }
 }
 
+function themeSound(theme) {
+  if (!window.sfx) return;
+  sfx.play({ dark: 'themeDark', light: 'themeLight', reading: 'themeReading' }[theme] || 'tick');
+}
+
 function initThemeToggle() {
   const theme = getStoredTheme();
   applyTheme(theme);
@@ -41,6 +46,7 @@ function initThemeToggle() {
     const next = THEME_CYCLE[(THEME_CYCLE.indexOf(current) + 1) % THEME_CYCLE.length];
     localStorage.setItem(STORAGE_KEY, next);
     applyTheme(next);
+    themeSound(next);
   });
 }
 

@@ -24,6 +24,8 @@ const SHELL_FILES = [
   'static/js/install.js',
   'static/js/datepicker.js',
   'static/js/food-sheet.js',
+  'static/js/sfx.js',
+  'static/js/constellation.js',
   'static/js/barcode.js',
   'static/icons/icon-192.png',
   'static/manifest.json',

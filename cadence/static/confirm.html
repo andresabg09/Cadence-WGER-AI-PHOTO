@@ -14,6 +14,8 @@
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
 <link rel="stylesheet" href="static/css/pulse.css">
 <style>
+  .water-step { width: 36px; height: 36px; border-radius: 11px; font-size: 16px; font-weight: 700; cursor: pointer; }
+  @media (min-width: 600px) and (max-width: 1023px) { .water-step { width: 44px; height: 44px; } }
   .gram-btn { width: 36px; height: 36px; border-radius: 11px; font-size: 16px; font-weight: 700; cursor: pointer; }
   @media (max-width: 599px) { .gram-btn { width: 32px; height: 32px; } }
   @media (min-width: 600px) and (max-width: 1023px) { .gram-btn { width: 44px; height: 44px; } }
@@ -84,6 +86,7 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/shell.js"></script>
 <script>
@@ -105,6 +108,7 @@ const analyzeResult = JSON.parse(raw || '{"components":[]}');
 const photos = readPhotos();
 let meal = sessionStorage.getItem('cadence_meal') || null;
 const takenAt = sessionStorage.getItem('cadence_taken_at') || null; // when the photo was taken
+let waterMl = Number(sessionStorage.getItem('cadence_water_ml') || 0); // plain water seen in the photo: goes to the water bar
 let mealSource = meal ? 'chosen' : 'none'; // 'chosen' = the user picked it, 'photo' = suggested from the photo time
 
 // Per-component live state: selected candidate id, its kcal/100g, grams, and
@@ -127,6 +131,12 @@ const state = analyzeResult.components.map((component) => {
   };
 });
 
+function setWater(ml) {
+  waterMl = Math.max(0, ml);
+  if (waterMl) sessionStorage.setItem('cadence_water_ml', String(waterMl)); else sessionStorage.removeItem('cadence_water_ml');
+  renderItems();
+}
+
 function persistState() {
   const merged = state.map((item) => ({
     detected_name: item.detected_name,
@@ -146,7 +156,7 @@ function renderSubtitle() {
   const manual = state.length - ai;
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   let text;
-  if (state.length === 0) text = 'Sin componentes';
+  if (state.length === 0) text = waterMl ? '💧 Agua detectada' : 'Sin componentes';
   else if (ai === 0) text = plural(manual, 'alimento agregado', 'alimentos agregados');
   else text = `✨ ${plural(ai, 'identificado', 'identificados')} por IA${manual ? ` · ${plural(manual, 'manual', 'manuales')}` : ''}`;
   if (photos.length > 1) text += ` · ${photos.length} fotos`;
@@ -363,11 +373,30 @@ function renderItems() {
 
   const bar = document.getElementById('confirmBar');
   document.getElementById('mealPick').style.display = state.length === 0 ? 'none' : 'flex';
-  bar.style.display = state.length === 0 ? 'none' : '';
+  bar.style.display = state.length === 0 && !waterMl ? 'none' : '';
+  document.getElementById('confirmBtn').firstChild.textContent = state.length === 0 ? 'Sumar el agua ' : 'Confirmar y registrar ';
 
-  if (state.length === 0) {
+  if (state.length === 0 && !waterMl) {
     wrap.innerHTML = emptyState();
     return;
+  }
+
+  if (waterMl > 0) {
+    const water = document.createElement('div');
+    water.className = 'card water-card span-all';
+    water.innerHTML = `
+      <span class="wc-ico">💧</span>
+      <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;">Agua detectada</div><div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">Se suma a tu barra de agua de hoy, sin calorías.</div></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="water-step" id="waterMinus" aria-label="Menos agua" style="border:1px solid var(--card-border);background:var(--bg);color:var(--ink);">−</button>
+        <span class="mono" style="font-size:13px;font-weight:700;min-width:62px;text-align:center;">${waterMl} ml</span>
+        <button class="water-step" id="waterPlus" aria-label="Más agua" style="border:none;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));color:#fff;">+</button>
+      </div>
+      <button class="wc-x" id="waterDrop" aria-label="No sumar el agua">✕</button>`;
+    wrap.appendChild(water);
+    water.querySelector('#waterMinus').addEventListener('click', () => setWater(waterMl - 50));
+    water.querySelector('#waterPlus').addEventListener('click', () => setWater(waterMl + 50));
+    water.querySelector('#waterDrop').addEventListener('click', () => setWater(0));
   }
 
   state.forEach((item, idx) => {
@@ -503,7 +532,7 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
     detected_name: item.detected_name,
   }));
 
-  if (items.length === 0) {
+  if (items.length === 0 && waterMl === 0) {
     showToast('No hay nada que confirmar todavía');
     return;
   }
@@ -516,7 +545,19 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
   btn.textContent = 'Guardando…';
 
   try {
-    const saved = await apiPost('api/confirm', payload);
+    // Only water: nothing goes to the diary, it just fills the bar on the photo's day.
+    const localDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const saved = items.length
+      ? await apiPost('api/confirm', payload)
+      : { created: [], date: localDay(takenAt ? new Date(takenAt) : new Date()), counts_for_streak: true };
+    if (window.sfx) sfx.play(items.length ? (photos.length ? 'photo' : 'save') : 'water'); // the reward: a bell for the meal, a shutter + bell for a photo, a drop for water
+    let waterLine = '';
+    if (waterMl > 0) {
+      const before = Number(localStorage.getItem(`cadence_water_${saved.date}`)) || 0;
+      const after = addWater(saved.date, waterMl);
+      waterLine = ` · 💧 +${waterMl} ml de agua`;
+      if (before < 2000 && after >= 2000) sessionStorage.setItem('cadence_water_goal', '1');
+    }
     // Each diary entry remembers its own zoomed crop (same order as the items we sent).
     // Photos and crops go to the server store; if that fails the plate is already saved in wger,
     // so keep a copy on this device and the diary moves it up on the next visit.
@@ -535,12 +576,14 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
     const flash = saved.counts_for_streak === false
       ? `Guardado en ${dayLabel}. Es un registro tardío: no suma a tu racha, que solo cuenta si registras el mismo día.`
       : `Guardado en ${dayLabel}`;
+    const message = items.length ? flash + waterLine : `💧 +${waterMl} ml sumados a tu agua (${dayLabel})`;
     try {
-      sessionStorage.setItem('cadence_flash', flash);
+      sessionStorage.setItem('cadence_flash', message);
       sessionStorage.setItem('cadence_flash_kind', saved.counts_for_streak === false ? 'warn' : 'ok');
     } catch { /* no flash */ }
     try { if (saved.date) sessionStorage.setItem('cadence_open_date', saved.date); } catch { /* no storage */ }
-    leaveFlow(saved.date ? `index.html?date=${saved.date}` : 'index.html');
+    // A beat before leaving, so the first notes are heard (the next page is a new document).
+    setTimeout(() => leaveFlow(saved.date ? `index.html?date=${saved.date}` : 'index.html'), window.sfx && sfx.isOn() ? 420 : 0);
   } catch (err) {
     if (isNetworkFailure(err)) {
       // No connection: keep the plate and let the dashboard send it when we're back.

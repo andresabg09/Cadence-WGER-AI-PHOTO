@@ -56,10 +56,12 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/constellation.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/datepicker.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
+let sky = null;
 const STEPS = ['intro', 'about', 'body', 'activity', 'goal', 'plan'];
 const data = { sex: null, birthdate: '', height_cm: '', weight_kg: '', activity: null, goal: null };
 let step = 0;
@@ -98,9 +100,7 @@ function choices(list, key) {
 const VIEWS = {
   intro: () => `
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:30px;padding:10px 6px;">
-      <div class="float brand-mark" style="width:104px;height:104px;border-radius:34px;">
-        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8a2 2 0 012-2h1.2l.9-1.5A2 2 0 0110 3.5h4a2 2 0 011.9 1l.9 1.5H18a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="13" r="3.6" stroke="#fff" stroke-width="1.8"/></svg>
-      </div>
+      ${cadenceHero(170)}
       <div>
         <h1 class="disp ob-title" style="font-size:26px;">Hola${me ? `, ${escapeHtml(me.name)}` : ''}. Conoce tu comida al instante</h1>
         <p class="ob-sub" style="margin:0;">Toma una foto de tu plato: la IA reconoce cada alimento y cadence calcula las calorías. Primero, unas preguntas rápidas para calcular cuánto necesitas tú.</p>
@@ -206,6 +206,7 @@ function render() {
   $('next').textContent = name === 'intro' ? 'Empezar' : name === 'plan' ? 'Empezar a registrar' : 'Siguiente';
   showError('');
   bind();
+  if (sky) sky.calm(name !== 'intro'); // the sky takes the whole screen on the welcome, then rests behind the questions
   if (name === 'plan') loadPlan();
   window.scrollTo(0, 0);
 }
@@ -268,6 +269,8 @@ window.addEventListener('popstate', (e) => {
   data.weight_kg = p.weight_kg || ''; data.activity = p.activity || null; data.goal = p.goal || null;
   history.replaceState({ ob: 0 }, '');
   render();
+  sky = mountConstellation(document.body);
+  sky.calm(STEPS[step] !== 'intro');
 })();
 </script>
 </body>

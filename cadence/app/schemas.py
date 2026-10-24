@@ -9,6 +9,8 @@ class DetectedComponent(BaseModel):
     # Other short English names for the same food ("chicken soup" -> "chicken noodle soup"):
     # wger's catalog often names it differently, so each is searched too.
     search_alternatives: list[str] = []
+    # Plain water in the picture (a glass, a bottle): millilitres to add to the water bar, not a food to log.
+    water_ml: int | None = None
     confidence: float | None = None
     # Portion the model sees on the plate. Only a starting point for the
     # quantity stepper - the user always confirms, calories come from wger.
@@ -38,6 +40,7 @@ class ComponentMatch(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     components: list[ComponentMatch]
+    water_ml: int = 0  # plain water seen in the photo or heard in the audio: goes to the water bar
 
 
 class ConfirmItem(BaseModel):

@@ -23,10 +23,8 @@
 <body>
 <div class="plain-page">
   <div class="plain-body">
-    <div style="padding:56px 0 26px;text-align:center;">
-      <div class="brand-mark">
-        <svg width="38" height="38" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8a2 2 0 012-2h1.2l.9-1.5A2 2 0 0110 3.5h4a2 2 0 011.9 1l.9 1.5H18a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="13" r="3.6" stroke="#fff" stroke-width="1.8"/></svg>
-      </div>
+    <div style="padding:40px 0 22px;text-align:center;">
+      <div id="heroSlot"></div>
       <h1 class="disp" style="margin:18px 0 6px;font-size:26px;font-weight:700;">cadence</h1>
       <p id="tagline" style="margin:0;font-size:13.5px;color:var(--ink-soft);line-height:1.5;">Toma una foto de tu plato y conoce tus calorías al instante.</p>
     </div>
@@ -53,6 +51,7 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/constellation.js"></script>
 <script src="static/js/theme.js"></script>
 <script>
 const params = new URLSearchParams(window.location.search);
@@ -148,6 +147,8 @@ $('form').addEventListener('submit', async (e) => {
   }
 });
 
+document.getElementById('heroSlot').innerHTML = cadenceHero(150);
+mountConstellation(document.body);
 init();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>

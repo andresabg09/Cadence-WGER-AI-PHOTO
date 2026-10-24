@@ -72,6 +72,7 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/shell.js"></script>
 <script>
@@ -124,6 +125,7 @@ async function start() {
   recorder.addEventListener('dataavailable', (e) => { if (e.data && e.data.size) chunks.push(e.data); });
   recorder.addEventListener('stop', onStopped);
   recorder.start();
+  if (window.sfx) sfx.play('recStart');
   startedAt = Date.now();
   setState('listening', 'ESCUCHANDO… 0:00');
   $('phrase').innerHTML = 'Habla con naturalidad y toca <em>Listo</em> al terminar.';
@@ -136,6 +138,7 @@ async function start() {
 
 function finish() {
   clearInterval(timer);
+  if (window.sfx && recorder && recorder.state === 'recording') sfx.play('recStop');
   if (recorder && recorder.state !== 'inactive') recorder.stop();
 }
 
@@ -191,6 +194,7 @@ async function onStopped() {
     if (appending) { try { components = JSON.parse(sessionStorage.getItem('cadence_analyze_result')).components || []; } catch { components = []; } }
     else clearScanSession();
     data.components.forEach((c) => { c.photo = null; });
+    if (data.water_ml > 0) sessionStorage.setItem('cadence_water_ml', String((appending ? Number(sessionStorage.getItem('cadence_water_ml')) || 0 : 0) + data.water_ml));
     sessionStorage.setItem('cadence_analyze_result', JSON.stringify({ components: components.concat(data.components) }));
     if (!appending) writePhotos([]);
     window.location.replace('confirm.html');

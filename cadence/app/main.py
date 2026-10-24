@@ -705,6 +705,20 @@ def history(before: str | None = None, days: int = 14, user: store.User = Depend
         wger.close()
 
 
+def split_water(detected: list) -> tuple[list, int]:
+    """(foods, millilitres of plain water): water is not logged as food, it fills the water bar."""
+    foods, water = [], 0
+    for item in detected:
+        ml = item.water_ml
+        if ml is None and (item.name or "").strip().lower() in {"agua", "agua natural", "agua mineral", "water"}:
+            ml = 250  # named but not measured: one glass
+        if ml:
+            water += ml
+        else:
+            foods.append(item)
+    return foods, min(water, 3000)
+
+
 def match_components(wger: WgerClient, user: store.User, detected: list) -> list[ComponentMatch]:
     """For each food the model named: wger candidates (plus the person's own foods), best first."""
     components = []
@@ -757,17 +771,19 @@ async def analyze(image: UploadFile, user: store.User = Depends(current_user)):
         raise HTTPException(400, "Imagen vacia")
 
     vision = get_vision_client()
-    detected = vision.identify_components(image_bytes, image.content_type or "image/jpeg")
-    if not detected:
+    detected, water_ml = split_water(vision.identify_components(image_bytes, image.content_type or "image/jpeg"))
+    if not detected and not water_ml:
         raise HTTPException(422, "No se identifico ningun alimento en la foto")
 
-    wger = get_wger_client()
-    try:
-        components = match_components(wger, user, detected)
-    finally:
-        wger.close()
+    components = []
+    if detected:
+        wger = get_wger_client()
+        try:
+            components = match_components(wger, user, detected)
+        finally:
+            wger.close()
 
-    return AnalyzeResponse(components=components)
+    return AnalyzeResponse(components=components, water_ml=water_ml)
 
 
 _AUDIO_TYPES = {"audio/wav", "audio/x-wav", "audio/wave", "audio/mpeg", "audio/mp3", "audio/mp4", "audio/aac", "audio/ogg", "audio/webm", "audio/flac"}
@@ -784,12 +800,14 @@ async def voice(audio: UploadFile, user: store.User = Depends(current_user)):
     if len(data) > 4_000_000:
         raise HTTPException(413, "El audio es demasiado largo: di solo lo que vas a registrar (máx. 60 segundos)")
     mime = (audio.content_type or "audio/wav").split(";")[0].lower()
-    detected = get_vision_client().identify_from_audio(data, mime if mime in _AUDIO_TYPES else "audio/wav")
-    if not detected:
+    detected, water_ml = split_water(get_vision_client().identify_from_audio(data, mime if mime in _AUDIO_TYPES else "audio/wav"))
+    if not detected and not water_ml:
         raise HTTPException(422, "No identifiqué ningún alimento en lo que dijiste")
+    if not detected:
+        return AnalyzeResponse(components=[], water_ml=water_ml)
     wger = get_wger_client()
     try:
-        return AnalyzeResponse(components=match_components(wger, user, detected))
+        return AnalyzeResponse(components=match_components(wger, user, detected), water_ml=water_ml)
     finally:
         wger.close()
 

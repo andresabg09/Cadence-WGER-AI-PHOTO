@@ -783,3 +783,57 @@ body:has(.plain-page) {
 .switch input:checked + i { background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); }
 .switch input:checked + i::after { transform: translateX(20px); }
 .switch input:focus-visible + i { outline: 2px solid var(--accent-to); outline-offset: 2px; }
+
+/* ---- Botón central: la marca de cadence abre Foto · Código · Voz ---- */
+.launcher { position: relative; width: 64px; height: 64px; margin-top: -34px; flex-shrink: 0; }
+.lc-fab { position: relative; width: 64px; height: 64px; border-radius: 50%; border: none; padding: 3px; cursor: pointer; background: conic-gradient(from 200deg, var(--accent-from), var(--accent-to), var(--accent-from)); box-shadow: 0 6px 22px -6px rgba(124,92,255,0.6); animation: glowPulse 2.6s ease-out infinite; transition: transform 420ms cubic-bezier(0.2, 1.2, 0.3, 1), box-shadow 420ms ease; -webkit-tap-highlight-color: transparent; }
+.lc-fab:active { transform: scale(0.94); }
+.lc-core { display: flex; width: 100%; height: 100%; border-radius: 50%; align-items: center; justify-content: center; background: radial-gradient(circle at 30% 22%, #221d44, #0C0B14 72%); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07); }
+.lc-ring { transform-origin: 0 0; transition: transform 640ms cubic-bezier(0.2, 0.9, 0.2, 1); }
+.lc-halo { position: absolute; left: -90px; top: -90px; width: 244px; height: 244px; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, rgba(124,92,255,0.40), rgba(45,212,255,0.12) 46%, transparent 70%); opacity: 0.55; transform: scale(0.8); transition: transform 700ms cubic-bezier(0.2, 0.9, 0.2, 1), opacity 500ms ease; }
+.lc-arc { position: absolute; left: -128px; top: -178px; pointer-events: none; overflow: visible; }
+.lc-arc path { stroke-dasharray: 100; stroke-dashoffset: 100; opacity: 0; transition: stroke-dashoffset 160ms cubic-bezier(0.3, 0.6, 0.2, 1), opacity 200ms ease; }
+.lc-sat { position: absolute; display: block; opacity: 0; pointer-events: none; color: var(--ink); text-decoration: none; transform: translate(var(--bx), var(--by)) scale(0.2); transition: transform 220ms cubic-bezier(0.4, 0, 0.6, 1), opacity 120ms ease; -webkit-tap-highlight-color: transparent; }
+.lc-ball { display: flex; width: 100%; height: 100%; border-radius: 50%; align-items: center; justify-content: center; background: color-mix(in srgb, var(--card) 86%, transparent); border: 1px solid var(--card-border); backdrop-filter: blur(16px); box-shadow: 0 14px 30px -12px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08); }
+.lc-label { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; color: #F5F5F7; text-shadow: 0 1px 8px rgba(0,0,0,0.6); }
+.lc-code { width: 56px; height: 56px; left: -92px; top: -78px; --bx: 96px; --by: 82px; }
+.lc-voz { width: 56px; height: 56px; left: 100px; top: -78px; --bx: -96px; --by: 82px; }
+.lc-foto { width: 72px; height: 72px; left: -4px; top: -142px; --bx: 0px; --by: 138px; }
+.lc-code .lc-label, .lc-voz .lc-label { top: 65px; }
+.lc-foto .lc-label { top: 81px; }
+.lc-foto .lc-ball { background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); border: none; color: #fff; box-shadow: 0 0 44px -6px rgba(124,92,255,0.75), 0 14px 30px -10px rgba(0,0,0,0.7); }
+.lc-scrim { position: fixed; inset: 0; z-index: 25; opacity: 0; pointer-events: none; background: radial-gradient(circle at 50% 100%, rgba(124,92,255,0.26), rgba(5,5,10,0.80) 58%); backdrop-filter: blur(10px); transition: opacity 200ms ease; }
+.lc-scrim.open { opacity: 1; pointer-events: auto; transition-duration: 320ms; }
+.launcher.open .lc-fab { transform: scale(1.07); box-shadow: 0 0 0 6px rgba(124,92,255,0.14), 0 0 44px -4px rgba(45,212,255,0.55); }
+.launcher.open .lc-ring { transform: rotate(180deg); }
+.launcher.open .lc-halo { opacity: 1; transform: scale(1.12); }
+.launcher.open .lc-arc path { stroke-dashoffset: 0; opacity: 1; transition: stroke-dashoffset 760ms cubic-bezier(0.3, 0.6, 0.2, 1) 60ms, opacity 200ms ease; }
+.launcher.open .lc-sat { opacity: 1; pointer-events: auto; transform: translate(0, 0) scale(1); transition: transform 560ms cubic-bezier(0.2, 1.25, 0.35, 1) var(--d, 0ms), opacity 240ms ease var(--d, 0ms); }
+.launcher.open .lc-code { --d: 90ms; } .launcher.open .lc-voz { --d: 150ms; }
+.lc-sat:focus-visible, .lc-fab:focus-visible { outline: 2px solid var(--accent-to); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .lc-fab, .lc-ring, .lc-halo, .lc-arc path, .lc-sat, .lc-scrim { transition: none !important; animation: none !important; } }
+
+.vol-row { gap: 10px; }
+.vol-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent-to); height: 28px; cursor: pointer; }
+.vol-row .hint { min-width: 38px; text-align: right; }
+.menu-row .switch { margin-left: auto; }
+
+/* ---- Bienvenida: constelación y el ícono de cadence ---- */
+.constellation { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; transition: opacity 600ms ease; }
+.constellation.fixed { position: fixed; }
+body:has(.constellation) .plain-page { position: relative; z-index: 1; }
+body:has(.constellation) .plain-body { position: relative; z-index: 1; }
+.hero { position: relative; display: flex; align-items: center; justify-content: center; margin: 0 auto; }
+.hero-rings { position: absolute; inset: 0; overflow: visible; }
+.hero-sweep, .hero-counter, .hero-moons { transform-origin: 75px 75px; }
+.hero-sweep { animation: heroSpin 3.6s linear infinite; }
+.hero-counter { animation: heroSpin 46s linear infinite reverse; }
+.hero-moons { animation: heroSpin 16s linear infinite; }
+@keyframes heroSpin { to { transform: rotate(360deg); } }
+.hero-icon { position: relative; border-radius: 28%; box-shadow: 0 0 60px -8px rgba(124,92,255,0.7), 0 18px 40px -18px rgba(0,0,0,0.8); animation: floatSlow 5.5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .hero-sweep, .hero-counter, .hero-moons, .hero-icon { animation: none; } }
+
+/* Agua detectada en una foto de comida (confirm.html) */
+.water-card { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border-color: rgba(45,212,255,0.35); background: linear-gradient(135deg, rgba(45,212,255,0.12), var(--card) 70%); }
+.water-card .wc-ico { width: 44px; height: 44px; border-radius: 14px; background: rgba(45,212,255,0.16); display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.water-card .wc-x { width: 36px; height: 36px; border-radius: 11px; border: 1px solid var(--card-border); background: var(--bg); color: var(--ink-soft); cursor: pointer; font-size: 13px; }

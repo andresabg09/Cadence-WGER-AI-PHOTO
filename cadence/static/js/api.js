@@ -80,7 +80,7 @@ function rememberUser(me) {
     const previous = localStorage.getItem(UID_KEY);
     if (previous && previous !== String(me.id)) {
       Object.keys(localStorage)
-        .filter((k) => k.startsWith('cadence_') && !['cadence_theme', 'cadence_visits', 'cadence_install_dismissed', UID_KEY].includes(k))
+        .filter((k) => k.startsWith('cadence_') && !['cadence_theme', 'cadence_visits', 'cadence_install_dismissed', 'cadence_sound', UID_KEY].includes(k))
         .forEach((k) => localStorage.removeItem(k));
     }
     localStorage.setItem(UID_KEY, String(me.id));
@@ -205,6 +205,7 @@ async function safeText(response) {
 }
 
 function showToast(message, kind = 'error') {
+  if (kind === 'error' && window.sfx) sfx.play('error');
   const toast = document.createElement('div');
   toast.className = `toast ${kind}`;
   toast.textContent = message;
@@ -303,7 +304,17 @@ async function prepareImage(file, maxDim = 1280) {
   }
 }
 
-const SCAN_SESSION_KEYS = ['cadence_analyze_result', 'cadence_photos', 'cadence_meal', 'cadence_taken_at'];
+const SCAN_SESSION_KEYS = ['cadence_analyze_result', 'cadence_photos', 'cadence_meal', 'cadence_taken_at', 'cadence_water_ml'];
+
+// Water lives per day on this device (the bar in the diary). Returns the new total for that day.
+function addWater(dateIso, ml) {
+  try {
+    const key = `cadence_water_${dateIso}`;
+    const next = Math.min(10000, (Number(localStorage.getItem(key)) || 0) + ml);
+    localStorage.setItem(key, String(next));
+    return next;
+  } catch { return 0; }
+}
 function clearScanSession() {
   SCAN_SESSION_KEYS.forEach((key) => sessionStorage.removeItem(key));
 }

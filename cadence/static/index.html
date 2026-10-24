@@ -123,14 +123,40 @@
     </div>
   </div>
 
+  <div class="lc-scrim" id="lcScrim"></div>
+
   <div class="tab-bar">
     <button class="tab active" aria-current="page">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="5" stroke="var(--accent-to)" stroke-width="1.8"/><path d="M8 10h8M8 14h5" stroke="var(--accent-to)" stroke-width="1.8"/></svg>
       <span>Diario</span>
     </button>
-    <a href="scan.html" class="fab" aria-label="Escanear comida con IA — acción principal">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 8a2 2 0 012-2h1.2l.9-1.5A2 2 0 0110 3.5h4a2 2 0 011.9 1l.9 1.5H18a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="13" r="3.4" stroke="#fff" stroke-width="1.8"/><path d="M12 10.2v5.6M9.2 13h5.6" stroke="#fff" stroke-width="1.3"/></svg>
-    </a>
+    <div class="launcher" id="launcher">
+      <div class="lc-halo"></div>
+      <svg class="lc-arc" width="320" height="230" viewBox="-160 -210 320 230" fill="none" aria-hidden="true">
+        <defs><linearGradient id="lcg-a" x1="-100" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color: var(--accent-from); stop-opacity: 0"/><stop offset="0.5" style="stop-color: var(--accent-to)"/><stop offset="1" style="stop-color: var(--accent-from); stop-opacity: 0"/></linearGradient></defs>
+        <path d="M -96 -82 Q 0 -204 96 -82" pathLength="100" stroke="url(#lcg-a)" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      <a class="lc-sat lc-code" href="scan.html?mode=barcode" data-launch aria-label="Código: escanea un producto" tabindex="-1">
+        <span class="lc-ball"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6v12M7.5 6v12M11 6v12M14 6v12M17 6v12M20 6v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+        <span class="lc-label mono">CÓDIGO</span>
+      </a>
+      <a class="lc-sat lc-foto" href="scan.html" data-launch aria-label="Foto: la IA identifica tu plato" tabindex="-1">
+        <span class="lc-ball"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8a2 2 0 012-2h1.2l.9-1.5A2 2 0 0110 3.5h4a2 2 0 011.9 1l.9 1.5H18a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="13" r="3.3" stroke="currentColor" stroke-width="1.7"/></svg></span>
+        <span class="lc-label mono">FOTO</span>
+      </a>
+      <a class="lc-sat lc-voz" href="voice.html" data-launch aria-label="Voz: dilo en voz alta" tabindex="-1">
+        <span class="lc-ball"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+        <span class="lc-label mono">VOZ</span>
+      </a>
+      <button type="button" class="lc-fab" id="fabBtn" aria-expanded="false" aria-haspopup="true" aria-label="Registrar comida: foto, código o voz">
+        <span class="lc-core"><svg width="33" height="33" viewBox="-16 -16 32 32" fill="none" aria-hidden="true">
+          <defs><linearGradient id="lcg-r" x1="-12" y1="12" x2="12" y2="-12" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color: var(--accent-from)"/><stop offset="1" style="stop-color: var(--accent-to)"/></linearGradient>
+          <linearGradient id="lcg-l" x1="-6" y1="-6" x2="6" y2="6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#A592FF"/><stop offset="1" stop-color="#27B8E8"/></linearGradient></defs>
+          <g class="lc-ring"><circle r="11.5" stroke="rgba(255,255,255,0.10)" stroke-width="2.6"/><circle r="11.5" stroke="url(#lcg-r)" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="54 80" transform="rotate(-110)"/></g>
+          <circle r="6.2" fill="url(#lcg-l)"/><circle r="3.5" fill="#0A0A12" fill-opacity="0.9"/><circle cx="-1.6" cy="-1.8" r="1.25" fill="#fff"/>
+          <path d="M9.6 -12.4l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7z" fill="#fff"/></svg></span>
+      </button>
+    </div>
     <a class="tab" id="progressBtn" href="progress.html">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 19V9M12 19V5M19 19v-7" stroke="var(--ink-soft)" stroke-width="1.8" stroke-linecap="round"/></svg>
       <span>Progreso</span>
@@ -139,6 +165,7 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/shell.js"></script>
 <script src="static/js/install.js"></script>
@@ -378,6 +405,7 @@ function wireSwipeToDelete() {
       const entryId = row.dataset.entryId;
       try {
         await apiDelete(`api/diary/${entryId}`);
+        if (window.sfx) sfx.play('remove');
         row.remove();
         loadToday();
       } catch (err) {
@@ -683,6 +711,7 @@ function openEntryDetail(entryId) {
   $('sDelete').addEventListener('click', async () => {
     try {
       await apiDelete(`api/diary/${entryId}`);
+      if (window.sfx) sfx.play('remove');
       dismissOverlay(loadToday);
     } catch (err) {
       $('sError').textContent = `No se pudo borrar: ${err.message}`;
@@ -732,6 +761,8 @@ function syncExtrasOnce(data) {
 let viewDate = new URLSearchParams(window.location.search).get('date'); // null = today
 
 // Coming back from a finished flow: open the day the plate was filed under and say where it went.
+let justSaved = false; // arrived here right after saving a meal: time to celebrate what that unlocked
+
 function applyReturnHints() {
   try {
     const day = sessionStorage.getItem('cadence_open_date');
@@ -744,6 +775,7 @@ function applyReturnHints() {
     }
     const flash = sessionStorage.getItem('cadence_flash');
     if (flash) {
+      justSaved = true;
       const kind = sessionStorage.getItem('cadence_flash_kind') || 'ok';
       sessionStorage.removeItem('cadence_flash');
       sessionStorage.removeItem('cadence_flash_kind');
@@ -808,7 +840,7 @@ function renderWorkouts(data) {
     ${list.length ? `<div class="wo-note">Estimado por actividad y peso (${Math.round(burned)} kcal en total). No cambia tu meta del día.</div>` : ''}`;
   document.getElementById('woAdd').addEventListener('click', () => openWorkoutSheet(data.date));
   box.querySelectorAll('[data-wo]').forEach((b) => b.addEventListener('click', async () => {
-    try { await apiDelete(`api/workouts/${b.dataset.wo}`); loadToday(); } catch (err) { showToast(err.message); }
+    try { await apiDelete(`api/workouts/${b.dataset.wo}`); if (window.sfx) sfx.play('remove'); loadToday(); } catch (err) { showToast(err.message); }
   }));
 }
 
@@ -841,9 +873,68 @@ function openWorkoutSheet(day) {
     err.classList.remove('show');
     try {
       await apiPost('api/workouts', { kind, minutes: Number(sheet.querySelector('#woMin').value), day, note: sheet.querySelector('#woNote').value.trim() || null });
+      if (window.sfx) sfx.play('save');
       dismissOverlay(loadToday);
     } catch (e) { err.textContent = e.message || 'No se pudo guardar'; err.classList.add('show'); }
   });
+}
+
+// ---- Central button: the cadence mark opens Foto · Código · Voz (it never opens the camera by itself) ----
+const launcher = document.getElementById('launcher');
+const lcScrim = document.getElementById('lcScrim');
+const fabBtn = document.getElementById('fabBtn');
+
+function setLauncher(open) {
+  launcher.classList.toggle('open', open);
+  lcScrim.classList.toggle('open', open);
+  fabBtn.setAttribute('aria-expanded', String(open));
+  launcher.querySelectorAll('.lc-sat').forEach((a) => a.setAttribute('tabindex', open ? '0' : '-1'));
+}
+function openLauncher() {
+  if (launcher.classList.contains('open')) return;
+  setLauncher(true);
+  window.sfx && sfx.play('open');
+  pushOverlay(() => setLauncher(false)); // the system Back button closes it and stays on the diary
+}
+function closeLauncher(quiet) {
+  if (!launcher.classList.contains('open')) return;
+  if (!quiet && window.sfx) sfx.play('close');
+  dismissOverlay();
+}
+fabBtn.addEventListener('click', () => (launcher.classList.contains('open') ? closeLauncher() : openLauncher()));
+lcScrim.addEventListener('click', () => closeLauncher());
+launcher.querySelectorAll('[data-launch]').forEach((a) => a.addEventListener('click', (e) => {
+  if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+  e.preventDefault();
+  const href = a.getAttribute('href');
+  window.sfx && sfx.play('tick');
+  dismissOverlay(() => { window.location.href = href; }); // close first, so Back from the camera lands on a clean diary
+}));
+
+// The rewards: reaching the day's goal, and a streak that grew. Only right after saving a meal.
+const MILESTONES = [3, 7, 14, 30, 50, 100, 365];
+function celebrate(data) {
+  if (!justSaved || data.today !== data.date) return;
+  justSaved = false;
+  const lines = [];
+  if (sessionStorage.getItem('cadence_water_goal')) { sessionStorage.removeItem('cadence_water_goal'); lines.push(['goal', {}, '💧 ¡Meta de agua cumplida!']); }
+  const ratio = data.goal.kcal > 0 ? data.totals.kcal / data.goal.kcal : 0;
+  try {
+    if (ratio >= 0.9 && ratio <= 1.1 && localStorage.getItem('cadence_goal_day') !== data.date) {
+      localStorage.setItem('cadence_goal_day', data.date);
+      lines.push(['goal', {}, '🎯 ¡Cumpliste tu meta de hoy!']);
+    }
+    const seen = Number(localStorage.getItem('cadence_streak_seen') || 0);
+    if (data.streak_days > seen && data.streak_days > 0) {
+      lines.push(['streak', { days: data.streak_days, milestone: MILESTONES.includes(data.streak_days) }, `🔥 ¡Racha de ${data.streak_days} ${data.streak_days === 1 ? 'día' : 'días'}!`]);
+    }
+  } catch { /* no storage: skip the party */ }
+  lines.forEach(([sound, opts, text], i) => setTimeout(() => { if (window.sfx) sfx.play(sound, opts); showToast(text, 'ok'); }, 650 + i * 1100));
+}
+
+function noteStreak(data) {
+  if (data.today !== data.date) return;
+  try { localStorage.setItem('cadence_streak_seen', String(data.streak_days)); } catch { /* no storage */ }
 }
 
 function paintToday(data, stale) {
@@ -865,9 +956,14 @@ function paintToday(data, stale) {
   renderWater(getWaterMl(data.date));
   renderWorkouts(data);
 
-  if (!stale) syncExtrasOnce(data);
-  document.getElementById('waterPlus').onclick = () => setWaterMl(data.date, getWaterMl(data.date) + WATER_STEP_ML);
-  document.getElementById('waterMinus').onclick = () => setWaterMl(data.date, getWaterMl(data.date) - WATER_STEP_ML);
+  if (!stale) { celebrate(data); noteStreak(data); syncExtrasOnce(data); }
+  document.getElementById('waterPlus').onclick = () => {
+    const before = getWaterMl(data.date);
+    setWaterMl(data.date, before + WATER_STEP_ML);
+    if (window.sfx) sfx.play(before < WATER_GOAL_ML && before + WATER_STEP_ML >= WATER_GOAL_ML ? 'goal' : 'water'); // a drop; the full bottle gets the chime
+    if (before < WATER_GOAL_ML && before + WATER_STEP_ML >= WATER_GOAL_ML) showToast('💧 ¡Meta de agua cumplida!', 'ok');
+  };
+  document.getElementById('waterMinus').onclick = () => { setWaterMl(data.date, getWaterMl(data.date) - WATER_STEP_ML); if (window.sfx) sfx.play('tick'); };
 }
 
 async function loadToday() {

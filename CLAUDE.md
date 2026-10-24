@@ -356,6 +356,27 @@ La app debe sentirse como app nativa. Reglas que la logran, no deshacerlas:
   nueva muestra "Hay una version nueva - Actualizar". Fuentes de Google sin bloquear el pintado; GZip activo.
 - Pantallas nuevas: usar `apiGetSWR` para sus lecturas y no esperar a `ensureSession` antes de pedir datos.
 
+## Boton central, sonidos, bienvenida y agua (25 oct 2026)
+
+- **Boton central del diario** = la marca de cadence (NO una camara). Al tocarlo despliega Foto · Codigo · Voz
+  (`#launcher` en index.html + CSS `.lc-*`); es una hoja encima: usa `pushOverlay/dismissOverlay`, y al elegir una
+  opcion cierra primero y luego navega (asi el Atras desde la camara cae en un diario limpio). Diseno en el canvas
+  "cadence - Diseno" (Inicio, Progreso, Tablet, "Menu + abierto", "Menu +: secuencia").
+- **Sonidos** (`js/sfx.js`, sintetizados con WebAudio, sin archivos): `sfx.play('save'|'photo'|'water'|'goal'|'streak'|
+  'themeDark'|...)`. Ajustes tiene interruptor y volumen (`cadence_sound`). Premian: guardar comida (campana), foto
+  (obturador + campana), vaso de agua (gota), meta del dia y meta de agua (acorde), racha nueva (chispa mas aguda
+  cuanto mas larga), cambiar tema. La pagina nueva no hereda el permiso de audio: por eso confirm.html espera ~420 ms
+  antes de salir y las celebraciones de meta/racha se disparan en el diario (`celebrate()` en index.html, solo
+  cuando se llega justo despues de guardar). Toda accion nueva con recompensa debe llamar `sfx.play`.
+- **Bienvenida/entrada** (`onboarding.html` intro y `login.html`): `cadenceHero()` (el icono real de la app con
+  anillos orbitales) + `mountConstellation(document.body)` (`js/constellation.js`): estrellas unidas por lineas; el
+  cursor las arremolina, mantener presionado abre un agujero negro y soltar lanza una onda. Respeta
+  `prefers-reduced-motion`.
+- **Agua en fotos y voz**: la IA devuelve agua sola como `water_ml` (no es alimento; `split_water` en main.py,
+  `AnalyzeResponse.water_ml`). confirm.html muestra la tarjeta "Agua detectada" (editable) y al confirmar suma los
+  ml a la barra del dia de la foto (`addWater`, localStorage por dia) sin crear registro en el diario; si solo hay
+  agua el boton dice "Sumar el agua".
+
 ## Navegacion y boton Atras (regla de Andres, 25 oct 2026; aplica a TODA pantalla nueva)
 
 cadence se usa como web y como app instalada (PWA en Android/iPhone). El boton Atras del sistema

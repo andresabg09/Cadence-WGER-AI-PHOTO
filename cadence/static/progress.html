@@ -58,6 +58,7 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/shell.js"></script>
 <script>
@@ -176,6 +177,7 @@ $('addWeight').addEventListener('click', () => openSheet(`
   sheet.querySelector('#sSave').addEventListener('click', async () => {
     try {
       me = await apiPost('api/weight', { kg: Number(sheet.querySelector('#kg').value) });
+      if (window.sfx) sfx.play('save');
       close(load);
     } catch (err) { const e = sheet.querySelector('#sErr'); e.textContent = err.message; e.classList.add('show'); }
   });

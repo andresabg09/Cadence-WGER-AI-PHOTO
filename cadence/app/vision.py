@@ -27,6 +27,11 @@ Reglas estrictas:
   con valores enteros de 0 a 1000 (0,0 es la esquina superior izquierda de la
   foto, 1000,1000 la inferior derecha). Encierra solo ese componente, ajustado,
   no todo el plato; las cajas de componentes distintos pueden tocarse.
+- AGUA: si ves agua sola (un vaso, botella o jarra con agua sin sabor, sin azucar,
+  sin leche ni jugo) NO es un alimento: devuelvela como un elemento con
+  "name": "agua" y "water_ml": los mililitros que se ven (entero; un vaso lleno
+  ~250, una botella pequena ~500, una grande ~1000; ajusta si esta a medias).
+  Un refresco, jugo, leche, cafe o te NO es agua: listalo como alimento normal.
 - "name" va en espanol (es lo que ve el usuario). "search_name" es el mismo
   alimento como nombre generico corto en ingles y TAL COMO SE COME (cocido o
   preparado, no crudo): "cooked white rice", "grilled chicken breast",
@@ -36,7 +41,7 @@ Reglas estrictas:
   "chicken soup", "chicken broth"). Sirven para encontrarlo si la base lo nombra distinto.
 
 Responde UNICAMENTE con un JSON array, sin texto adicional, con esta forma:
-[{"name": "pollo a la plancha", "search_name": "grilled chicken breast", "search_alternatives": ["chicken breast", "grilled chicken"], "confidence": 0.9, "estimated_grams": 120, "box_2d": [250, 100, 700, 480]}, ...]
+[{"name": "pollo a la plancha", "search_name": "grilled chicken breast", "search_alternatives": ["chicken breast", "grilled chicken"], "confidence": 0.9, "estimated_grams": 120, "box_2d": [250, 100, 700, 480]}, {"name": "agua", "water_ml": 250, "confidence": 0.9}]
 """
 
 
@@ -55,6 +60,9 @@ Reglas estrictas:
   como nombre generico corto en ingles y TAL COMO SE COME (cooked/grilled/boiled).
   "search_alternatives": hasta 3 nombres alternativos en ingles, de mas a menos especifico.
 - "confidence": 0 a 1, que tan seguro estas de haber entendido ese alimento.
+- Agua sola ("un vaso de agua", "medio litro de agua"): elemento con "name": "agua"
+  y "water_ml" en mililitros (un vaso ~250, una botella ~500, un litro 1000). No es un
+  alimento. Refresco, jugo, leche o cafe SI son alimentos.
 - Si el audio no menciona ningun alimento o no se entiende, responde [].
 
 Responde UNICAMENTE con un JSON array, sin texto adicional:
@@ -93,7 +101,8 @@ def _parse_components(raw_text: str) -> list[DetectedComponent]:
     data = json.loads(payload)
     return [
         DetectedComponent(
-            name=item["name"],
+            name=item.get("name") or "agua",
+            water_ml=_sane_ml(item.get("water_ml")),
             search_name=item.get("search_name"),
             search_alternatives=_alternatives(item.get("search_alternatives")),
             confidence=item.get("confidence"),
@@ -108,6 +117,14 @@ def _alternatives(raw) -> list[str]:
     if not isinstance(raw, list):
         return []
     return [str(term).strip() for term in raw if str(term).strip()][:3]
+
+
+def _sane_ml(value) -> int | None:
+    try:
+        ml = int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+    return ml if 20 <= ml <= 3000 else None
 
 
 def _sane_grams(value) -> int | None:

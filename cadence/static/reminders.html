@@ -69,6 +69,7 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/shell.js"></script>
 <script src="static/js/install.js"></script>
@@ -162,6 +163,7 @@ async function enablePush() {
 
 let saveTimer = null;
 async function changed(turnedOn) {
+  if (window.sfx) sfx.play(turnedOn ? 'toggleOn' : 'tick');
   try {
     if (turnedOn) {
       const ok = await enablePush();
@@ -178,7 +180,7 @@ async function changed(turnedOn) {
   }
 }
 
-$('waterOn').addEventListener('change', () => { prefs.water.on = $('waterOn').checked; render(); changed($('waterOn').checked); });
+$('waterOn').addEventListener('change', () => { prefs.water.on = $('waterOn').checked; render(); if (!prefs.water.on && window.sfx) sfx.play('toggleOff'); changed($('waterOn').checked); });
 $('waterEvery').addEventListener('change', () => { prefs.water.every_h = Number($('waterEvery').value); changed(false); });
 $('waterFrom').addEventListener('change', () => { prefs.water.from = $('waterFrom').value; changed(false); });
 $('waterTo').addEventListener('change', () => { prefs.water.to = $('waterTo').value; changed(false); });

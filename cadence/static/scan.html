@@ -143,6 +143,7 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/sfx.js"></script>
 <script src="static/js/shell.js"></script>
 <script src="static/js/food-sheet.js"></script>
 <script src="static/js/barcode.js"></script>
@@ -260,6 +261,7 @@ function addScannedFood(food) {
 }
 
 async function handleCode(code) {
+  if (window.sfx) sfx.play('scan');
   caption.textContent = 'Buscando el producto…';
   try {
     const found = await apiGet(`api/barcode/${code}`);
@@ -320,6 +322,7 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
 });
 
 captureBtn.addEventListener('click', () => {
+  if (window.sfx) sfx.play('shutter');
   if (!video.videoWidth) {
     showToast('La cámara aún no está lista', 'warn');
     return;
@@ -364,7 +367,7 @@ function setBusy(busy) {
 }
 
 // Adds this photo's result to the plate (a fresh plate, or the current one when appending).
-function storePlate(newComponents, thumb, takenAt) {
+function storePlate(newComponents, thumb, takenAt, waterMl = 0) {
   const photos = appending ? readPhotos() : [];
   let components = [];
   if (appending) {
@@ -374,6 +377,7 @@ function storePlate(newComponents, thumb, takenAt) {
   newComponents.forEach((c) => { c.photo = photoIdx; }); // which photo it belongs to; c.box says where
   sessionStorage.setItem('cadence_analyze_result', JSON.stringify({ components: components.concat(newComponents) }));
   writePhotos(photos);
+  if (waterMl > 0) sessionStorage.setItem('cadence_water_ml', String((Number(sessionStorage.getItem('cadence_water_ml')) || 0) + waterMl));
   // The plate keeps the first photo's time; a later photo added to it doesn't move it.
   if (takenAt && !sessionStorage.getItem('cadence_taken_at')) sessionStorage.setItem('cadence_taken_at', takenAt);
 }
@@ -389,7 +393,7 @@ async function runAnalysis(source) {
   try {
     const data = await apiPost('api/analyze', formData, { isFormData: true });
     renderLiveChips(data.components);
-    storePlate(data.components, thumb, takenAt);
+    storePlate(data.components, thumb, takenAt, data.water_ml || 0);
     setTimeout(() => { window.location.replace('confirm.html'); }, 600);
   } catch (err) {
     setBusy(false);

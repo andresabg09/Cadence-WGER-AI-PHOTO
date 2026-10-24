@@ -55,6 +55,12 @@ CREATE TABLE IF NOT EXISTS workouts (
   id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL,
   minutes INTEGER NOT NULL, kcal REAL NOT NULL, note TEXT, created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS push_subs (
+  endpoint TEXT PRIMARY KEY, user_id INTEGER NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS reminder_prefs (user_id INTEGER PRIMARY KEY, prefs TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS reminder_sent (user_id INTEGER NOT NULL, key TEXT NOT NULL, day TEXT NOT NULL, PRIMARY KEY (user_id, key, day));
 CREATE TABLE IF NOT EXISTS weights (
   user_id INTEGER NOT NULL, day TEXT NOT NULL, kg REAL NOT NULL, PRIMARY KEY (user_id, day)
 );
@@ -556,3 +562,65 @@ def delete_weight(user_id: int, day: str) -> bool:
 def photo_count(user_id: int) -> int:
     with closing(_connect()) as conn:
         return conn.execute("SELECT COUNT(*) FROM entry_meta WHERE user_id = ? AND plate_key IS NOT NULL", (user_id,)).fetchone()[0]
+
+
+# ------------------------------------------------------------------ push subscriptions and reminders
+
+def get_kv(key: str) -> str | None:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def set_kv_if_absent(key: str, value: str) -> str:
+    """Store value unless a (concurrent) request already did; returns what is stored."""
+    with closing(_connect()) as conn, conn:
+        conn.execute("INSERT OR IGNORE INTO kv (key, value) VALUES (?, ?)", (key, value))
+        return conn.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()[0]
+
+
+def save_subscription(user_id: int, endpoint: str, p256dh: str, auth: str) -> None:
+    with closing(_connect()) as conn, conn:
+        conn.execute("INSERT OR REPLACE INTO push_subs (endpoint, user_id, p256dh, auth, created_at) VALUES (?,?,?,?,?)",
+                     (endpoint, user_id, p256dh, auth, _now()))
+
+
+def delete_subscription(endpoint: str, user_id: int | None = None) -> None:
+    with closing(_connect()) as conn, conn:
+        if user_id is None:
+            conn.execute("DELETE FROM push_subs WHERE endpoint = ?", (endpoint,))
+        else:
+            conn.execute("DELETE FROM push_subs WHERE endpoint = ? AND user_id = ?", (endpoint, user_id))
+
+
+def subscriptions(user_id: int) -> list[dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute("SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = ?", (user_id,)).fetchall()
+    return [{"endpoint": r[0], "keys": {"p256dh": r[1], "auth": r[2]}} for r in rows]
+
+
+def users_with_subscriptions() -> list[int]:
+    with closing(_connect()) as conn:
+        return [r[0] for r in conn.execute("SELECT DISTINCT user_id FROM push_subs")]
+
+
+def get_reminder_prefs(user_id: int) -> dict | None:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT prefs FROM reminder_prefs WHERE user_id = ?", (user_id,)).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def set_reminder_prefs(user_id: int, prefs: dict) -> None:
+    with closing(_connect()) as conn, conn:
+        conn.execute("INSERT OR REPLACE INTO reminder_prefs (user_id, prefs) VALUES (?, ?)", (user_id, json.dumps(prefs)))
+
+
+def claim_reminder(user_id: int, key: str, day: str) -> bool:
+    """True for the first caller only: a reminder goes out once per person, key and day (even with several workers)."""
+    with closing(_connect()) as conn, conn:
+        return conn.execute("INSERT OR IGNORE INTO reminder_sent (user_id, key, day) VALUES (?,?,?)", (user_id, key, day)).rowcount == 1
+
+
+def prune_reminders(before_day: str) -> None:
+    with closing(_connect()) as conn, conn:
+        conn.execute("DELETE FROM reminder_sent WHERE day < ?", (before_day,))

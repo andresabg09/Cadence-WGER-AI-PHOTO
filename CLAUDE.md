@@ -307,11 +307,18 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   `GET /api/progress`: racha, ultimas 4 semanas, grafica de peso con meta, 12 logros calculados en
   `app/progress.py`, sin guardarlos) e Historial (`history.html`, `GET /api/history`: dias con kcal y
   fotos, "ver dias anteriores"). Peso: `GET /api/weights`, `POST /api/weight`, `DELETE /api/weight/{dia}`.
-- **Bloque 4 - Ajustes y habitos.** HECHO: hub de Ajustes (esta dentro de `profile.html`), Apariencia,
-  Instalar app, Bienvenida (1 intro + 5 preguntas; reemplaza las 3 diapositivas del mockup).
-  FALTA: Recordatorios (notificaciones push: claves VAPID + service worker + programador en el
-  servidor; en iPhone solo con la app instalada) y registro por voz (audio -> Gemini, no el dictado
-  del navegador).
+- **Bloque 4 - Ajustes y habitos (HECHO).** Hub de Ajustes (dentro de `profile.html`), Apariencia,
+  Instalar app, Bienvenida, Recordatorios y Registro por voz. Recordatorios (`reminders.html`,
+  `app/reminders.py`): avisos push de agua (cada 1-4 h entre dos horas), comidas (desayuno/almuerzo/cena
+  a su hora; NO avisa si esa comida ya esta registrada) y resumen semanal (domingos). Web Push propio en
+  `app/webpush.py` (cifrado RFC 8291 verificado contra el vector oficial + VAPID, solo `cryptography` y
+  httpx: `pywebpush` necesita compilar `http-ece` y podria romper el build). Claves VAPID se generan solas
+  y viven en la tabla `kv`. Programador: hilo que despierta cada minuto (`start_scheduler`, evento
+  startup); cada aviso sale una vez por persona/dia (`claim_reminder`) y solo dentro de los 30 min
+  siguientes a su hora. En iPhone solo funciona con la app INSTALADA. Voz (`voice.html`, `POST
+  /api/voice`): graba, convierte a WAV 16 kHz en el navegador y Gemini lo convierte en la misma lista de
+  componentes que una foto (con gramos si los dijo) -> Confirmar. Cuenta para el limite diario de
+  analisis. NO verificado aun en un telefono real: push (ver "Enviar aviso de prueba" en Recordatorios).
 - **Bloque 5 - Integraciones (HECHO, con una decision).** El catalogo de wger es SOLO LECTURA por API
   (`IngredientViewSet` es ReadOnly): no se pueden crear alimentos ahi. Por eso los alimentos propios
   y los productos escaneados viven en cadence (`custom_foods`, id de ingrediente NEGATIVO) y sus

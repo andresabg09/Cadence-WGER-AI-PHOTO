@@ -432,7 +432,9 @@ La app debe sentirse como app nativa. Reglas que la logran, no deshacerlas:
 - Foto de perfil: `PUT/GET/DELETE /api/avatar` (tabla `avatars`, recorte cuadrado 360 px hecho en el navegador;
   `me.avatar_v` versiona la URL). Se pinta en Perfil, en la cabecera del diario y en la barra lateral (`paintAvatars`).
 - Sonidos nuevos: `add` (anadir alimento), `pick` (elegir opcion), `streakOpen` (intro al abrir la racha).
-- Sonidos de llegada (`sfx.enter('enterProfile'|'enterSettings'|'enterProgress')`, una linea al inicio de cada pagina): cortos y
+- Sonidos al ir a Progreso / Retos / Premios (`navProgress|navChallenges|navAwards`): suenan al TOCAR el enlace (delegado en `sfx.js`, por `href`; la pagina abre ~150 ms despues) porque una pagina recien abierta casi nunca puede sonar (iPhone). Cortos (<0.4 s). No usar `sfx.enter` para ellos.
+- Agua: los vasos se construyen una vez y se actualizan en sitio (`renderWater`, index.html) para que el agua suba/baje; gota que cae, pop del vaso, oleaje y, al cumplir la meta, ola de saltos (CSS `.glass-btn.pour|drain|cheer`); el sonido llega con la gota (`WATER_LAND_MS`). Respeta `prefers-reduced-motion`.
+- Sonidos de llegada (`sfx.enter('enterProfile'|'enterSettings')`, una linea al inicio de cada pagina): cortos y
   bajitos; si el navegador no deja sonar en la pagina nueva se omiten (nunca se encolan para el primer toque) y no suenan al recargar.
 - La foto ampliada del detalle (`openLightbox` en index.html) dibuja la zona azul del ingrediente sobre un marco (`.lb-frame`)
   que mide exactamente la foto, asi la zona sigue en su sitio al acercar.

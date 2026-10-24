@@ -133,12 +133,24 @@
     enterProfile(t) { tone(t, N(5), 0.55, { type: 'triangle', gain: 0.11, send: 0.6 }); tone(t + 0.1, N(9), 0.7, { type: 'triangle', gain: 0.09, send: 0.6 }); tone(t + 0.11, N(21), 0.7, { gain: 0.04, bell: true }); },
     // Ajustes: a precise little dial, two clicks and a soft low settle.
     enterSettings(t) { tone(t, 1250, 0.04, { gain: 0.09, send: 0.2 }); tone(t + 0.055, 1880, 0.05, { gain: 0.08, send: 0.25 }); pluck(t + 0.11, N(-5), 0.3, { gain: 0.1, send: 0.3 }); },
-    // Progreso: a quick rise that lands on a bright fifth, the feeling of arriving at your own results.
-    enterProgress(t) {
-      riser(t, 0.2, 300, 1000, { gain: 0.05 });
-      tone(t + 0.2, A5, 0.9, { gain: 0.12, bell: true });
-      tone(t + 0.25, E6, 1.0, { gain: 0.09, bell: true });
-      air(t + 0.2, 0.35, 6000, 11000, { gain: 0.02, type: 'highpass', q: 0.5 });
+    // Moving between the main sections (played on the tap, so it works on every phone): short, soft and different for each.
+    // Progreso: three light notes going up, like a small staircase.
+    navProgress(t) {
+      tone(t, E5, 0.2, { gain: 0.1, bell: true, send: 0.5 });
+      tone(t + 0.07, B5, 0.24, { gain: 0.09, bell: true, send: 0.5 });
+      tone(t + 0.14, E6, 0.4, { gain: 0.08, bell: true, send: 0.6 });
+    },
+    // Retos: a dry little "tok" and a coin-like ding.
+    navChallenges(t) {
+      pluck(t, N(-7), 0.16, { gain: 0.1, send: 0.2 });
+      tone(t + 0.06, 1760, 0.3, { gain: 0.1, bell: true, send: 0.5 });
+      tone(t + 0.12, 2349, 0.34, { gain: 0.06, bell: true, send: 0.6 });
+    },
+    // Premios: a quick shimmer that settles on a bright note.
+    navAwards(t) {
+      air(t, 0.12, 4500, 9500, { gain: 0.025, type: 'highpass', q: 0.5 });
+      tone(t + 0.02, G5, 0.26, { gain: 0.09, bell: true, send: 0.5 });
+      tone(t + 0.09, C6, 0.4, { gain: 0.09, bell: true, send: 0.6 });
     },
     // Collecting coins: two bright metallic pings.
     coin(t) { tone(t, 1760, 0.5, { gain: 0.13, bell: true }); tone(t + 0.07, 2637, 0.6, { gain: 0.1, bell: true }); air(t, 0.06, 5000, 9000, { gain: 0.03, type: 'highpass' }); },
@@ -167,7 +179,7 @@
     error(t) { tone(t, 247, 0.22, { gain: 0.14 }); tone(t + 0.13, 196, 0.3, { gain: 0.13 }); },
   };
 
-  const BUZZ = { coin: [10, 30, 10], award: [14, 40, 14, 40, 24], enterProgress: 8, streakOpen: [12, 70, 40], add: 10, pick: 6, open: 8, save: [14, 40, 14], photo: [10, 30, 18], water: 10, goal: [20, 50, 20, 50, 40], streak: [16, 40, 30], error: [30, 40, 30], remove: 12 };
+  const BUZZ = { coin: [10, 30, 10], award: [14, 40, 14, 40, 24], navProgress: 8, navChallenges: 8, navAwards: 8, streakOpen: [12, 70, 40], add: 10, pick: 6, open: 8, save: [14, 40, 14], photo: [10, 30, 18], water: 10, goal: [20, 50, 20, 50, 40], streak: [16, 40, 30], error: [30, 40, 30], remove: 12 };
 
   function play(name, opts) {
     const s = settings();
@@ -211,6 +223,24 @@
     };
     if (ctx.state === 'suspended') ctx.resume().then(flush).catch(() => {}); else flush();
   }
+
+  // Taps on the links to Progreso / Retos / Premios make their sound first (the tap is what lets the browser play it, a
+  // freshly opened page often may not) and the page opens a breath later, once the sound has started.
+  const NAV_SOUND = { 'progress.html': 'navProgress', 'challenges.html': 'navChallenges', 'awards.html': 'navAwards' };
+  let leaving = false;
+  document.addEventListener('click', (e) => {
+    if (leaving || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a || (a.target && a.target !== '_self') || a.hasAttribute('download')) return;
+    const name = NAV_SOUND[(a.getAttribute('href') || '').split(/[?#]/)[0]];
+    if (!name || !settings().on || !(window.AudioContext || window.webkitAudioContext)) return;
+    if (a.pathname === location.pathname) return;
+    e.preventDefault();
+    leaving = true;
+    play(name);
+    setTimeout(() => { location.assign(a.href); }, 150);
+    setTimeout(() => { leaving = false; }, 1500); // if the page was kept (bfcache) the next tap works again
+  });
 
   ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'].forEach((type) => window.addEventListener(type, unlock, { passive: true }));
 

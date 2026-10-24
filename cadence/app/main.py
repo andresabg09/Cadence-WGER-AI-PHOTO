@@ -10,9 +10,10 @@ from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import accounts, auth, store
+from . import accounts, auth, nutrition, store
 from .config import settings
 from .diagnostics import run_diagnostics
+from .progress import achievements as build_achievements, day_totals, streak_runs
 from .matching import rank_candidates, rank_matches
 from .auth import current_user, require_admin
 from .meals import (
@@ -34,10 +35,17 @@ from .schemas import (
     ComponentMatch,
     CalendarDay,
     CalendarResponse,
+    BarcodeResult,
+    HistoryDay,
+    HistoryResponse,
+    ProgressDay,
+    ProgressResponse,
+    WeightPoint,
     ConfirmedEntry,
     ConfirmRequest,
     ConfirmResponse,
     DiaryUpdate,
+    FoodIn,
     IngredientDetail,
     MacroTotals,
     MealGroup,
@@ -48,6 +56,8 @@ from .schemas import (
     StreakRun,
     StreaksResponse,
     TodayResponse,
+    WorkoutIn,
+    WorkoutOut,
     WgerStatus,
 )
 from .vision import GeminiVisionClient
@@ -131,8 +141,28 @@ def plan_for(wger: WgerClient, user: store.User, create: bool = True) -> int | s
         return plan
 
 
+def user_entries(wger: WgerClient, user: store.User, plan_id: int | str | None, start: datetime, end: datetime) -> list[dict]:
+    """The person's diary in [start, end]: their wger plan plus the entries cadence keeps itself
+    (own foods and scanned products, which wger's read-only catalog cannot hold)."""
+    entries = wger.get_diary_entries(plan_id, start, end) if plan_id is not None else []
+    return entries + store.local_entries(user.id, start, end)
+
+
+def ingredient_info(wger: WgerClient, user: store.User, ingredient_id: int) -> dict:
+    """wger-shaped nutrition of a food: own foods have a negative id and live in cadence."""
+    if ingredient_id < 0:
+        food = store.get_custom_food(ingredient_id, user.id)
+        if food is None:
+            raise WgerError("Ese alimento propio no existe")
+        return food
+    return wger.get_ingredient(ingredient_id)
+
+
 def owns_entry(wger: WgerClient, user: store.User, entry_id: str) -> bool:
     """Is this diary entry in the user's own plan? (Every write goes through here.)"""
+    if store.is_local_entry(entry_id):
+        local = store.local_entry(entry_id)
+        return bool(local and local["user_id"] == user.id)
     owner = store.entry_owner(entry_id)
     if owner is not None:
         return owner == user.id
@@ -164,9 +194,12 @@ def meal_now(at: str | None = None):
 _staples_cache: dict = {"at": float("-inf"), "items": []}  # monotonic() can be tiny right after a host boot
 
 
-def candidate_pool(wger: WgerClient, term: str) -> list[dict]:
-    """wger's text search plus the ready-to-eat staples (cached 10 min), without repeats."""
+def candidate_pool(wger: WgerClient, term: str, user: store.User | None = None) -> list[dict]:
+    """wger's text search plus the ready-to-eat staples (cached 10 min) and the person's own
+    foods, without repeats."""
     pool = wger.search_ingredients(term, limit=settings.search_fetch_limit)
+    if user is not None:
+        pool = store.custom_foods(user.id, term) + pool
     now = monotonic()
     if now - _staples_cache["at"] > 600:
         try:
@@ -260,6 +293,16 @@ def profile_page():
     return FileResponse("static/profile.html")
 
 
+@app.get("/progress.html")
+def progress_page():
+    return FileResponse("static/progress.html")
+
+
+@app.get("/history.html")
+def history_page():
+    return FileResponse("static/history.html")
+
+
 @app.get("/goals.html")
 def goals_page():
     return FileResponse("static/goals.html")
@@ -283,22 +326,11 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
             carbs_g=user.goal_carbs or settings.fallback_goal_carbs_g,
             fat_g=user.goal_fat or settings.fallback_goal_fat_g,
         )
-        if plan_id is None:
-            # Nothing logged yet: show an empty day instead of creating a plan on a read.
-            return TodayResponse(
-                date=shown_date.isoformat(),
-                today=real_today.isoformat(),
-                totals=MacroTotals(),
-                goal=goal,
-                meals=[],
-                streak_days=0,
-                user_name=user.name,
-            )
         now = local_now()
         today_date = real_today
         history_start = datetime.combine(today_date - timedelta(days=30), time.min, tzinfo=now.tzinfo)
         day_end = datetime.combine(today_date, time.max, tzinfo=now.tzinfo)
-        entries = wger.get_diary_entries(plan_id, history_start, day_end)
+        entries = user_entries(wger, user, plan_id, history_start, day_end)
 
         try:
             logged_on = store.get_logged_on([str(e["id"]) for e in entries])
@@ -309,7 +341,7 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
         if shown_date < history_start.date():
             # Older than the streak window: read that day on its own.
             day_start = datetime.combine(shown_date, time.min, tzinfo=now.tzinfo)
-            entries = wger.get_diary_entries(plan_id, day_start, datetime.combine(shown_date, time.max, tzinfo=now.tzinfo))
+            entries = user_entries(wger, user, plan_id, day_start, datetime.combine(shown_date, time.max, tzinfo=now.tzinfo))
         today_entries = [e for e in entries if entry_date(e) == shown_date]
 
         ingredient_cache: dict[int, dict] = {}
@@ -317,7 +349,7 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
         def macros_for(ingredient_id: int) -> dict:
             if ingredient_id not in ingredient_cache:
                 try:
-                    ingredient_cache[ingredient_id] = wger.get_ingredient(ingredient_id)
+                    ingredient_cache[ingredient_id] = ingredient_info(wger, user, ingredient_id)
                 except Exception:  # noqa: BLE001
                     logger.exception("no se pudo leer el alimento %s", ingredient_id)
                     ingredient_cache[ingredient_id] = {"name": "(alimento no disponible)"}
@@ -386,6 +418,7 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
             )
 
         return TodayResponse(
+            workouts=[WorkoutOut(**w) for w in store.workouts_between(user.id, shown_date.isoformat(), shown_date.isoformat())],
             date=shown_date.isoformat(),
             today=real_today.isoformat(),
             totals=MacroTotals(
@@ -403,11 +436,11 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
         wger.close()
 
 
-def diary_days(wger: WgerClient, plan_id: int, now: datetime, start: date_type, end: date_type
-               ) -> tuple[dict[date_type, int], set[date_type]]:
+def diary_days(wger: WgerClient, user: store.User, plan_id: int | str | None, now: datetime, start: date_type,
+               end: date_type) -> tuple[dict[date_type, int], set[date_type]]:
     """(entries per day, days that count for the streak) between two dates."""
-    entries = wger.get_diary_entries(
-        plan_id,
+    entries = user_entries(
+        wger, user, plan_id,
         datetime.combine(start, time.min, tzinfo=now.tzinfo),
         datetime.combine(end, time.max, tzinfo=now.tzinfo),
     )
@@ -439,18 +472,16 @@ def calendar(month: str | None = None, user: store.User = Depends(current_user))
     wger = get_wger_client()
     try:
         plan_id = plan_for(wger, user, create=False)
-        if plan_id is None:
-            return CalendarResponse(month=first.strftime("%Y-%m"), today=real_today.isoformat(), days=[])
 
         window_start = first - timedelta(days=62)
-        counts, counting = diary_days(wger, plan_id, now, window_start, last)
+        counts, counting = diary_days(wger, user, plan_id, now, window_start, last)
         # A streak running into the month can be older than the window: read further back until it breaks.
         for _ in range(6):
             if window_start not in counting:
                 break
             older_end = window_start - timedelta(days=1)
             older_start = older_end - timedelta(days=62)
-            older_counts, older_counting = diary_days(wger, plan_id, now, older_start, older_end)
+            older_counts, older_counting = diary_days(wger, user, plan_id, now, older_start, older_end)
             counts.update(older_counts)
             counting |= older_counting
             window_start = older_start
@@ -476,24 +507,12 @@ def streaks(user: store.User = Depends(current_user)):
     try:
         plan_id = plan_for(wger, user, create=False)
         counting: set[date_type] = set()
-        if plan_id is not None:
-            # Three reads of ~4 months keep each wger page small.
-            for chunk in range(3):
-                end = real_today - timedelta(days=122 * chunk)
-                start = end - timedelta(days=121)
-                counting |= diary_days(wger, plan_id, now, start, end)[1]
-        runs: list[StreakRun] = []
-        run_days: list[date_type] = []
-        for day in sorted(counting) + [None]:
-            if run_days and (day is None or day != run_days[-1] + timedelta(days=1)):
-                runs.append(StreakRun(start=run_days[0].isoformat(), end=run_days[-1].isoformat(), length=len(run_days)))
-                run_days = []
-            if day is not None:
-                run_days.append(day)
-        current = None
-        if runs and date_type.fromisoformat(runs[-1].end) >= real_today - timedelta(days=1):
-            current = runs.pop()  # still alive: today may simply not be logged yet
-        runs.reverse()  # newest first
+        # Three reads of ~4 months keep each wger page small.
+        for chunk in range(3):
+            end = real_today - timedelta(days=122 * chunk)
+            start = end - timedelta(days=121)
+            counting |= diary_days(wger, user, plan_id, now, start, end)[1]
+        current, runs = streak_runs(counting, real_today)
         return StreaksResponse(
             today=real_today.isoformat(),
             current=current,
@@ -505,6 +524,106 @@ def streaks(user: store.User = Depends(current_user)):
             best=max([r.length for r in runs] + ([current.length] if current else []), default=0),
             previous=runs[:12],
         )
+    finally:
+        wger.close()
+
+
+def _year_entries(wger: WgerClient, user: store.User, plan_id, now: datetime, days: int = 366) -> list[dict]:
+    """The person's diary for the last `days` days, read in ~4-month chunks to keep wger pages small."""
+    entries: list[dict] = []
+    for chunk in range(0, days, 122):
+        end = now.date() - timedelta(days=chunk)
+        start = end - timedelta(days=min(121, days - chunk - 1))
+        entries += user_entries(wger, user, plan_id, datetime.combine(start, time.min, tzinfo=now.tzinfo),
+                                datetime.combine(end, time.max, tzinfo=now.tzinfo))
+    return entries
+
+
+def _goal_kcal(user: store.User) -> float:
+    return user.goal_kcal or settings.fallback_goal_kcal
+
+
+@app.get("/api/progress", response_model=ProgressResponse)
+def progress(user: store.User = Depends(current_user)):
+    """Streak, the last 4 weeks, weight and achievements (everything read from the person's own data)."""
+    now = local_now()
+    today_ = now.date()
+    wger = get_wger_client()
+    try:
+        plan_id = plan_for(wger, user, create=False)
+        entries = _year_entries(wger, user, plan_id, now)
+        try:
+            logged_on = store.get_logged_on([str(e["id"]) for e in entries])
+        except Exception:  # noqa: BLE001
+            logger.exception("no se pudo leer el almacen local (racha)")
+            logged_on = {}
+        counting = {d for d in (entry_date(e) for e in counts_for_streak(entries, logged_on)) if d is not None}
+        current, previous = streak_runs(counting, today_)
+        best = max([r.length for r in previous] + ([current.length] if current else []), default=0)
+
+        recent_start = today_ - timedelta(days=89)
+        recent = [e for e in entries if (entry_date(e) or today_) >= recent_start]
+        totals = day_totals(recent, lambda ingredient_id: ingredient_info(wger, user, ingredient_id))
+        goal = _goal_kcal(user)
+        logged_days = {entry_date(e) for e in entries}
+        days = []
+        for offset in range(27, -1, -1):
+            d = today_ - timedelta(days=offset)
+            days.append(ProgressDay(date=d.isoformat(), kcal=round(totals.get(d, {}).get("kcal", 0)), logged=d in logged_days, counts=d in counting))
+
+        weights = store.weights_since(user.id, (today_ - timedelta(days=180)).isoformat())
+        change = None
+        month = [w for w in weights if w["day"] >= (today_ - timedelta(days=30)).isoformat()]
+        if len(month) >= 2:
+            change = round(month[-1]["kg"] - month[0]["kg"], 1)
+        all_weights = store.weights_since(user.id, "0000-00-00")
+        medals = build_achievements(
+            total_logged=len(entries), photos=store.photo_count(user.id), best_streak=best, weights=len(all_weights),
+            totals=totals, goal_kcal=goal, goal_protein=user.goal_protein or settings.fallback_goal_protein_g)
+        return ProgressResponse(
+            today=today_.isoformat(), streak_current=current.length if current else 0, streak_best=best,
+            logged_today=today_ in counting, goal_kcal=goal, days=days,
+            weights=[WeightPoint(**w) for w in weights], weight_change_30d=change,
+            target_weight_kg=user.target_weight_kg, achievements=medals, unlocked=sum(m.unlocked for m in medals))
+    finally:
+        wger.close()
+
+
+@app.get("/api/history", response_model=HistoryResponse)
+def history(before: str | None = None, days: int = 14, user: store.User = Depends(current_user)):
+    """Past days with something logged, newest first: calories and the photos of that day."""
+    now = local_now()
+    today_ = now.date()
+    try:
+        end_day = date_type.fromisoformat(before) - timedelta(days=1) if before else today_
+    except ValueError:
+        raise HTTPException(400, "Fecha invalida (usa AAAA-MM-DD)") from None
+    end_day = min(end_day, today_)
+    span = max(1, min(days, 31))
+    start_day = end_day - timedelta(days=span - 1)
+    wger = get_wger_client()
+    try:
+        plan_id = plan_for(wger, user, create=False)
+        entries = user_entries(wger, user, plan_id, datetime.combine(start_day, time.min, tzinfo=now.tzinfo),
+                               datetime.combine(end_day, time.max, tzinfo=now.tzinfo))
+        totals = day_totals(entries, lambda ingredient_id: ingredient_info(wger, user, ingredient_id))
+        try:
+            meta = store.get_meta([str(e["id"]) for e in entries])
+        except Exception:  # noqa: BLE001
+            meta = {}
+        by_day: dict[date_type, list[dict]] = {}
+        for entry in entries:
+            d = entry_date(entry)
+            if d is not None:
+                by_day.setdefault(d, []).append(entry)
+        out = []
+        for d in sorted(by_day, reverse=True):
+            with_crop = [str(e["id"]) for e in by_day[d] if meta.get(str(e["id"]), {}).get("has_crop")]
+            out.append(HistoryDay(date=d.isoformat(), kcal=round(totals[d]["kcal"]), count=len(by_day[d]),
+                                  thumbs=with_crop[:5], more=max(0, len(by_day[d]) - 5)))
+        oldest = today_ - timedelta(days=730)
+        return HistoryResponse(goal_kcal=_goal_kcal(user), days=out,
+                               next_before=start_day.isoformat() if start_day > oldest else None)
     finally:
         wger.close()
 
@@ -529,7 +648,7 @@ async def analyze(image: UploadFile, user: store.User = Depends(current_user)):
             # Search/rank with the English generic name (wger's DB language);
             # detected_name stays the Spanish label the user sees.
             term = component.search_name or component.name
-            raw_matches = candidate_pool(wger, term)
+            raw_matches = candidate_pool(wger, term, user)
             # The catalog may name the food differently ("chicken soup" vs "chicken noodle soup"):
             # search the model's alternative names (and, if still thin, the Spanish one) too.
             seen_ids = {m["id"] for m in raw_matches}
@@ -537,7 +656,7 @@ async def analyze(image: UploadFile, user: store.User = Depends(current_user)):
                 if extra.lower() == term.lower():
                     continue
                 try:
-                    more = wger.search_ingredients(extra, limit=settings.search_fetch_limit // 2)
+                    more = candidate_pool(wger, extra, user)
                 except Exception:  # noqa: BLE001 - alternatives are a bonus
                     continue
                 raw_matches += [m for m in more if m["id"] not in seen_ids]
@@ -569,12 +688,12 @@ async def analyze(image: UploadFile, user: store.User = Depends(current_user)):
 
 
 @app.get("/api/ingredient/{ingredient_id}", response_model=IngredientDetail)
-def ingredient_detail(ingredient_id: int, _: store.User = Depends(current_user)):
+def ingredient_detail(ingredient_id: int, user: store.User = Depends(current_user)):
     wger = get_wger_client()
     try:
-        data = wger.get_ingredient(ingredient_id)
+        data = ingredient_info(wger, user, ingredient_id)
         return IngredientDetail(
-            id=data["id"],
+            id=ingredient_id,
             name=data.get("name", "?"),
             energy_kcal_100g=float(data.get("energy", 0) or 0),
             protein_100g=float(data.get("protein", 0) or 0),
@@ -586,14 +705,14 @@ def ingredient_detail(ingredient_id: int, _: store.User = Depends(current_user))
 
 
 @app.get("/api/search", response_model=list[SearchResult])
-def search_foods(term: str, _: store.User = Depends(current_user)):
+def search_foods(term: str, user: store.User = Depends(current_user)):
     """Manual food search (search.html): wger hits + their kcal/100g."""
     term = term.strip()
     if len(term) < 2:
         return []
     wger = get_wger_client()
     try:
-        matches = candidate_pool(wger, term)
+        matches = candidate_pool(wger, term, user)
         results: list[SearchResult] = []
         for _score, match in rank_matches(term, matches, 8):
             energy = match.get("energy")
@@ -608,18 +727,120 @@ def search_foods(term: str, _: store.User = Depends(current_user)):
         wger.close()
 
 
+def _check_food(food: FoodIn) -> None:
+    if not food.name.strip() or len(food.name) > 80:
+        raise HTTPException(422, "Ponle un nombre al alimento (máx. 80 letras)")
+    for label, value, top in (("calorías", food.kcal, 950), ("proteína", food.protein, 100), ("carbohidratos", food.carbs, 100), ("grasa", food.fat, 100)):
+        if not 0 <= value <= top:
+            raise HTTPException(422, f"Revisa las {label}: por 100 g debe estar entre 0 y {top}")
+    if food.protein + food.carbs + food.fat > 105:
+        raise HTTPException(422, "Proteína + carbohidratos + grasa no pueden pasar de 100 g por cada 100 g")
+
+
+@app.post("/api/foods", response_model=SearchResult)
+def create_food(food: FoodIn, user: store.User = Depends(current_user)):
+    """The person's own food (macros per 100 g). Reusing a barcode updates that food."""
+    _check_food(food)
+    code = (food.barcode or "").strip() or None
+    existing = store.custom_food_by_barcode(user.id, code) if code else None
+    if existing:
+        return SearchResult(id=existing["id"], name=existing["name"], energy_kcal_100g=existing["energy"])
+    fid = store.create_custom_food(user.id, food.name, food.kcal, food.protein, food.carbs, food.fat, code)
+    return SearchResult(id=-fid, name=food.name.strip(), energy_kcal_100g=food.kcal)
+
+
+@app.get("/api/foods", response_model=list[SearchResult])
+def my_foods(user: store.User = Depends(current_user)):
+    return [SearchResult(id=f["id"], name=f["name"], energy_kcal_100g=f["energy"]) for f in store.custom_foods(user.id)[:30]]
+
+
+def _off_product(code: str) -> dict | None:
+    """Open Food Facts, only as a fallback when wger could not resolve the code."""
+    try:
+        response = httpx.get(f"https://world.openfoodfacts.org/api/v2/product/{code}.json",
+                             params={"fields": "product_name,nutriments"}, timeout=8,
+                             headers={"User-Agent": "cadence/1.0 (personal nutrition diary)"})
+        if response.status_code != 200 or response.json().get("status") != 1:
+            return None
+        product = response.json()["product"]
+        n = product.get("nutriments") or {}
+        kcal = n.get("energy-kcal_100g")
+        if kcal is None and n.get("energy_100g") is not None:
+            kcal = float(n["energy_100g"]) / 4.184
+        if not product.get("product_name") or kcal is None:
+            return None
+        return {"name": product["product_name"], "kcal": round(float(kcal), 1), "protein": round(float(n.get("proteins_100g") or 0), 1),
+                "carbs": round(float(n.get("carbohydrates_100g") or 0), 1), "fat": round(float(n.get("fat_100g") or 0), 1)}
+    except Exception:  # noqa: BLE001 - a bonus lookup
+        logger.exception("Open Food Facts no respondio para %s", code)
+        return None
+
+
+@app.get("/api/barcode/{code}", response_model=BarcodeResult)
+def barcode(code: str, user: store.User = Depends(current_user)):
+    """Own food with that code -> wger's catalog (which asks Open Food Facts itself) -> Open Food Facts."""
+    code = code.strip()
+    if not code.isdigit() or not 6 <= len(code) <= 14:
+        raise HTTPException(422, "Ese código de barras no es válido")
+    own = store.custom_food_by_barcode(user.id, code)
+    if own:
+        return BarcodeResult(found=True, source="own", id=own["id"], name=own["name"], kcal=own["energy"], protein=own["protein"],
+                             carbs=own["carbohydrates"], fat=own["fat"], barcode=code)
+    wger = get_wger_client()
+    try:
+        try:
+            hit = wger.get_ingredient_by_code(code)
+        except Exception:  # noqa: BLE001
+            logger.exception("wger no pudo buscar el codigo %s", code)
+            hit = None
+    finally:
+        wger.close()
+    if hit and hit.get("energy") is not None:
+        return BarcodeResult(found=True, source="wger", id=hit["id"], name=hit["name"], kcal=float(hit["energy"]),
+                             protein=float(hit.get("protein") or 0), carbs=float(hit.get("carbohydrates") or 0),
+                             fat=float(hit.get("fat") or 0), barcode=code)
+    off = _off_product(code)
+    if off:
+        return BarcodeResult(found=True, source="off", barcode=code, **off)
+    return BarcodeResult(found=False, barcode=code)
+
+
+@app.post("/api/workouts", response_model=WorkoutOut)
+def add_workout(body: WorkoutIn, user: store.User = Depends(current_user)):
+    """A workout in the person's own log (kcal = estimate from the activity, minutes and weight)."""
+    if body.kind not in nutrition.WORKOUT_MET:
+        raise HTTPException(422, "Elige el tipo de entrenamiento")
+    if not 5 <= body.minutes <= 600:
+        raise HTTPException(422, "La duración debe estar entre 5 y 600 minutos")
+    today_ = local_now().date()
+    try:
+        day = date_type.fromisoformat(body.day) if body.day else today_
+    except ValueError:
+        raise HTTPException(400, "Fecha invalida (usa AAAA-MM-DD)") from None
+    if day > today_:
+        raise HTTPException(422, "No se puede registrar un entrenamiento futuro")
+    kcal = nutrition.workout_kcal(body.kind, body.minutes, store.latest_weight(user.id) or 70)
+    wid = store.add_workout(user.id, day.isoformat(), body.kind, body.minutes, kcal, body.note)
+    return WorkoutOut(id=wid, day=day.isoformat(), kind=body.kind, minutes=body.minutes, kcal=kcal, note=(body.note or "").strip() or None)
+
+
+@app.delete("/api/workouts/{workout_id}")
+def delete_workout(workout_id: int, user: store.User = Depends(current_user)):
+    if not store.delete_workout(user.id, workout_id):
+        raise HTTPException(404, "Entrenamiento no encontrado")
+    return {"status": "deleted"}
+
+
 @app.get("/api/recent", response_model=list[SearchResult])
 def recent_foods(user: store.User = Depends(current_user)):
     """Distinct foods logged in the last 30 days, newest first."""
     wger = get_wger_client()
     try:
         plan_id = plan_for(wger, user, create=False)
-        if plan_id is None:
-            return []
         now = local_now()
         start = datetime.combine(now.date() - timedelta(days=30), time.min, tzinfo=now.tzinfo)
         # Until the end of today: logging "desayuno" at night stamps it at 8:00, i.e. later than now.
-        entries = wger.get_diary_entries(plan_id, start, datetime.combine(now.date(), time.max, tzinfo=now.tzinfo))
+        entries = user_entries(wger, user, plan_id, start, datetime.combine(now.date(), time.max, tzinfo=now.tzinfo))
         entries.sort(key=lambda e: e.get("datetime", ""), reverse=True)
 
         seen: dict[int, dict] = {}
@@ -630,7 +851,7 @@ def recent_foods(user: store.User = Depends(current_user)):
 
         def to_result(entry: dict) -> SearchResult | None:
             try:
-                data = wger.get_ingredient(entry["ingredient"])
+                data = ingredient_info(wger, user, entry["ingredient"])
             except Exception:
                 return None
             when = entry_datetime(entry)
@@ -654,7 +875,10 @@ def delete_diary_entry(entry_id: str, user: store.User = Depends(current_user)):
     try:
         if not owns_entry(wger, user, entry_id):
             raise HTTPException(404, "Registro no encontrado")
-        wger.delete_diary_entry(entry_id)
+        if store.is_local_entry(entry_id):
+            store.delete_local_entry(entry_id)
+        else:
+            wger.delete_diary_entry(entry_id)
         try:
             store.delete_entry(entry_id)
         except Exception:  # noqa: BLE001
@@ -732,12 +956,15 @@ def update_diary_entry(entry_id: str, update: DiaryUpdate, user: store.User = De
             raise HTTPException(404, "Registro no encontrado")
         when = None
         if update.meal:
-            entry = wger.get_diary_entry(entry_id)
+            entry = store.local_entry(entry_id) if store.is_local_entry(entry_id) else wger.get_diary_entry(entry_id)
             current = entry_datetime(entry) or local_now()
             when = datetime_for_meal(update.meal, current)
         if update.amount_grams is not None and update.amount_grams <= 0:
             raise HTTPException(400, "La cantidad debe ser mayor que cero")
-        wger.update_diary_entry(entry_id, update.amount_grams, when)
+        if store.is_local_entry(entry_id):
+            store.update_local_entry(entry_id, update.amount_grams, when)
+        else:
+            wger.update_diary_entry(entry_id, update.amount_grams, when)
         return {"status": "updated"}
     except WgerError as exc:
         raise HTTPException(502, str(exc)) from exc
@@ -754,10 +981,15 @@ def confirm(request: ConfirmRequest, user: store.User = Depends(current_user)):
         when = datetime_for_meal(request.meal, parse_taken_at(request.taken_at, local_now()))
         created = []
         for item in request.items:
-            try:
-                diary_entry_id = wger.log_diary_entry(plan_id, item.ingredient_id, item.amount_grams, when)
-            except WgerError as exc:
-                raise HTTPException(502, str(exc)) from exc
+            if item.ingredient_id < 0:  # one of the person's own foods: kept by cadence
+                if store.get_custom_food(item.ingredient_id, user.id) is None:
+                    raise HTTPException(404, "Ese alimento propio no existe")
+                diary_entry_id = store.add_local_entry(user.id, item.ingredient_id, item.amount_grams, when)
+            else:
+                try:
+                    diary_entry_id = wger.log_diary_entry(plan_id, item.ingredient_id, item.amount_grams, when)
+                except WgerError as exc:
+                    raise HTTPException(502, str(exc)) from exc
             created.append(
                 ConfirmedEntry(
                     ingredient_id=item.ingredient_id,

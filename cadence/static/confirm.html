@@ -348,7 +348,7 @@ function emptyState() {
       <div style="display:flex;flex-direction:column;gap:10px;max-width:320px;margin:0 auto;">
         <a href="scan.html${meal ? `?meal=${meal}` : ''}" data-replace class="btn-primary">📸 Tomar otra foto</a>
         <a href="search.html?from=confirm${mealQuery}" data-replace class="btn-secondary" style="display:flex;align-items:center;justify-content:center;min-height:44px;">🔍 Buscar manualmente</a>
-        <button type="button" class="btn-secondary" id="barcodeBtn" style="min-height:44px;">▦ Escanear código de barras</button>
+        <a href="scan.html?mode=barcode${meal ? `&meal=${meal}` : ''}" data-replace class="btn-secondary" style="display:flex;align-items:center;justify-content:center;min-height:44px;">▦ Escanear código de barras</a>
       </div>
     </div>`;
 }
@@ -364,8 +364,6 @@ function renderItems() {
 
   if (state.length === 0) {
     wrap.innerHTML = emptyState();
-    const barcode = document.getElementById('barcodeBtn');
-    if (barcode) barcode.addEventListener('click', () => showToast('Escaneo por código de barras: próximamente', 'warn'));
     return;
   }
 

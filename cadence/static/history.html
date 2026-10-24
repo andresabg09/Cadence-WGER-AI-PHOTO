@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>cadence · Historial</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="static/css/pulse.css">
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body class="with-shell" data-page="historial">
+<div class="app">
+  <div class="page-head" style="padding:22px 20px 12px;display:flex;align-items:center;gap:12px;">
+    <a href="index.html" id="backLink" aria-label="Volver" class="icon-btn" style="width:44px;height:44px;border-radius:13px;flex-shrink:0;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
+    </a>
+    <div style="flex:1;min-width:0;">
+      <h1 class="disp" style="margin:0;font-size:20px;font-weight:700;">Historial</h1>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">Revisa lo que registraste cada día</div>
+    </div>
+  </div>
+
+  <div class="app-content" style="padding-bottom:60px;display:flex;flex-direction:column;gap:14px;">
+    <div class="week-strip" id="weekStrip" aria-label="Esta semana"></div>
+    <div class="history-grid" id="list"><div class="skeleton" style="height:96px;border-radius:18px;"></div></div>
+    <button class="btn-secondary" id="more" style="display:none;min-height:46px;">Ver días anteriores</button>
+  </div>
+</div>
+
+<script src="static/js/api.js"></script>
+<script src="static/js/theme.js"></script>
+<script src="static/js/shell.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const DAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+let goal = 2000;
+let nextBefore = null;
+let today = null;
+const seen = new Set();
+
+$('backLink').addEventListener('click', (e) => {
+  if (history.length > 1 && document.referrer.startsWith(window.location.origin)) { e.preventDefault(); history.back(); }
+});
+
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+function title(dateIso) {
+  const d = new Date(`${dateIso}T12:00:00`);
+  const diff = Math.round((new Date(`${today}T12:00:00`) - d) / 86400000);
+  const base = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  if (diff === 0) return `Hoy, ${base}`;
+  if (diff === 1) return `Ayer, ${base}`;
+  const name = DAYS[d.getDay()];
+  return `${name.charAt(0).toUpperCase() + name.slice(1)}, ${base}`;
+}
+
+function card(day) {
+  const over = day.kcal > goal * 1.1;
+  const thumbs = day.thumbs.map((id) => `<span class="h-thumb" style="background-image:url('api/media/crop/${encodeURIComponent(id)}')"></span>`).join('');
+  const rest = day.count - day.thumbs.length;
+  return `<a class="card history-card" href="index.html?date=${day.date}">
+    <div class="h-head"><b>${title(day.date)}</b><span class="mono"><b${over ? ' style="color:#FF8A5B;"' : ''}>${day.kcal}</b> <i>/ ${Math.round(goal)}</i></span></div>
+    <div class="h-thumbs">${thumbs}${rest > 0 ? `<span class="h-more">${day.thumbs.length ? '+' + rest : day.count + ' alimento' + (day.count === 1 ? '' : 's')}</span>` : ''}</div>
+  </a>`;
+}
+
+function renderStrip(loadedDays) {
+  const t = new Date(`${today}T12:00:00`);
+  const monday = new Date(t); monday.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+  const logged = new Set(loadedDays);
+  let html = '';
+  for (let i = 0; i < 7; i += 1) {
+    const d = new Date(monday); d.setDate(monday.getDate() + i);
+    const id = iso(d);
+    const future = id > today;
+    html += `<a class="ws-day${id === today ? ' on' : ''}${future ? ' future' : ''}" ${future ? '' : `href="index.html?date=${id}"`}><span>${'LMXJVSD'[i]}</span><b>${d.getDate()}</b><i class="${logged.has(id) ? 'dot' : ''}"></i></a>`;
+  }
+  $('weekStrip').innerHTML = html;
+}
+
+async function loadPage(first) {
+  const query = nextBefore ? `?before=${nextBefore}&days=14` : '?days=14';
+  const page = await apiGet(`api/history${query}`);
+  goal = page.goal_kcal;
+  nextBefore = page.next_before;
+  const fresh = page.days.filter((d) => !seen.has(d.date));
+  fresh.forEach((d) => seen.add(d.date));
+  if (first) $('list').innerHTML = '';
+  if (first && fresh.length === 0) $('list').innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><span style="font-size:34px;">🗓️</span><h3 class="disp" style="margin:12px 0 6px;font-size:15px;">Todavía no hay días para mostrar</h3><p style="margin:0;font-size:12px;color:var(--ink-soft);">Cuando registres comidas, cada día aparecerá aquí.</p></div>';
+  $('list').insertAdjacentHTML('beforeend', fresh.map(card).join(''));
+  $('more').style.display = nextBefore ? '' : 'none';
+  return page;
+}
+
+$('more').addEventListener('click', async () => {
+  $('more').disabled = true;
+  try { await loadPage(false); } catch (err) { showToast(err.message); }
+  $('more').disabled = false;
+});
+
+(async function init() {
+  let me;
+  try { me = await ensureSession(); } catch { return; }
+  try {
+    today = iso(new Date());
+    const page = await loadPage(true);
+    renderStrip(page.days.map((d) => d.date));
+  } catch (err) {
+    $('list').innerHTML = `<div class="chart-empty">No se pudo cargar el historial: ${escapeHtml(err.message)}</div>`;
+  }
+})();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

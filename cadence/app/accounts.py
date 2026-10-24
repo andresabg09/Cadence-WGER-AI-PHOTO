@@ -280,6 +280,19 @@ def rename(body: dict, user: store.User = Depends(auth.current_user)):
     return me_out(store.get_user(user.id))
 
 
+@router.get("/api/weights")
+def weights(days: int = 180, user: store.User = Depends(auth.current_user)):
+    since = _today() - timedelta(days=max(1, min(days, 3650)))
+    return store.weights_since(user.id, since.isoformat())
+
+
+@router.delete("/api/weight/{day}")
+def delete_weight(day: date, user: store.User = Depends(auth.current_user)):
+    if not store.delete_weight(user.id, day.isoformat()):
+        raise HTTPException(404, "No hay un peso en ese día")
+    return {"status": "deleted"}
+
+
 @router.post("/api/weight", response_model=MeOut)
 def log_weight(body: WeightIn, user: store.User = Depends(auth.current_user)):
     day = (body.day or _today())

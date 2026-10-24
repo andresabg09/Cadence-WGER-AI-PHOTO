@@ -69,6 +69,9 @@
       <div id="recents" style="display:flex;flex-direction:column;gap:8px;"></div>
     </div>
 
+    <a href="scan.html?mode=barcode" data-replace class="dashed-add" style="justify-content:center;border-radius:16px;padding:14px;font-size:12.5px;font-weight:600;">
+      <span style="font-weight:800;color:var(--accent-to);">▦</span> Escanear código de barras
+    </a>
     <button id="customBtn" class="dashed-add" style="justify-content:center;border-radius:16px;padding:14px;font-size:12.5px;font-weight:600;font-family:inherit;">
       <span style="font-weight:800;color:var(--accent-to);">+</span> Crear alimento personalizado (macros manuales)
     </button>
@@ -79,6 +82,7 @@
 <script src="static/js/api.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/shell.js"></script>
+<script src="static/js/food-sheet.js"></script>
 <script>
 const FAV_KEY = 'cadence_favorites';
 const params = new URLSearchParams(location.search);
@@ -243,7 +247,7 @@ document.getElementById('termInput').addEventListener('input', (e) => {
   }, 350);
 });
 
-document.getElementById('customBtn').addEventListener('click', () => showToast('Alimento personalizado: próximamente', 'warn'));
+document.getElementById('customBtn').addEventListener('click', () => openFoodSheet({}, (food) => addFood(food)));
 
 renderFavorites();
 renderRecents();

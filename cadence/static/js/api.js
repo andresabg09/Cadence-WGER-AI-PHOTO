@@ -512,3 +512,15 @@ function parseExifDate(view, base) {
   if (year < 2000 || year > new Date().getFullYear() + 1) return null;
   return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`;
 }
+
+// ---- Streak flames (diary, calendar, Progreso): hotter flame = more days in a row ----
+const FLAME_PATH = 'M12 2c.7 3.2-1.3 4.9-3 6.8C7.4 10.6 6 12.4 6 15c0 3.3 2.7 6 6 6s6-2.7 6-6c0-2.3-1-3.9-2.2-5.1-.3 1.2-1 2-1.9 2.4.6-3.5-.6-7.4-1.9-10.3z';
+// 1-2 ember, 3-6 orange, 7-13 red, 14-29 magenta (glow), 30+ violet (glow): more days in a row, hotter flame.
+function flameTier(streak) {
+  return streak >= 30 ? 5 : streak >= 14 ? 4 : streak >= 7 ? 3 : streak >= 3 ? 2 : 1;
+}
+
+function flameSvg(streak, size = 15) {
+  return `<svg class="flame t${flameTier(streak)}" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><path d="${FLAME_PATH}"/></svg>`;
+}
+

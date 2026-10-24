@@ -15,8 +15,8 @@
   const ITEMS = [
     { key: 'diario', label: 'Diario', href: 'index.html' },
     { key: 'scan', label: 'Escanear con IA', href: 'scan.html' },
-    { key: 'progreso', label: 'Progreso', href: null },
-    { key: 'historial', label: 'Historial', href: null },
+    { key: 'progreso', label: 'Progreso', href: 'progress.html' },
+    { key: 'historial', label: 'Historial', href: 'history.html' },
   ];
   const BOTTOM = [
     { key: 'perfil', label: 'Perfil', href: 'profile.html' },
@@ -27,7 +27,7 @@
     if (item.key === 'scan') {
       return `<a class="scan" href="${item.href}" ${current === 'escanear' ? 'aria-current="page"' : ''}>${svg('camara', 19)} ${item.label}</a>`;
     }
-    const active = (item.key === 'diario' && current === 'diario') || (item.key === 'perfil' && current === 'perfil') ? 'aria-current="page"' : '';
+    const active = item.key === current ? 'aria-current="page"' : '';
     const attrs = item.href ? `href="${item.href}"` : `href="#" data-soon="${item.label}"`;
     return `<a class="item" ${attrs} ${active}>${svg(item.key, 18)}${item.label}</a>`;
   }

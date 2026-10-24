@@ -205,7 +205,7 @@ de wger. Diseno:
 - **Cuentas propias de cadence** en el almacen SQLite (`app/store.py`: users, sessions, invites,
   weights, usage): correo + contrasena (scrypt), cookie de sesion `cadence_session` (HttpOnly,
   SameSite=Lax, 60 dias). Sin SMTP: el administrador crea codigos de invitacion de un solo uso y
-  restablece contrasenas desde Perfil. El PRIMER registro es el administrador (y con `ADMIN_EMAIL`
+  restablece contrasenas desde Perfil: genera un CODIGO de un solo uso (24 h) que la persona escribe en el login ("Tengo un codigo", `POST /api/auth/reset`) para elegir su nueva clave; su clave actual sigue valiendo hasta entonces. El PRIMER registro es el administrador (y con `ADMIN_EMAIL`
   solo ese correo puede crearlo). `OPEN_REGISTRATION=true` abre el registro sin codigo.
 - **Una sola cuenta de wger (el token de servicio) y UN PLAN DE NUTRICION POR PERSONA** (descripcion
   `cadence:<id>`, `plan_for` en main.py). El administrador adopta el plan anterior a las cuentas
@@ -301,19 +301,30 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   Panel de rachas (25 oct): la pastilla del fueguito de la cabecera es un boton (`openStreaks`,
   `GET /api/streaks`): racha actual con sus dias (cada llama crece segun el dia de la racha),
   mejor racha y rachas anteriores (ultimos 12 meses); tocar un dia/racha abre ese dia.
-- **Bloque 3 - Datos personales.** HECHO: Perfil, Objetivos (Mifflin-St Jeor; las metas viven en
+- **Bloque 3 - Datos personales (HECHO).** Perfil, Objetivos (Mifflin-St Jeor; las metas viven en
   cadence, no en wger), registrar peso, cuentas y bienvenida/cuestionario (ver "Cuentas
-  multiusuario"), racha + calendario + panel de rachas, navegar por dias. FALTA: grafica de peso
-  (la tabla `weights` ya existe), logros, pantalla "Historial completo".
+  multiusuario"), racha + calendario + panel de rachas, navegar por dias. Progreso (`progress.html`,
+  `GET /api/progress`: racha, ultimas 4 semanas, grafica de peso con meta, 12 logros calculados en
+  `app/progress.py`, sin guardarlos) e Historial (`history.html`, `GET /api/history`: dias con kcal y
+  fotos, "ver dias anteriores"). Peso: `GET /api/weights`, `POST /api/weight`, `DELETE /api/weight/{dia}`.
 - **Bloque 4 - Ajustes y habitos.** HECHO: hub de Ajustes (esta dentro de `profile.html`), Apariencia,
   Instalar app, Bienvenida (1 intro + 5 preguntas; reemplaza las 3 diapositivas del mockup).
   FALTA: Recordatorios (notificaciones push: claves VAPID + service worker + programador en el
   servidor; en iPhone solo con la app instalada) y registro por voz (audio -> Gemini, no el dictado
   del navegador).
-- **Bloque 5 - Integraciones wger.** FALTA TODO: codigo de barras (el catalogo de wger trae `code`;
-  en iPhone no hay BarcodeDetector: usar libreria), alimento personalizado (crear ingrediente
-  propio por persona), puente de entrenamiento (workoutsession/workoutlog). El interruptor "Codigo"
-  del escaner ya existe pero solo dice "proximamente".
+- **Bloque 5 - Integraciones (HECHO, con una decision).** El catalogo de wger es SOLO LECTURA por API
+  (`IngredientViewSet` es ReadOnly): no se pueden crear alimentos ahi. Por eso los alimentos propios
+  y los productos escaneados viven en cadence (`custom_foods`, id de ingrediente NEGATIVO) y sus
+  registros en `local_entries` (id `c<n>`); `user_entries()` en main.py junta wger + locales y TODO lo
+  que lee el diario (hoy, calendario, rachas, progreso, historial, recientes) pasa por ahi. Codigo de
+  barras: `GET /api/barcode/{codigo}` = alimento propio -> wger (`ingredientinfo?code=`, wger consulta
+  Open Food Facts por su cuenta) -> Open Food Facts directo -> hoja para crearlo; lector en
+  `static/js/barcode.js` (BarcodeDetector o ZXing local en `js/vendor/`, Apache-2.0). Alimento
+  personalizado: `static/js/food-sheet.js`, `POST /api/foods`. Entrenamiento: NO se usa
+  workoutsession de wger (es de una sola cuenta de servicio, no por persona): registro propio
+  (`workouts`, `POST/DELETE /api/workouts`), kcal quemadas ESTIMADAS (MET x peso x horas) y no
+  cambian la meta del dia.
+- (Decision de Andres, 24 oct 2026: los Bloques 6 y 7 se POSPONEN; por ahora lo usan el y su novia. NO implementarlos hasta que lo pida.)
 - **Bloque 6 - Marca y deploy.** FALTA TODO: rebranding wger -> cadence (ademas, algunos mensajes de
   error del servidor aun nombran a wger), decidir deploy automatico (ver `deploy/README.md`).
 - **Bloque 7 - Listo para otras personas (propuesto, antes de abrir a desconocidos).** FALTA TODO:

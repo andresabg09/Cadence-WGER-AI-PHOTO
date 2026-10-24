@@ -75,3 +75,11 @@ def macros_for_kcal(kcal: float, weight_kg: float, goal: str) -> tuple[int, int,
     fat = round(kcal * 0.27 / 9)
     carbs = max(0, round((kcal - protein * 4 - fat * 9) / 4))
     return int(protein), int(carbs), int(fat)
+
+
+# Metabolic equivalents (kcal per kg per hour) of the activities cadence offers: an ESTIMATE, shown as such.
+WORKOUT_MET = {"pesas": 5.0, "cardio": 7.0, "caminar": 3.5, "correr": 9.8, "ciclismo": 7.5, "natacion": 6.0, "yoga": 2.5, "otro": 4.5}
+
+
+def workout_kcal(kind: str, minutes: int, weight_kg: float) -> float:
+    return round(WORKOUT_MET.get(kind, WORKOUT_MET["otro"]) * weight_kg * minutes / 60)

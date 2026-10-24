@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS workouts (
 );
 CREATE TABLE IF NOT EXISTS avatars (user_id INTEGER PRIMARY KEY, data BLOB NOT NULL, version INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS water_log (user_id INTEGER NOT NULL, day TEXT NOT NULL, ml INTEGER NOT NULL, PRIMARY KEY (user_id, day));
 CREATE TABLE IF NOT EXISTS push_subs (
   endpoint TEXT PRIMARY KEY, user_id INTEGER NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL
 );
@@ -381,6 +382,37 @@ def list_invites() -> list[dict]:
 def delete_invite(code: str) -> bool:
     with closing(_connect()) as conn, conn:
         return conn.execute("DELETE FROM invites WHERE code = ? AND used_by IS NULL", (code.upper(),)).rowcount > 0
+
+
+WATER_MAX_ML = 10000
+
+
+def water_ml(user_id: int, day: str) -> int:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT ml FROM water_log WHERE user_id = ? AND day = ?", (user_id, day)).fetchone()
+    return row[0] if row else 0
+
+
+def add_water(user_id: int, day: str, delta_ml: int) -> int:
+    """Adds (or removes) millilitres to a day and returns the new total. One statement, so two devices never overwrite each other."""
+    with closing(_connect()) as conn, conn:
+        conn.execute(
+            "INSERT INTO water_log (user_id, day, ml) VALUES (?, ?, MIN(?, MAX(0, ?))) "
+            "ON CONFLICT(user_id, day) DO UPDATE SET ml = MIN(?, MAX(0, ml + ?))",
+            (user_id, day, WATER_MAX_ML, delta_ml, WATER_MAX_ML, delta_ml),
+        )
+        return conn.execute("SELECT ml FROM water_log WHERE user_id = ? AND day = ?", (user_id, day)).fetchone()[0]
+
+
+def import_water(user_id: int, days: dict[str, int]) -> None:
+    """Water that only lived on one device: keeps the larger of what the server has and what the device had."""
+    with closing(_connect()) as conn, conn:
+        for day, ml in days.items():
+            conn.execute(
+                "INSERT INTO water_log (user_id, day, ml) VALUES (?, ?, ?) "
+                "ON CONFLICT(user_id, day) DO UPDATE SET ml = MAX(ml, excluded.ml)",
+                (user_id, day, min(WATER_MAX_ML, max(0, ml))),
+            )
 
 
 def set_weight(user_id: int, day: str, kg: float) -> None:

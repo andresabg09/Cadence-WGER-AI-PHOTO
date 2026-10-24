@@ -374,7 +374,7 @@ La app debe sentirse como app nativa. Reglas que la logran, no deshacerlas:
   `prefers-reduced-motion`.
 - **Agua en fotos y voz**: la IA devuelve agua sola como `water_ml` (no es alimento; `split_water` en main.py,
   `AnalyzeResponse.water_ml`). confirm.html muestra la tarjeta "Agua detectada" (editable) y al confirmar suma los
-  ml a la barra del dia de la foto (`addWater`, localStorage por dia) sin crear registro en el diario; si solo hay
+  ml a la barra del dia de la foto (`addWater` -> `POST /api/water`) sin crear registro en el diario; si solo hay
   agua el boton dice "Sumar el agua".
 
 ## Registrar: un solo menu (25 oct 2026, decision de Andres)
@@ -392,6 +392,15 @@ La app debe sentirse como app nativa. Reglas que la logran, no deshacerlas:
 - iOS: no hay WebKit en el entorno de pruebas, asi que NO esta probado en iPhone. Lo que se cuido por revision de
   codigo: `-webkit-backdrop-filter`, campos de 16 px (si no, iOS hace zoom), desbloqueo de audio en `click/touchend`,
   metas `apple-mobile-web-app-*`, push solo con la app instalada, lector de codigos con ZXing (sin BarcodeDetector).
+
+## Agua (25 oct 2026, decision de Andres: nada de datos solo-en-el-navegador)
+
+El agua se guarda POR PERSONA en el servidor (tabla `water_log`, `store.add_water` suma o resta ml de un dia en una sola
+sentencia, asi dos dispositivos no se pisan; tope 10 000 ml/dia). `POST /api/water {date, add_ml}` y `/api/today` devuelve
+`water_ml`. Offline: `addWater` (api.js) encola en `cadence_water_pending` y `flushWater` lo envia al volver. El agua que
+versiones viejas dejaron en `localStorage` (`cadence_water_<dia>`) sube una sola vez con `POST /api/water/import` (se
+queda con el mayor valor) y se borra del navegador. Regla general: nada que el usuario deba ver desde otro dispositivo puede
+vivir solo en localStorage (solo caches, borradores y preferencias de ese aparato).
 
 ## Navegacion y boton Atras (regla de Andres, 25 oct 2026; aplica a TODA pantalla nueva)
 

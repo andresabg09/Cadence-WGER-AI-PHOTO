@@ -186,3 +186,31 @@ def test_profile_picture_is_per_person_replaceable_and_removable(wger):
     assert ana.get("/api/avatar").status_code == 404 and ana.get("/api/auth/me").json()["avatar_v"] is None  # hers is hers
     assert new_client().get("/api/avatar").status_code == 401
     assert admin.delete("/api/avatar").json()["avatar_v"] is None and admin.get("/api/avatar").status_code == 404
+
+
+def test_water_is_kept_on_the_server_per_person_and_shows_in_the_diary(wger):
+    admin, ana = two_people()
+    day = admin.get("/api/today").json()["date"]
+    assert admin.get("/api/today").json()["water_ml"] == 0
+    assert admin.post("/api/water", json={"date": day, "add_ml": 250}).json() == {"date": day, "ml": 250}
+    assert admin.post("/api/water", json={"date": day, "add_ml": 200}).json()["ml"] == 450
+    # the number lives on the server: any browser of the account reads it back; another person does not
+    assert admin.get("/api/today").json()["water_ml"] == 450
+    assert ana.get("/api/today").json()["water_ml"] == 0
+    # removing never goes below zero, and one day is capped
+    assert admin.post("/api/water", json={"date": day, "add_ml": -1000}).json()["ml"] == 0
+    assert admin.post("/api/water", json={"date": day, "add_ml": 9000}).json()["ml"] == 9000
+    assert admin.post("/api/water", json={"date": day, "add_ml": 9000}).json()["ml"] == 10000
+    assert admin.post("/api/water", json={"date": "2999-01-01", "add_ml": 100}).status_code == 422
+    assert admin.post("/api/water", json={"date": "ayer", "add_ml": 100}).status_code == 400
+    assert new_client().post("/api/water", json={"date": day, "add_ml": 100}).status_code == 401
+
+
+def test_water_saved_on_a_device_is_imported_once_keeping_the_larger_amount(wger):
+    admin, _ = two_people()
+    day = admin.get("/api/today").json()["date"]
+    admin.post("/api/water", json={"date": day, "add_ml": 500})
+    sent = admin.post("/api/water/import", json={"days": {day: 300, "2026-01-05": 750, "nonsense": 10}}).json()
+    assert sent == {"imported": 2}
+    assert admin.get("/api/today").json()["water_ml"] == 500  # the server already had more
+    assert admin.get("/api/today?date=2026-01-05").json()["water_ml"] == 750

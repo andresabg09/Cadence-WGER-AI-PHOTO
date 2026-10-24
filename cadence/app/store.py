@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS workouts (
   id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL,
   minutes INTEGER NOT NULL, kcal REAL NOT NULL, note TEXT, created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS avatars (user_id INTEGER PRIMARY KEY, data BLOB NOT NULL, version INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS push_subs (
   endpoint TEXT PRIMARY KEY, user_id INTEGER NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL
@@ -624,3 +625,29 @@ def claim_reminder(user_id: int, key: str, day: str) -> bool:
 def prune_reminders(before_day: str) -> None:
     with closing(_connect()) as conn, conn:
         conn.execute("DELETE FROM reminder_sent WHERE day < ?", (before_day,))
+
+
+# ------------------------------------------------------------------ profile picture
+
+def set_avatar(user_id: int, data: bytes) -> int:
+    version = int(datetime.now(timezone.utc).timestamp())
+    with closing(_connect()) as conn, conn:
+        conn.execute("INSERT OR REPLACE INTO avatars (user_id, data, version) VALUES (?,?,?)", (user_id, data, version))
+    return version
+
+
+def get_avatar(user_id: int) -> tuple[bytes, int] | None:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT data, version FROM avatars WHERE user_id = ?", (user_id,)).fetchone()
+    return (row[0], row[1]) if row else None
+
+
+def avatar_version(user_id: int) -> int | None:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT version FROM avatars WHERE user_id = ?", (user_id,)).fetchone()
+    return row[0] if row else None
+
+
+def delete_avatar(user_id: int) -> None:
+    with closing(_connect()) as conn, conn:
+        conn.execute("DELETE FROM avatars WHERE user_id = ?", (user_id,))

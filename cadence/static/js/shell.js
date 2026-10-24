@@ -9,6 +9,7 @@
     perfil: '<circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.8"/><path d="M5 20c1.4-3.8 4.2-5.6 7-5.6s5.6 1.8 7 5.6" stroke="currentColor" stroke-width="1.8"/>',
     ajustes: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="15" cy="7" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="17" r="2" stroke="currentColor" stroke-width="1.8"/>',
   };
+  const MARK = `<span class="scan-core"><svg width="22" height="22" viewBox="-16 -16 32 32" fill="none" aria-hidden="true"><defs><linearGradient id="sg-r" x1="-12" y1="12" x2="12" y2="-12" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color: var(--accent-from)"/><stop offset="1" style="stop-color: var(--accent-to)"/></linearGradient><linearGradient id="sg-l" x1="-6" y1="-6" x2="6" y2="6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#A592FF"/><stop offset="1" stop-color="#27B8E8"/></linearGradient></defs><g class="scan-ring"><circle r="11.5" stroke="rgba(255,255,255,0.12)" stroke-width="2.6"/><circle r="11.5" stroke="url(#sg-r)" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="54 80" transform="rotate(-110)"/></g><circle r="6.2" fill="url(#sg-l)"/><circle r="3.5" fill="#0A0A12" fill-opacity="0.9"/><circle cx="-1.6" cy="-1.8" r="1.25" fill="#fff"/></svg></span>`;
   const svg = (name, size) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" aria-hidden="true">${ICONS[name]}</svg>`;
 
   // href null = screen from a later block ("próximamente").
@@ -25,12 +26,23 @@
 
   function itemHtml(item, current) {
     if (item.key === 'scan') {
-      return `<a class="scan" href="${item.href}" ${current === 'escanear' ? 'aria-current="page"' : ''}>${svg('camara', 19)} ${item.label}</a>`;
+      // Same idea as the phone's central button: the cadence mark, and it opens Foto · Código · Voz.
+      return `<button type="button" class="scan" id="sideRegister" aria-haspopup="dialog">${MARK}<span>Registrar comida</span></button>`;
     }
     const active = item.key === current ? 'aria-current="page"' : '';
     const attrs = item.href ? `href="${item.href}"` : `href="#" data-soon="${item.label}"`;
     return `<a class="item" ${attrs} ${active}>${svg(item.key, 18)}${item.label}</a>`;
   }
+
+  // The register panel is loaded the first time it is needed.
+  function openRegisterMenu(options) {
+    if (window.cadenceRegisterMenu) { window.cadenceRegisterMenu.open(options); return; }
+    const tag = document.createElement('script');
+    tag.src = 'static/js/register-menu.js';
+    tag.onload = () => window.cadenceRegisterMenu.open(options);
+    document.head.appendChild(tag);
+  }
+  window.openRegisterMenu = openRegisterMenu;
 
   function buildSidebar() {
     const current = document.body.dataset.page || '';
@@ -52,6 +64,8 @@
       }
     });
     document.body.insertBefore(nav, document.body.firstChild);
+    const reg = document.getElementById('sideRegister');
+    if (reg) reg.addEventListener('click', () => openRegisterMenu());
   }
 
   async function refreshConnection() {

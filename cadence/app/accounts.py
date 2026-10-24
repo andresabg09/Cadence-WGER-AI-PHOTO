@@ -95,6 +95,7 @@ class MeOut(BaseModel):
     onboarded: bool
     profile: ProfileOut
     targets: TargetsOut | None = None
+    avatar_v: int | None = None  # version of the profile picture (None = no picture); GET /api/avatar?v=...
 
 
 # ------------------------------------------------------------------ helpers
@@ -117,6 +118,7 @@ def me_out(user: store.User) -> MeOut:
                            weight_kg=store.latest_weight(user.id), activity=user.activity, goal=user.goal,
                            target_weight_kg=user.target_weight_kg),
         targets=targets,
+        avatar_v=store.avatar_version(user.id),
     )
 
 
@@ -291,6 +293,36 @@ def delete_weight(day: date, user: store.User = Depends(auth.current_user)):
     if not store.delete_weight(user.id, day.isoformat()):
         raise HTTPException(404, "No hay un peso en ese día")
     return {"status": "deleted"}
+
+
+class AvatarIn(BaseModel):
+    image: str  # data URL (the browser sends a small square JPEG)
+
+
+@router.put("/api/avatar", response_model=MeOut)
+def set_avatar(body: AvatarIn, user: store.User = Depends(auth.current_user)):
+    raw = store.decode_image(body.image)
+    if raw is None or len(raw) > 800_000 or not (raw[:3] == b"\xff\xd8\xff" or raw[:8] == b"\x89PNG\r\n\x1a\n" or raw[:4] == b"RIFF"):
+        raise HTTPException(422, "Esa foto no se puede usar. Elige una imagen JPG o PNG.")
+    store.set_avatar(user.id, raw)
+    return me_out(user)
+
+
+@router.get("/api/avatar")
+def get_avatar(v: int | None = None, user: store.User = Depends(auth.current_user)):
+    found = store.get_avatar(user.id)
+    if found is None:
+        raise HTTPException(404, "Sin foto de perfil")
+    data, _ = found
+    kind = "image/png" if data[:4] == b"\x89PNG" else "image/webp" if data[:4] == b"RIFF" else "image/jpeg"
+    # The URL carries the version, so a changed picture is a new URL: safe to keep a long time.
+    return Response(data, media_type=kind, headers={"Cache-Control": "private, max-age=31536000, immutable"})
+
+
+@router.delete("/api/avatar", response_model=MeOut)
+def remove_avatar(user: store.User = Depends(auth.current_user)):
+    store.delete_avatar(user.id)
+    return me_out(user)
 
 
 @router.post("/api/weight", response_model=MeOut)

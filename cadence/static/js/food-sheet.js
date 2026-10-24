@@ -46,6 +46,7 @@ function openFoodSheet(initial, onSaved) {
     $('fSave').disabled = true;
     try {
       const food = await apiPost('api/foods', body);
+      if (window.sfx) sfx.play('save');
       dismissOverlay(() => onSaved(food));
     } catch (e) {
       err.textContent = e.message || 'No se pudo guardar';

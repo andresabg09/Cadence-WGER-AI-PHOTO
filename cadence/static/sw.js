@@ -25,6 +25,7 @@ const SHELL_FILES = [
   'static/js/datepicker.js',
   'static/js/food-sheet.js',
   'static/js/sfx.js',
+  'static/js/register-menu.js',
   'static/js/constellation.js',
   'static/js/barcode.js',
   'static/icons/icon-192.png',

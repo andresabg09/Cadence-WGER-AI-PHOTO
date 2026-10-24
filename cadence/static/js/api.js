@@ -84,8 +84,27 @@ function rememberUser(me) {
         .forEach((k) => localStorage.removeItem(k));
     }
     localStorage.setItem(UID_KEY, String(me.id));
+    if (me.avatar_v) localStorage.setItem('cadence_avatar_v', String(me.avatar_v)); else localStorage.removeItem('cadence_avatar_v');
   } catch { /* no storage */ }
+  paintAvatars();
 }
+
+// The profile picture replaces the generic person icon (diary header, desktop sidebar).
+function paintAvatars() {
+  let v = null;
+  try { v = localStorage.getItem('cadence_avatar_v'); } catch { /* no storage */ }
+  const img = () => `<img src="api/avatar?v=${encodeURIComponent(v)}" alt="" style="width:100%;height:100%;border-radius:inherit;object-fit:cover;display:block;">`;
+  const btn = document.getElementById('profileBtn');
+  if (btn && v && btn.dataset.avatar !== v) { btn.dataset.avatar = v; btn.style.padding = '0'; btn.style.overflow = 'hidden'; btn.innerHTML = img(); }
+  document.querySelectorAll('.side-nav a.item[href="profile.html"] svg').forEach((svg) => {
+    if (!v) return;
+    const span = document.createElement('span');
+    span.style.cssText = 'width:18px;height:18px;border-radius:50%;overflow:hidden;display:inline-block;flex-shrink:0;';
+    span.innerHTML = img();
+    svg.replaceWith(span);
+  });
+}
+document.addEventListener('DOMContentLoaded', () => { paintAvatars(); setTimeout(paintAvatars, 400); });
 
 // Signed in and set up, or on the way to the screen that fixes that. Returns the profile.
 async function ensureSession({ needOnboarded = true } = {}) {

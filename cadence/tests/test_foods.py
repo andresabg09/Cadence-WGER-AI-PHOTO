@@ -171,3 +171,18 @@ def test_plain_water_goes_to_the_water_bar_not_the_diary(wger, monkeypatch):
     assert seen["water_ml"] == 550  # 300 measured + one unmeasured glass (250)
     heard = admin.post("/api/voice", files={"audio": ("v.wav", b"RIFFxxxx", "audio/wav")}).json()
     assert heard == {"components": [], "water_ml": 500}
+
+
+def test_profile_picture_is_per_person_replaceable_and_removable(wger):
+    from tests.test_accounts import PNG
+    admin, ana = two_people()
+    assert admin.get("/api/auth/me").json()["avatar_v"] is None and admin.get("/api/avatar").status_code == 404
+    assert admin.put("/api/avatar", json={"image": "data:image/png;base64,AAAA"}).status_code == 422  # not an image
+    assert admin.put("/api/avatar", json={"image": "data:image/png;base64," + "A" * 1_200_000}).status_code == 422  # too big
+    me = admin.put("/api/avatar", json={"image": PNG}).json()
+    assert me["avatar_v"]
+    shown = admin.get(f"/api/avatar?v={me['avatar_v']}")
+    assert shown.status_code == 200 and shown.headers["content-type"] == "image/png" and "immutable" in shown.headers["cache-control"]
+    assert ana.get("/api/avatar").status_code == 404 and ana.get("/api/auth/me").json()["avatar_v"] is None  # hers is hers
+    assert new_client().get("/api/avatar").status_code == 401
+    assert admin.delete("/api/avatar").json()["avatar_v"] is None and admin.get("/api/avatar").status_code == 404

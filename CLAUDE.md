@@ -186,8 +186,12 @@ se mantiene igual - es un rebranding de marca, no un rediseno.
 
 ## Principio: wger es el almacen, cadence es la unica cara
 
-Cadence no tiene base de datos propia: guarda diario, metas, peso y racha en wger via su API
-REST, y usa su catalogo de alimentos. Andres NO debe tener que entrar a la interfaz de wger
+Cadence guarda diario, metas, peso y racha en wger via su API REST, y usa su catalogo de
+alimentos. Unica excepcion (25 oct 2026): un almacen SQLite minimo propio (`cadence/app/store.py`,
+volumen Docker `cadence-data` montado en `/data`, `DATA_DIR`) para lo que wger no puede guardar:
+la observacion de cada registro y las fotos (foto del plato 1280 px + recorte nitido por
+ingrediente). NO duplica diario ni alimentos. Si se borra el volumen se pierden notas y fotos, no
+el diario. Endpoints: `PUT /api/diary/{id}/note`, `POST /api/entry-media`, `GET /api/media/...`. Andres NO debe tener que entrar a la interfaz de wger
 para nada: todo lo que wger exija (plan de nutricion, etc.) lo crea cadence solo
 (`create_nutrition_plan`). Unicos pasos de servidor, una sola vez: cargar el catalogo
 (`sync-ingredients-bulk`) y generar el token. Si algun dia se quiere independizar del todo,
@@ -247,8 +251,10 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   (`/api/today?date=`), al guardar se abre el dia del plato con aviso "Guardado en ...", tocar un
   registro abre su detalle (foto del plato con la zona, macros, cantidad y comida editables via
   `PATCH /api/diary/{id}`, observacion, borrar). Observaciones, recortes y fotos viven en
-  localStorage del dispositivo (`cadence_notes`, `cadence_thumbs`, `cadence_plates`): wger no tiene
-  campo de nota; guardarlas en servidor es decision del Bloque 3. La barra inferior tapaba/era tapada
+  almacen del servidor (ver Principio; wger no tiene campo de nota ni fotos). Lo que quedo en
+  localStorage de versiones anteriores (`cadence_notes`, `cadence_thumbs`, `cadence_plates`) sube
+  solo al servidor al abrir el dia (`syncLocalExtras`). Calidad: la foto de trabajo es 1280 px q0.88
+  y el recorte sale de ella (420 px al guardar), con zoom/lightbox en el detalle. La barra inferior tapaba/era tapada
   por las filas (`.tab-bar` sin z-index): corregido. Avisos (toast) ahora opacos + caja de error fija.
 - **Bloque 3 - Datos personales.** Perfil, Objetivos (Mifflin-St Jeor, guarda goal_* del
   plan), Progreso (racha, peso desde weightentry, logros), Historial.

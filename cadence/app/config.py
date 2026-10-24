@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     wger_language_id: int = 2  # 2 = English in wger's default fixtures
     wger_language_code: str = "en"  # same language, as ISO code (new search endpoint)
 
+    # Where cadence keeps its own small extras (notes, photos). A volume in Docker.
+    data_dir: str = "/data"
+
     # Behavior
     user_name: str = "Andrés"  # shown in the dashboard greeting
     # IANA zone used to decide "today" and which meal slot an entry falls in.

@@ -108,6 +108,10 @@ class MealItem(BaseModel):
     carbs_g: float = 0
     fat_g: float = 0
     taken_at: str | None = None  # local ISO time of the entry (for the detail sheet)
+    note: str | None = None
+    has_crop: bool = False  # a stored crop is served at /api/media/crop/{diary_entry_id}
+    plate_key: str | None = None  # the plate photo, served at /api/media/plate/{plate_key}
+    box: list[float] | None = None
 
 
 class DiaryUpdate(BaseModel):
@@ -130,3 +134,20 @@ class TodayResponse(BaseModel):
     meals: list[MealGroup]
     streak_days: int
     user_name: str
+
+
+class NoteUpdate(BaseModel):
+    note: str | None = None
+
+
+class MediaEntry(BaseModel):
+    entry_id: str
+    crop: str | None = None  # data URL, zoomed square of this ingredient
+    photo: int | None = None  # index into MediaUpload.photos
+    box: list[float] | None = None
+
+
+class MediaUpload(BaseModel):
+    plate_id: str
+    photos: list[str] = []  # data URLs of the plate photo(s)
+    items: list[MediaEntry]

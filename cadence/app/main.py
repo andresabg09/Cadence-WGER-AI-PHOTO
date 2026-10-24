@@ -5,9 +5,10 @@ from datetime import date as date_type, datetime, time, timedelta
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from . import store
 from .config import settings
 from .diagnostics import run_diagnostics
 from .matching import rank_candidates, rank_matches
@@ -34,6 +35,8 @@ from .schemas import (
     MacroTotals,
     MealGroup,
     MealItem,
+    MediaUpload,
+    NoteUpdate,
     SearchResult,
     TodayResponse,
     WgerStatus,
@@ -105,7 +108,7 @@ def meal_now(at: str | None = None):
     return {"meal": meal_key_for_entry({"datetime": when.isoformat()}), "at": when.isoformat()}
 
 
-_staples_cache: dict = {"at": 0.0, "items": []}
+_staples_cache: dict = {"at": float("-inf"), "items": []}  # monotonic() can be tiny right after a host boot
 
 
 def candidate_pool(wger: WgerClient, term: str) -> list[dict]:
@@ -250,6 +253,12 @@ def today(date: str | None = None):
         groups: dict[str, list[MealItem]] = {key: [] for key in MEAL_ORDER}
         totals = MacroTotals()
 
+        try:
+            meta = store.get_meta([str(e["id"]) for e in today_entries])
+        except Exception:  # noqa: BLE001 - notes/photos are extras; the diary still shows
+            logger.exception("no se pudo leer el almacen local de notas y fotos")
+            meta = {}
+
         for entry in today_entries:
             ingredient_id = entry["ingredient"]
             amount = float(entry["amount"])
@@ -277,6 +286,10 @@ def today(date: str | None = None):
                     carbs_g=round(carbs, 1),
                     fat_g=round(fat, 1),
                     taken_at=(entry_datetime(entry).isoformat() if entry_datetime(entry) else None),
+                    note=meta.get(str(entry["id"]), {}).get("note"),
+                    has_crop=meta.get(str(entry["id"]), {}).get("has_crop", False),
+                    plate_key=meta.get(str(entry["id"]), {}).get("plate_key"),
+                    box=meta.get(str(entry["id"]), {}).get("box"),
                 )
             )
 
@@ -453,11 +466,56 @@ def delete_diary_entry(entry_id: str):
     wger = get_wger_client()
     try:
         wger.delete_diary_entry(entry_id)
+        try:
+            store.delete_entry(entry_id)
+        except Exception:  # noqa: BLE001
+            logger.exception("no se pudo limpiar el almacen local de %s", entry_id)
         return {"status": "deleted"}
     except WgerError as exc:
         raise HTTPException(502, str(exc)) from exc
     finally:
         wger.close()
+
+
+@app.put("/api/diary/{entry_id}/note")
+def save_note(entry_id: str, body: NoteUpdate):
+    store.set_note(entry_id, body.note)
+    return {"status": "saved"}
+
+
+@app.post("/api/entry-media")
+def save_entry_media(upload: MediaUpload):
+    """Photos of a plate and each ingredient's crop, filed under the diary entries."""
+    keys: dict[int, str] = {}
+    for index, data_url in enumerate(upload.photos):
+        raw = store.decode_image(data_url)
+        if raw:
+            keys[index] = f"{upload.plate_id}:{index}"
+            store.put_plate(keys[index], raw)
+    saved = 0
+    for item in upload.items:
+        crop = store.decode_image(item.crop)
+        plate_key = keys.get(item.photo) if item.photo is not None else None
+        if crop or plate_key:
+            store.set_media(item.entry_id, crop, plate_key, item.box)
+            saved += 1
+    return {"saved": saved}
+
+
+@app.get("/api/media/crop/{entry_id}")
+def media_crop(entry_id: str):
+    data = store.get_crop(entry_id)
+    if data is None:
+        raise HTTPException(404, "Sin recorte")
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+
+
+@app.get("/api/media/plate/{key}")
+def media_plate(key: str):
+    data = store.get_plate(key)
+    if data is None:
+        raise HTTPException(404, "Sin foto")
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.patch("/api/diary/{entry_id}")

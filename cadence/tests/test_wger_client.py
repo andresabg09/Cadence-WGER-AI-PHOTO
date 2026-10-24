@@ -284,7 +284,7 @@ def test_analyze_offers_the_ready_to_eat_staple_in_spanish(monkeypatch):
             return httpx.Response(200, json={"results": [dry]})
         return httpx.Response(404)
 
-    main._staples_cache.update(at=0.0, items=[])
+    main._staples_cache.update(at=float("-inf"), items=[])
     _stub_wger(monkeypatch, handler)
     monkeypatch.setattr(main, "get_vision_client", lambda: StubVision())
     response = TestClient(main.app).post("/api/analyze", files={"image": ("plate.jpg", b"fake-bytes", "image/jpeg")})

@@ -141,6 +141,10 @@ services:
       WGER_BASE_URL: ${WGER_BASE_URL:-https://crm-cadence-wger-ai-photo.cjauws.easypanel.host}
       TIMEZONE: ${TIMEZONE:-America/Panama}
       USER_NAME: ${USER_NAME:-Andrés}
+      DATA_DIR: /data
+    volumes:
+      # Notas y fotos de cadence (lo que wger no guarda): sobreviven a cada Implementar.
+      - cadence-data:/data
     depends_on:
       web:
         condition: service_healthy
@@ -156,6 +160,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  cadence-data:
   postgres-data:
   celery-beat:
   redis-data:

@@ -222,7 +222,7 @@ function renderInsight(totals, goal) {
 }
 
 function mealItemRow(item, mealKey) {
-  const photo = readThumbs()[item.diary_entry_id];
+  const photo = item.has_crop ? `api/media/crop/${encodeURIComponent(item.diary_entry_id)}` : readThumbs()[item.diary_entry_id];
   const thumbStyle = photo
     ? `background-image:url('${photo}');background-size:cover;background-position:center;`
     : `background:${MEAL_ICON_BG[mealKey] || MEAL_ICON_BG.otro};`;
@@ -236,7 +236,7 @@ function mealItemRow(item, mealKey) {
           <span style="position:absolute;bottom:-4px;right:-4px;background:var(--good);border-radius:100px;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px;border:2px solid var(--card);">✓</span>
         </div>
         <div style="flex:1;">
-          <div style="font-size:13px;font-weight:700;">${escapeHtml(item.name)}${readNotes()[item.diary_entry_id] ? '<span class="note-dot" title="Tiene una observación">📝</span>' : ''}</div>
+          <div style="font-size:13px;font-weight:700;">${escapeHtml(item.name)}${(item.note || readNotes()[item.diary_entry_id]) ? '<span class="note-dot" title="Tiene una observación">📝</span>' : ''}</div>
           <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${Math.round(item.amount_grams)} g · ${Math.round(item.kcal)} kcal</div>
         </div>
         <button class="row-del" aria-label="Borrar ${escapeHtml(item.name)}">
@@ -370,6 +370,25 @@ function portionStep(grams, direction) {
   return base < 50 ? 5 : base < 200 ? 10 : 25;
 }
 
+function openLightbox(src, box) {
+  const box_ = document.createElement('div');
+  box_.className = 'lightbox';
+  box_.innerHTML = `<button class="lb-close" aria-label="Cerrar">✕</button><div class="lb-scroll"><img alt="" src="${src}"></div>
+    <div class="lb-hint">Toca la foto para acercar · pellizca para más zoom</div>`;
+  document.body.appendChild(box_);
+  const scroller = box_.querySelector('.lb-scroll');
+  const img = box_.querySelector('img');
+  const centerOnZone = () => {
+    const c = box ? [box[0] + box[2] / 2, box[1] + box[3] / 2] : [0.5, 0.5];
+    scroller.scrollLeft = c[0] * img.clientWidth - scroller.clientWidth / 2;
+    scroller.scrollTop = c[1] * img.clientHeight - scroller.clientHeight / 2;
+  };
+  img.addEventListener('click', () => { box_.classList.toggle('zoomed'); if (box_.classList.contains('zoomed')) centerOnZone(); });
+  box_.querySelector('.lb-close').addEventListener('click', () => box_.remove());
+  const onKey = (e) => { if (e.key === 'Escape') { box_.remove(); document.removeEventListener('keydown', onKey, true); e.stopPropagation(); } };
+  document.addEventListener('keydown', onKey, true);
+}
+
 function closeEntryDetail() {
   document.querySelectorAll('.sheet-scrim, .entry-sheet').forEach((el) => el.remove());
 }
@@ -381,8 +400,11 @@ function openEntryDetail(entryId) {
   let grams = item.amount_grams;
   let mealKey = found.mealKey;
   const perGram = (value) => (item.amount_grams > 0 ? value / item.amount_grams : 0);
-  const plate = readEntryPlate(entryId);
-  const crop = readThumbs()[entryId];
+  const localPlate = readEntryPlate(entryId);
+  const plate = item.plate_key
+    ? { photo: `api/media/plate/${encodeURIComponent(item.plate_key)}`, box: item.box }
+    : localPlate;
+  const crop = item.has_crop ? `api/media/crop/${encodeURIComponent(entryId)}` : readThumbs()[entryId];
   const when = item.taken_at ? new Date(item.taken_at) : null;
   const whenText = when
     ? when.toLocaleString('es', { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' })
@@ -400,15 +422,20 @@ function openEntryDetail(entryId) {
   if (plate) {
     const b = plate.box;
     const zone = b ? `<div class="zone" style="left:${b[0] * 100}%;top:${b[1] * 100}%;width:${b[2] * 100}%;height:${b[3] * 100}%;"></div>` : '';
-    photoHtml = `<div class="plate-photo"><img alt="Foto del plato" src="${plate.photo}">${zone}</div>`;
+    photoHtml = `<div class="plate-photo zoomable" id="sPhoto" role="button" aria-label="Ampliar la foto"><img alt="Foto del plato" src="${plate.photo}">${zone}<span class="zoom-hint">🔍 Toca para ampliar</span></div>`;
   } else if (crop) {
-    photoHtml = `<div class="plate-photo"><img alt="Foto del alimento" src="${crop}" style="max-height:200px;"></div>`;
+    photoHtml = `<div class="plate-photo zoomable" id="sPhoto" role="button" aria-label="Ampliar la foto"><img alt="Foto del alimento" src="${crop}" style="max-height:260px;"><span class="zoom-hint">🔍 Toca para ampliar</span></div>`;
   }
 
   sheet.innerHTML = `
     ${photoHtml}
-    <h3 class="disp">${escapeHtml(item.name)}</h3>
-    <div class="when">${escapeHtml(whenText)}</div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      ${plate && crop ? `<img alt="" src="${crop}" style="width:64px;height:64px;border-radius:14px;object-fit:cover;flex-shrink:0;">` : ''}
+      <div style="min-width:0;">
+        <h3 class="disp">${escapeHtml(item.name)}</h3>
+        <div class="when">${escapeHtml(whenText)}</div>
+      </div>
+    </div>
     <div class="macro-tiles">
       <div class="macro-tile"><b id="sKcal">0</b><span>KCAL</span></div>
       <div class="macro-tile"><b id="sProt">0</b><span>PROT g</span></div>
@@ -423,7 +450,7 @@ function openEntryDetail(entryId) {
     </div>
     <label class="field">COMIDA</label>
     <div class="meal-pick" id="sMeals" role="group" aria-label="Comida"></div>
-    <label class="field" for="sNote">OBSERVACIÓN <span style="font-weight:500;text-transform:none;letter-spacing:0;">(se guarda en este dispositivo)</span></label>
+    <label class="field" for="sNote">OBSERVACIÓN</label>
     <textarea id="sNote" placeholder="Ej.: con poca sal, porción del restaurante…"></textarea>
     <div class="sheet-actions">
       <button class="btn-danger" id="sDelete">Borrar</button>
@@ -435,7 +462,9 @@ function openEntryDetail(entryId) {
   document.body.appendChild(sheet);
   const $ = (id) => sheet.querySelector(`#${id}`);
 
-  $('sNote').value = readNotes()[entryId] || '';
+  $('sNote').value = item.note || readNotes()[entryId] || '';
+  const photoEl = $('sPhoto');
+  if (photoEl) photoEl.addEventListener('click', () => openLightbox(plate ? plate.photo : crop, plate ? plate.box : null));
 
   const renderNumbers = () => {
     $('sGrams').textContent = `${Math.round(grams)} g`;
@@ -471,11 +500,12 @@ function openEntryDetail(entryId) {
     const btn = $('sSave');
     btn.disabled = true;
     $('sError').classList.remove('show');
-    writeNote(entryId, $('sNote').value);
     const changes = {};
     if (Math.round(grams) !== Math.round(item.amount_grams)) changes.amount_grams = Math.round(grams);
     if (mealKey !== found.mealKey) changes.meal = mealKey;
     try {
+      const note = $('sNote').value;
+      if (note.trim() !== (item.note || '')) await apiPut(`api/diary/${entryId}/note`, { note });
       if (Object.keys(changes).length) await apiPatch(`api/diary/${entryId}`, changes);
       closeEntryDetail();
       loadToday();
@@ -489,6 +519,16 @@ function openEntryDetail(entryId) {
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeEntryDetail(); });
 
 let latestToday = null;
+const syncedDays = new Set();
+
+// Moves what this device still holds (older notes/photos) up to the server, once per day shown.
+function syncExtrasOnce(data) {
+  if (syncedDays.has(data.date)) return;
+  syncedDays.add(data.date);
+  const items = data.meals.flatMap((m) => m.items);
+  if (!items.length) return;
+  syncLocalExtras(items).then((moved) => { if (moved) loadToday(); });
+}
 let viewDate = new URLSearchParams(window.location.search).get('date'); // null = today
 
 function isViewingToday() {
@@ -549,6 +589,7 @@ async function loadToday() {
     renderMeals(data.meals);
     renderWater(getWaterMl(data.date));
 
+    syncExtrasOnce(data);
     document.getElementById('waterPlus').onclick = () => setWaterMl(data.date, getWaterMl(data.date) + WATER_STEP_ML);
     document.getElementById('waterMinus').onclick = () => setWaterMl(data.date, getWaterMl(data.date) - WATER_STEP_ML);
   } catch (err) {

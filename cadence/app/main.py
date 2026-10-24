@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+from .diagnostics import run_diagnostics
 from .matching import rank_candidates
 from .meals import (
     MEAL_LABELS,
@@ -75,6 +76,19 @@ def get_wger_client() -> WgerClient:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/diagnostics")
+def diagnostics(deep: bool = False):
+    """Checklist of everything cadence needs; ?deep=1 also calls Gemini once."""
+    wger = None
+    if settings.wger_api_token:
+        wger = WgerClient(settings.wger_base_url, settings.wger_api_token, settings.wger_language_id, settings.wger_language_code)
+    try:
+        return run_diagnostics(wger, deep=deep)
+    finally:
+        if wger:
+            wger.close()
 
 
 @app.get("/")

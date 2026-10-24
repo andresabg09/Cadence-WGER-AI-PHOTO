@@ -184,26 +184,41 @@ dedicada, evaluando el riesgo de romper el core de wger. El resto del
 lenguaje visual (paleta, tipografia, iconografia Material Symbols de MUI)
 se mantiene igual - es un rebranding de marca, no un rediseno.
 
-## Proximos pasos (en orden)
+## Plan por bloques (fuente de verdad del avance)
 
-1. Andrés confirma en su servidor (SSH/EasyPanel) que el stack quedo
-   estable tras el fix de `nginx.conf` y que el dominio carga el login de
-   wger.
-2. Andrés genera su `WGER_API_TOKEN` (menu de usuario en wger -> API key) y
-   su `GEMINI_API_KEY`, y llena `cadence/.env` a partir de
-   `cadence/.env.example`.
-3. Verificar contra la instancia real los campos exactos de
-   `/api/v2/ingredient/search/` y `/api/v2/nutritiondiary/` (puede requerir
-   ajustar `wger_client.py`).
-4. Decidir la ruta de deploy automatico para este proyecto especifico (ver
-   `deploy/README.md`) y, si aplica, activar el webhook en GitHub.
-5. Probar el flujo completo end-to-end con una foto real.
-6. Abordar el rebranding wger -> cadence sobre la instancia desplegada.
+Mockup aprobado: artifact "cadence — Diseño" (claude.ai/artifact/VtU9UcFoBkUS7g7Nry3Exc),
+15 pantallas de celular + (desde el Bloque 1) versiones tablet y escritorio.
+Cada bloque se construye COMPLETO, se prueba (tests + navegador con wger simulado),
+se publica a `master` y se valida con UNA sola revision en el servidor
+(`/cadence/api/diagnostics?deep=1`). No se entrega a medias ni bug por bug.
+
+- **Bloque 0 - Destrabar y verificar (EN CURSO).** Token/Gemini por Entorno, busqueda
+  `ingredientinfo`, errores legibles, `/api/diagnostics`. Pendiente de Andres: crear plan
+  de nutricion en wger, `sync-ingredients-bulk` en el contenedor `web`, implementar.
+  Sale cuando el diagnostico esta todo verde.
+- **Bloque 1 - Responsive tablet y escritorio.** Layout adaptable de Inicio, Escaneo,
+  Confirmar, Buscar (barra lateral en escritorio, 2-3 columnas); en escritorio el escaneo
+  es "subir foto / webcam" (sin sensor de angulo).
+- **Bloque 2 - Flujo central real.** Probar con foto real; ajustar campos de wger segun el
+  diagnostico; elegir comida al registrar (desayuno/almuerzo/cena); Estados y errores
+  (sin conexion, IA no reconocio, wger no responde, diario vacio); iconos PNG + Instalar app.
+- **Bloque 3 - Datos personales.** Perfil, Objetivos (Mifflin-St Jeor, guarda goal_* del
+  plan), Progreso (racha, peso desde weightentry, logros), Historial.
+- **Bloque 4 - Ajustes y habitos.** Ajustes (hub), Apariencia (toggle ya hecho),
+  Bienvenida, Recordatorios, registro por voz.
+- **Bloque 5 - Integraciones wger.** Puente de entrenamiento (workoutsession/workoutlog),
+  codigo de barras, alimento personalizado.
+- **Bloque 6 - Marca y deploy.** Rebranding wger -> cadence; decidir deploy automatico
+  (ver `deploy/README.md`).
 
 ## Reglas de trabajo (validas para cualquier chat futuro)
 
 - Codigo quirurgico y cambios minimos sobre reescrituras amplias.
-- Commits y push solo con confirmacion explicita de Andrés en el momento.
+- Publicacion: Andrés autorizo (octubre 2026) que cada bloque se haga completo y se
+  publique a `master` al terminar, sin pedir confirmacion por cada arreglo. Ramas
+  `fix/...` solo si hay riesgo de romper el deploy. Nunca poner claves en el repo.
+- Antes de pedirle algo a Andrés, agrupar TODO lo que necesita hacer en un solo mensaje
+  (el no puede iterar bug por bug: cada deploy le cuesta ~5 min).
 - Nunca reabrir la decision de Gemini Flash Lite como modelo de vision
   salvo problema real de precision en pruebas.
 - Las calorias siempre salen de la base de datos de wger, nunca las

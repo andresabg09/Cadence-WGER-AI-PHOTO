@@ -41,3 +41,22 @@ def test_wger_failures_become_readable_502(monkeypatch):
     response = TestClient(main.app).get("/api/today")
     assert response.status_code == 502
     assert "WGER_API_TOKEN" in response.json()["detail"]
+
+
+def test_diagnostics_lists_every_missing_piece(monkeypatch):
+    from app import diagnostics
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v2/nutritionplan/":
+            return httpx.Response(200, json={"results": []})
+        if request.url.path == "/api/v2/ingredientinfo/":
+            return httpx.Response(200, json={"results": []})
+        return httpx.Response(200, json={})
+
+    monkeypatch.setattr(diagnostics.settings, "wger_api_token", "x")
+    monkeypatch.setattr(diagnostics.settings, "gemini_api_key", "y")
+    report = diagnostics.run_diagnostics(client_with(handler))
+    failed = {c["name"] for c in report["checks"] if not c["ok"]}
+    assert report["ok"] is False
+    assert failed == {"Existe un plan de nutricion", "wger tiene ingredientes cargados"}
+    assert all(c["fix"] for c in report["checks"] if not c["ok"])

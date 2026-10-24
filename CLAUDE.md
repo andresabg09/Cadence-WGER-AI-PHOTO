@@ -353,7 +353,7 @@ calcula; las puntuaciones se calculan en el servidor con formulas fijas y visibl
 `apiGetSWR`; hojas con `pushOverlay`; recompensas con `sfx.play`; cada endpoint nuevo exige `current_user` + prueba de
 aislamiento; probar con Playwright y wger simulado. Nada de candados ni "premium": todo se desbloquea. No copiar: ayuno,
 fotos de stock, tienda de monedas con dinero.
-- **Bloque 8 - Puntuacion nutricional y niveles (base de los demas).** `app/scoring.py`: puntaje 0-100 por comida y por dia
+- **Bloque 8 - Puntuacion nutricional y niveles (HECHO, 25 oct 2026; aprobado por Andres).** Implementado en `app/scoring.py` (formulas fijas: macros 30, proteina 20, fibra 15, azucar+grasa saturada 15, variedad 10, porcion 10; un criterio sin datos (menos del 60 % del peso del plato) NO resta y se avisa en `partial`; tabla de basicos con fibra/azucar/grasa sat. en `STAPLE_EXTRA`), `GET /api/today` devuelve `score`/`levels` por comida y del dia (promedio ponderado por kcal), hoja `static/js/meal-detail.js` (se abre tocando la pastilla de puntaje de cada comida) y ayudas de dibujo en `static/js/bits.js`. Los alimentos propios aceptan fibra opcional. Texto original del plan: `app/scoring.py`: puntaje 0-100 por comida y por dia
   (Excelente/Buena/Regular/Mejorable) con formula visible ("Como se calcula"): balance de macros frente a la meta de la persona,
   proteina de la comida frente a su parte del dia, fibra, azucar y grasa saturada, variedad y porcion. Si falta un dato (wger no
   siempre trae fibra/azucar) NO penaliza y avisa "datos parciales". Barras "Nivel de proteina" y "Nivel de fibra" con marcador.

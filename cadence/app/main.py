@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import accounts, auth, nutrition, reminders, store
+from . import accounts, auth, nutrition, reminders, scoring, store
 from .config import settings
 from .diagnostics import run_diagnostics
 from .progress import achievements as build_achievements, day_totals, streak_runs
@@ -35,6 +35,10 @@ from .meals import (
     parse_taken_at,
 )
 from .schemas import (
+    LevelOut,
+    LevelsOut,
+    ScoreOut,
+    ScorePart,
     WaterAdd,
     WaterImport,
     WaterOut,
@@ -412,6 +416,29 @@ def import_water(body: WaterImport, user: store.User = Depends(current_user)):
     return {"imported": len(days)}
 
 
+def _scoring_food(item: MealItem) -> scoring.Food:
+    return scoring.Food(item.name, item.amount_grams, item.kcal, item.protein_g, item.carbs_g, item.fat_g,
+                        item.fibre_g, item.sugar_g, item.sat_fat_g)
+
+
+def _score_out(score: scoring.Score | None) -> ScoreOut | None:
+    if score is None:
+        return None
+    return ScoreOut(points=score.points, label=score.label, partial=score.partial,
+                    parts=[ScorePart(key=p.key, label=p.label, points=p.points, max=p.max, note=p.note) for p in score.parts])
+
+
+def _day_score(scored: list[tuple[float, int]]) -> ScoreOut | None:
+    day = scoring.score_day(scored)
+    return ScoreOut(points=day[0], label=day[1]) if day else None
+
+
+def _levels_out(foods: list[scoring.Food], goal: scoring.Goal, meal: str | None) -> LevelsOut:
+    def out(level):
+        return None if level is None else LevelOut(value_g=level.value_g, target_g=level.target_g, pct=level.pct, label=level.label)
+    return LevelsOut(protein=out(scoring.protein_level(foods, goal, meal)), fibre=out(scoring.fibre_level(foods, goal, meal)))
+
+
 @app.get("/api/today", response_model=TodayResponse)
 def today(date: str | None = None, user: store.User = Depends(current_user)):
     """The diary of one day (default: today in the user's timezone)."""
@@ -489,6 +516,8 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
             totals.fat_g += fat
 
             key = meal_key_for_entry(entry)
+            fibre100, sugar100, sat100 = scoring.per_100g(ingredient.get("name", ""), ingredient)
+            part = lambda per100: None if per100 is None else round(per100 * ratio, 2)  # noqa: E731
             groups[key].append(
                 MealItem(
                     diary_entry_id=str(entry["id"]),  # UUID text on current wger, int on older ones
@@ -504,16 +533,29 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
                     has_crop=meta.get(str(entry["id"]), {}).get("has_crop", False),
                     plate_key=meta.get(str(entry["id"]), {}).get("plate_key"),
                     box=meta.get(str(entry["id"]), {}).get("box"),
+                    fibre_g=part(fibre100),
+                    sugar_g=part(sugar100),
+                    sat_fat_g=part(sat100),
                 )
             )
 
         meals = []
+        goal_for_score = scoring.Goal(goal.kcal, goal.protein_g, goal.carbs_g, goal.fat_g)
+        scored: list[tuple[float, int]] = []
+        day_foods: list[scoring.Food] = []
         for key in MEAL_ORDER:
             items = groups[key]
             if not items:
                 continue
+            foods = [_scoring_food(i) for i in items]
+            day_foods += foods
+            meal_score = scoring.score_meal(foods, goal_for_score, key)
+            if meal_score:
+                scored.append((sum(f.kcal for f in foods), meal_score.points))
             meals.append(
                 MealGroup(
+                    score=_score_out(meal_score),
+                    levels=_levels_out(foods, goal_for_score, key),
                     key=key,
                     label=MEAL_LABELS[key],
                     totals=MacroTotals(
@@ -538,6 +580,8 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
             ),
             goal=goal,
             meals=meals,
+            score=_day_score(scored),
+            levels=_levels_out(day_foods, goal_for_score, None) if day_foods else None,
             streak_days=streak_days,
             user_name=user.name,
             water_ml=store.water_ml(user.id, shown_date.isoformat()),
@@ -892,6 +936,8 @@ def _check_food(food: FoodIn) -> None:
     for label, value, top in (("calorías", food.kcal, 950), ("proteína", food.protein, 100), ("carbohidratos", food.carbs, 100), ("grasa", food.fat, 100)):
         if not 0 <= value <= top:
             raise HTTPException(422, f"Revisa las {label}: por 100 g debe estar entre 0 y {top}")
+    if food.fibre is not None and not 0 <= food.fibre <= 100:
+        raise HTTPException(422, "La fibra por 100 g debe estar entre 0 y 100")
     if food.protein + food.carbs + food.fat > 105:
         raise HTTPException(422, "Proteína + carbohidratos + grasa no pueden pasar de 100 g por cada 100 g")
 
@@ -904,7 +950,7 @@ def create_food(food: FoodIn, user: store.User = Depends(current_user)):
     existing = store.custom_food_by_barcode(user.id, code) if code else None
     if existing:
         return SearchResult(id=existing["id"], name=existing["name"], energy_kcal_100g=existing["energy"])
-    fid = store.create_custom_food(user.id, food.name, food.kcal, food.protein, food.carbs, food.fat, code)
+    fid = store.create_custom_food(user.id, food.name, food.kcal, food.protein, food.carbs, food.fat, code, food.fibre)
     return SearchResult(id=-fid, name=food.name.strip(), energy_kcal_100g=food.kcal)
 
 
@@ -936,7 +982,8 @@ def _off_lookup(code: str) -> tuple[dict | None, str, str | None]:
         if not name or kcal is None:
             return None, "no_nutrition", name
         return ({"name": name, "kcal": round(float(kcal), 1), "protein": round(float(n.get("proteins_100g") or 0), 1),
-                 "carbs": round(float(n.get("carbohydrates_100g") or 0), 1), "fat": round(float(n.get("fat_100g") or 0), 1)},
+                 "carbs": round(float(n.get("carbohydrates_100g") or 0), 1), "fat": round(float(n.get("fat_100g") or 0), 1),
+                 "fibre": round(float(n["fiber_100g"]), 1) if n.get("fiber_100g") is not None else None},
                 "found", name)
     except Exception:  # noqa: BLE001 - a bonus lookup
         logger.exception("Open Food Facts no respondio para %s", code)
@@ -952,7 +999,7 @@ def barcode(code: str, user: store.User = Depends(current_user)):
     own = store.custom_food_by_barcode(user.id, code)
     if own:
         return BarcodeResult(found=True, source="own", id=own["id"], name=own["name"], kcal=own["energy"], protein=own["protein"],
-                             carbs=own["carbohydrates"], fat=own["fat"], barcode=code)
+                             carbs=own["carbohydrates"], fat=own["fat"], fibre=own.get("fibres"), barcode=code)
     wger = get_wger_client()
     wger_failed = False
     try:

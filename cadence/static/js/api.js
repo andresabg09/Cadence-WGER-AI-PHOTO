@@ -30,6 +30,16 @@ async function apiPost(path, body, { isFormData = false, timeoutMs = 90000 } = {
   return response.json();
 }
 
+async function apiPatch(path, body) {
+  const response = await fetch(path, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(await safeText(response));
+  return response.json();
+}
+
 async function apiDelete(path) {
   const response = await fetch(path, { method: 'DELETE' });
   if (!response.ok) throw new Error(await safeText(response));
@@ -206,6 +216,69 @@ function rememberThumbs(created, crops) {
   const ids = Object.keys(map);
   if (ids.length > 150) ids.slice(0, ids.length - 150).forEach((id) => delete map[id]);
   try { localStorage.setItem(THUMBS_KEY, JSON.stringify(map)); } catch { /* storage full or unavailable */ }
+}
+
+// ---- Notes ("observaciones") per diary entry: kept on this device, like the crops ----
+const NOTES_KEY = 'cadence_notes';
+
+function readNotes() {
+  try { return JSON.parse(localStorage.getItem(NOTES_KEY) || '{}'); } catch { return {}; }
+}
+
+function writeNote(entryId, text) {
+  const notes = readNotes();
+  const clean = (text || '').trim();
+  if (clean) notes[entryId] = clean; else delete notes[entryId];
+  try { localStorage.setItem(NOTES_KEY, JSON.stringify(notes)); } catch { /* storage full or unavailable */ }
+}
+
+// ---- The plate's photo per entry, so a past record can be opened and looked at again ----
+const PLATES_KEY = 'cadence_plates';           // { "<plate>:<photo>": dataUrl (480 px) }
+const ENTRY_PLATE_KEY = 'cadence_entry_plate'; // { "<entry id>": { key, box } }
+
+function readJsonKey(key) {
+  try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch { return {}; }
+}
+
+function readEntryPlate(entryId) {
+  const link = readJsonKey(ENTRY_PLATE_KEY)[entryId];
+  if (!link) return null;
+  const photo = readJsonKey(PLATES_KEY)[link.key];
+  return photo ? { photo, box: link.box || null } : null;
+}
+
+async function downscale(src, maxDim = 480) {
+  const img = await loadImage(src);
+  if (!img) return null;
+  const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.65);
+}
+
+// created[i] is the diary entry of chosen[i]; chosen[i].photo is an index into photos.
+async function rememberPlate(created, chosen, photos) {
+  if (!created || !created.length) return;
+  const plates = readJsonKey(PLATES_KEY);
+  const links = readJsonKey(ENTRY_PLATE_KEY);
+  const plateId = created[0].diary_entry_id;
+  for (let i = 0; i < created.length; i += 1) {
+    const item = chosen[i];
+    if (!item || item.photo == null || !photos[item.photo]) continue;
+    const key = `${plateId}:${item.photo}`;
+    if (!plates[key]) plates[key] = await downscale(photos[item.photo]);
+    if (plates[key]) links[created[i].diary_entry_id] = { key, box: item.box || null };
+  }
+  const keys = Object.keys(plates);
+  if (keys.length > 20) keys.slice(0, keys.length - 20).forEach((k) => delete plates[k]); // newest 20 plates
+  const ids = Object.keys(links);
+  if (ids.length > 150) ids.slice(0, ids.length - 150).forEach((id) => delete links[id]);
+  try {
+    localStorage.setItem(PLATES_KEY, JSON.stringify(plates));
+    localStorage.setItem(ENTRY_PLATE_KEY, JSON.stringify(links));
+  } catch { /* storage full: the entry just won't have its photo */ }
 }
 
 // ---- When was this photo taken? (suggests the meal and dates the diary entry) ----

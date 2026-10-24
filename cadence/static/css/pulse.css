@@ -244,6 +244,7 @@ button { font-family: inherit; }
   border-top: 1px solid var(--card-border);
   padding: 12px 24px calc(24px + env(safe-area-inset-bottom));
   display: flex; justify-content: space-around; align-items: center;
+  z-index: 30; /* above the meal rows and their photos, which scroll underneath */
 }
 .tab-bar button, .tab-bar a.tab {
   background: none; border: none; display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -458,3 +459,49 @@ button { font-family: inherit; }
 
 /* Item thumbnail: the user's own photo when we have one, else the gradient chip. */
 .thumb-photo { background-size: cover; background-position: center; background-repeat: no-repeat; }
+
+.toast.ok { background: linear-gradient(rgba(61,220,132,0.16), rgba(61,220,132,0.16)), var(--card); border: 1px solid rgba(61,220,132,0.5); color: var(--ink); }
+
+/* ---- Day navigation (diary) ---- */
+.day-nav { display: flex; align-items: center; gap: 4px; position: relative; }
+.day-nav .nav-arrow {
+  width: 30px; height: 30px; border-radius: 10px; border: 1px solid var(--card-border); background: var(--card);
+  color: var(--ink-soft); font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.day-nav .nav-arrow:disabled { opacity: 0.35; cursor: default; }
+.day-nav .day-label { background: none; border: none; color: var(--ink); font-size: 15px; font-weight: 700; cursor: pointer; padding: 4px 6px; font-family: inherit; }
+.day-nav input[type=date] { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
+.meal-item-row { cursor: pointer; }
+
+/* ---- Entry detail sheet ---- */
+.sheet-scrim { position: fixed; inset: 0; z-index: 90; background: rgba(5,5,10,0.6); backdrop-filter: blur(2px); }
+.entry-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 91; max-width: 520px; margin: 0 auto;
+  background: var(--card); border: 1px solid var(--card-border); border-radius: 26px 26px 0 0;
+  padding: 18px 20px calc(22px + env(safe-area-inset-bottom)); max-height: 92vh; overflow-y: auto;
+  animation: fadeSlide 0.25s ease-out both;
+}
+@media (min-width: 700px) {
+  .entry-sheet { bottom: auto; top: 50%; transform: translateY(-50%); border-radius: 26px; animation: none; }
+}
+.entry-sheet .plate-photo { position: relative; border-radius: 16px; overflow: hidden; margin-bottom: 14px; background: var(--bg); }
+.entry-sheet .plate-photo img { display: block; width: 100%; max-height: 230px; object-fit: cover; }
+.entry-sheet .plate-photo .zone { position: absolute; border: 2px solid var(--accent-to); border-radius: 8px; box-shadow: 0 0 0 1px rgba(0,0,0,0.4); }
+.entry-sheet h3 { margin: 0; font-size: 17px; font-weight: 700; }
+.entry-sheet .when { font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; }
+.macro-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0; }
+.macro-tile { background: var(--bg); border-radius: 12px; padding: 9px 4px; text-align: center; }
+.macro-tile b { display: block; font-size: 14px; }
+.macro-tile span { font-size: 9.5px; color: var(--ink-soft); font-weight: 700; letter-spacing: 0.04em; }
+.entry-sheet label.field { display: block; font-size: 10.5px; font-weight: 700; color: var(--ink-soft); letter-spacing: 0.04em; margin: 12px 0 6px; }
+.entry-sheet textarea {
+  width: 100%; min-height: 70px; border-radius: 12px; border: 1px solid var(--card-border); background: var(--bg);
+  color: var(--ink); padding: 10px 12px; font: inherit; font-size: 13px; resize: vertical; box-sizing: border-box;
+}
+.sheet-actions { display: flex; gap: 10px; margin-top: 16px; }
+.sheet-actions .btn-primary { flex: 1; }
+.sheet-actions .btn-danger {
+  border: 1px solid rgba(255,92,92,0.5); background: transparent; color: var(--bad); border-radius: 14px;
+  padding: 0 16px; min-height: 48px; font-weight: 700; cursor: pointer; font-family: inherit;
+}
+.note-dot { display: inline-block; margin-left: 6px; font-size: 11px; }

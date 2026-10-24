@@ -1,7 +1,7 @@
 from time import monotonic
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, time, timedelta
+from datetime import date as date_type, datetime, time, timedelta
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, UploadFile
@@ -19,6 +19,7 @@ from .meals import (
     entry_date,
     entry_datetime,
     local_now,
+    local_tz,
     meal_key_for_entry,
     parse_taken_at,
 )
@@ -28,6 +29,7 @@ from .schemas import (
     ConfirmedEntry,
     ConfirmRequest,
     ConfirmResponse,
+    DiaryUpdate,
     IngredientDetail,
     MacroTotals,
     MealGroup,
@@ -188,14 +190,22 @@ def search_page():
 
 
 @app.get("/api/today", response_model=TodayResponse)
-def today():
+def today(date: str | None = None):
+    """The diary of one day (default: today in the user's timezone)."""
+    real_today = local_now().date()
+    try:
+        shown_date = date_type.fromisoformat(date) if date else real_today
+    except ValueError:
+        raise HTTPException(400, "Fecha invalida (usa AAAA-MM-DD)") from None
+    shown_date = min(shown_date, real_today)  # nothing can be logged in the future
     wger = get_wger_client()
     try:
         plan_id = settings.default_nutrition_plan_id or wger.find_default_nutrition_plan_id()
         if plan_id is None:
             # Nothing logged yet: show an empty day instead of creating a plan on a read.
             return TodayResponse(
-                date=local_now().date().isoformat(),
+                date=shown_date.isoformat(),
+                today=real_today.isoformat(),
                 totals=MacroTotals(),
                 goal=MacroTotals(
                     kcal=settings.fallback_goal_kcal,
@@ -214,13 +224,17 @@ def today():
             plan = {}
 
         now = local_now()
-        today_date = now.date()
+        today_date = real_today
         history_start = datetime.combine(today_date - timedelta(days=30), time.min, tzinfo=now.tzinfo)
         day_end = datetime.combine(today_date, time.max, tzinfo=now.tzinfo)
         entries = wger.get_diary_entries(plan_id, history_start, day_end)
 
         streak_days = compute_streak(entries, today_date)
-        today_entries = [e for e in entries if entry_date(e) == today_date]
+        if shown_date < history_start.date():
+            # Older than the streak window: read that day on its own.
+            day_start = datetime.combine(shown_date, time.min, tzinfo=now.tzinfo)
+            entries = wger.get_diary_entries(plan_id, day_start, datetime.combine(shown_date, time.max, tzinfo=now.tzinfo))
+        today_entries = [e for e in entries if entry_date(e) == shown_date]
 
         ingredient_cache: dict[int, dict] = {}
 
@@ -259,6 +273,10 @@ def today():
                     name=ingredient.get("name", "?"),
                     amount_grams=amount,
                     kcal=round(kcal, 1),
+                    protein_g=round(protein, 1),
+                    carbs_g=round(carbs, 1),
+                    fat_g=round(fat, 1),
+                    taken_at=(entry_datetime(entry).isoformat() if entry_datetime(entry) else None),
                 )
             )
 
@@ -273,9 +291,9 @@ def today():
                     label=MEAL_LABELS[key],
                     totals=MacroTotals(
                         kcal=round(sum(i.kcal for i in items), 1),
-                        protein_g=0,
-                        carbs_g=0,
-                        fat_g=0,
+                        protein_g=round(sum(i.protein_g for i in items), 1),
+                        carbs_g=round(sum(i.carbs_g for i in items), 1),
+                        fat_g=round(sum(i.fat_g for i in items), 1),
                     ),
                     items=items,
                 )
@@ -289,7 +307,8 @@ def today():
         )
 
         return TodayResponse(
-            date=today_date.isoformat(),
+            date=shown_date.isoformat(),
+            today=real_today.isoformat(),
             totals=MacroTotals(
                 kcal=round(totals.kcal, 1),
                 protein_g=round(totals.protein_g, 1),
@@ -441,6 +460,25 @@ def delete_diary_entry(entry_id: str):
         wger.close()
 
 
+@app.patch("/api/diary/{entry_id}")
+def update_diary_entry(entry_id: str, update: DiaryUpdate):
+    wger = get_wger_client()
+    try:
+        when = None
+        if update.meal:
+            entry = wger.get_diary_entry(entry_id)
+            current = entry_datetime(entry) or local_now()
+            when = datetime_for_meal(update.meal, current)
+        if update.amount_grams is not None and update.amount_grams <= 0:
+            raise HTTPException(400, "La cantidad debe ser mayor que cero")
+        wger.update_diary_entry(entry_id, update.amount_grams, when)
+        return {"status": "updated"}
+    except WgerError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    finally:
+        wger.close()
+
+
 @app.post("/api/confirm", response_model=ConfirmResponse)
 def confirm(request: ConfirmRequest):
     wger = get_wger_client()
@@ -461,6 +499,6 @@ def confirm(request: ConfirmRequest):
                     diary_entry_id=diary_entry_id,
                 )
             )
-        return ConfirmResponse(created=created)
+        return ConfirmResponse(created=created, date=when.astimezone(local_tz()).date().isoformat())
     finally:
         wger.close()

@@ -447,8 +447,14 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
     const saved = await apiPost('api/confirm', payload);
     // Each diary entry remembers its own zoomed crop (same order as the items we sent).
     await rememberThumbs(saved.created, chosen.map((item) => item.crop));
+    try { await rememberPlate(saved.created, chosen, photos); } catch { /* the photo is a nicety */ }
     clearScanSession();
-    window.location.href = 'index.html';
+    // Open the day the plate was filed under (the photo's day), and say where it went.
+    const dayLabel = saved.date
+      ? new Date(`${saved.date}T12:00:00`).toLocaleDateString('es', { day: 'numeric', month: 'long' })
+      : 'tu diario';
+    try { sessionStorage.setItem('cadence_flash', `Guardado en ${dayLabel}`); } catch { /* no flash */ }
+    window.location.href = saved.date ? `index.html?date=${saved.date}` : 'index.html';
   } catch (err) {
     if (isNetworkFailure(err)) {
       // No connection: keep the plate and let the dashboard send it when we're back.

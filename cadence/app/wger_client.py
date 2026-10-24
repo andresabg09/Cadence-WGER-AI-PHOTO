@@ -173,6 +173,23 @@ class WgerClient:
             raise WgerError(f"wger rechazo el registro de comida: {response.status_code} {response.text}")
         return str(response.json()["id"])
 
+    def update_diary_entry(self, entry_id: int | str, amount_grams: float | None = None,
+                           when: datetime | None = None) -> None:
+        payload: dict = {}
+        if amount_grams is not None:
+            payload["amount"] = amount_grams
+        if when is not None:
+            payload["datetime"] = when.isoformat()
+        response = self._client.patch(f"/api/v2/nutritiondiary/{entry_id}/", json=payload)
+        if response.status_code >= 400:
+            raise WgerError(f"wger rechazo el cambio del registro: {response.status_code} {response.text}")
+
+    def get_diary_entry(self, entry_id: int | str) -> dict:
+        response = self._client.get(f"/api/v2/nutritiondiary/{entry_id}/", params={"format": "json"})
+        if response.status_code >= 400:
+            raise WgerError(f"wger no encontro el registro: {response.status_code}")
+        return response.json()
+
     def delete_diary_entry(self, entry_id: int | str) -> None:
         response = self._client.delete(f"/api/v2/nutritiondiary/{entry_id}/")
         if response.status_code not in (200, 202, 204):

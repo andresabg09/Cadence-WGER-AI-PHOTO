@@ -68,6 +68,8 @@ class ConfirmedEntry(BaseModel):
 
 class ConfirmResponse(BaseModel):
     created: list[ConfirmedEntry]
+    # Local day the plate was filed under (the photo's day), so the app can open that day.
+    date: str | None = None
 
 
 class IngredientDetail(BaseModel):
@@ -102,6 +104,15 @@ class MealItem(BaseModel):
     name: str
     amount_grams: float
     kcal: float
+    protein_g: float = 0
+    carbs_g: float = 0
+    fat_g: float = 0
+    taken_at: str | None = None  # local ISO time of the entry (for the detail sheet)
+
+
+class DiaryUpdate(BaseModel):
+    amount_grams: float | None = None
+    meal: str | None = None  # moves the entry into that meal's time window, same day
 
 
 class MealGroup(BaseModel):
@@ -113,6 +124,7 @@ class MealGroup(BaseModel):
 
 class TodayResponse(BaseModel):
     date: str
+    today: str | None = None  # the user's real today (date above is the day being shown)
     totals: MacroTotals
     goal: MacroTotals
     meals: list[MealGroup]

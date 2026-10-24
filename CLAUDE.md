@@ -231,6 +231,12 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   `cadence_photos`, cada componente con `photo`+`box`). "Agregar otra foto" (`scan.html?append=1`)
   suma fotos a un mismo registro. El diario guarda el recorte de cada entrada (localStorage).
   Sin `box` valido se usa la foto entera. Pendiente de validar con cajas reales de Gemini.
+  Comida segun la hora de la foto (24 oct): el selector Desayuno/Almuerzo/Merienda/Cena es
+  SIEMPRE libre; solo se preselecciona una sugerencia con la hora de la foto (EXIF
+  DateTimeOriginal de las fotos de galeria, `readTakenAt` en api.js; camara de la app = ahora;
+  sin EXIF = fecha del archivo). `ConfirmRequest.taken_at` fecha el registro en el DIA de la foto
+  y, si el usuario elige otra comida, dentro de la ventana de esa comida (`datetime_for_meal`).
+  Una hora futura se recorta a "ahora". `/api/meal-now?at=` devuelve la sugerencia.
 - **Bloque 3 - Datos personales.** Perfil, Objetivos (Mifflin-St Jeor, guarda goal_* del
   plan), Progreso (racha, peso desde weightentry, logros), Historial.
 - **Bloque 4 - Ajustes y habitos.** Ajustes (hub), Apariencia (toggle ya hecho),

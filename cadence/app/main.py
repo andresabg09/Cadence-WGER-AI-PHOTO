@@ -20,6 +20,7 @@ from .meals import (
     entry_datetime,
     local_now,
     meal_key_for_entry,
+    parse_taken_at,
 )
 from .schemas import (
     AnalyzeResponse,
@@ -93,9 +94,13 @@ def health():
 
 
 @app.get("/api/meal-now")
-def meal_now():
-    """Which meal slot the clock (in TIMEZONE) falls in; 'otro' outside all windows."""
-    return {"meal": meal_key_for_entry({"datetime": local_now().isoformat()})}
+def meal_now(at: str | None = None):
+    """Which meal slot a moment falls in (TIMEZONE); 'otro' outside all windows.
+
+    `at` is the photo's own time when it has one; otherwise the clock. This is only
+    a suggestion: the UI always lets the user pick a different meal."""
+    when = parse_taken_at(at, local_now())
+    return {"meal": meal_key_for_entry({"datetime": when.isoformat()}), "at": when.isoformat()}
 
 
 _wger_status_cache: dict = {"at": 0.0, "value": None}
@@ -425,7 +430,7 @@ def confirm(request: ConfirmRequest):
     try:
         plan_id = request.plan_id or settings.default_nutrition_plan_id or wger.get_default_nutrition_plan_id()
 
-        when = datetime_for_meal(request.meal, local_now())
+        when = datetime_for_meal(request.meal, parse_taken_at(request.taken_at, local_now()))
         created = []
         for item in request.items:
             try:

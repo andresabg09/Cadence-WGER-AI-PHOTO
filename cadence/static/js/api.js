@@ -131,7 +131,7 @@ async function prepareImage(file, maxDim = 1280) {
   }
 }
 
-const SCAN_SESSION_KEYS = ['cadence_analyze_result', 'cadence_photos', 'cadence_meal'];
+const SCAN_SESSION_KEYS = ['cadence_analyze_result', 'cadence_photos', 'cadence_meal', 'cadence_taken_at'];
 function clearScanSession() {
   SCAN_SESSION_KEYS.forEach((key) => sessionStorage.removeItem(key));
 }
@@ -194,4 +194,63 @@ function rememberThumbs(created, crops) {
   const ids = Object.keys(map);
   if (ids.length > 150) ids.slice(0, ids.length - 150).forEach((id) => delete map[id]);
   try { localStorage.setItem(THUMBS_KEY, JSON.stringify(map)); } catch { /* storage full or unavailable */ }
+}
+
+// ---- When was this photo taken? (suggests the meal and dates the diary entry) ----
+// Gallery/desktop files carry it in their EXIF; the in-app camera is "now". Returns an
+// ISO string: no zone for EXIF (it is the camera's local clock), UTC for everything else.
+async function readTakenAt(file) {
+  if (!(file instanceof File)) return new Date().toISOString(); // shot with the in-app camera
+  try {
+    const exif = await readExifDate(file);
+    if (exif) return exif;
+  } catch { /* unreadable EXIF: fall through */ }
+  const age = Date.now() - file.lastModified;
+  if (file.lastModified && age >= 0 && age < 120 * 86400000) return new Date(file.lastModified).toISOString();
+  return new Date().toISOString();
+}
+
+async function readExifDate(file) {
+  const view = new DataView(await file.slice(0, 262144).arrayBuffer());
+  if (view.byteLength < 12 || view.getUint16(0) !== 0xFFD8) return null; // EXIF is read from JPEGs only
+  let offset = 2;
+  while (offset + 10 < view.byteLength) {
+    const marker = view.getUint16(offset);
+    if ((marker & 0xFF00) !== 0xFF00) return null;
+    const length = view.getUint16(offset + 2);
+    if (marker === 0xFFE1 && view.getUint32(offset + 4) === 0x45786966) return parseExifDate(view, offset + 10);
+    offset += 2 + length;
+  }
+  return null;
+}
+
+function parseExifDate(view, base) {
+  const little = view.getUint16(base) === 0x4949;
+  const u16 = (o) => view.getUint16(o, little);
+  const u32 = (o) => view.getUint32(o, little);
+  const text = (entry) => {
+    const count = u32(entry + 4);
+    const start = count > 4 ? base + u32(entry + 8) : entry + 8;
+    let out = '';
+    for (let i = 0; i < count - 1 && start + i < view.byteLength; i++) out += String.fromCharCode(view.getUint8(start + i));
+    return out;
+  };
+  const scan = (ifd, wanted) => {
+    const found = {};
+    const n = u16(ifd);
+    for (let i = 0; i < n; i++) {
+      const entry = ifd + 2 + i * 12;
+      const tag = u16(entry);
+      if (wanted.includes(tag)) found[tag] = tag === 0x8769 ? u32(entry + 8) : text(entry);
+    }
+    return found;
+  };
+  const ifd0 = scan(base + u32(base + 4), [0x0132, 0x8769]);
+  const exif = ifd0[0x8769] ? scan(base + ifd0[0x8769], [0x9003, 0x9004]) : {};
+  const raw = exif[0x9003] || exif[0x9004] || ifd0[0x0132];
+  const m = /^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(raw || '');
+  if (!m) return null;
+  const year = Number(m[1]);
+  if (year < 2000 || year > new Date().getFullYear() + 1) return null;
+  return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`;
 }

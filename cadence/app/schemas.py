@@ -49,6 +49,9 @@ class ConfirmRequest(BaseModel):
     # desayuno | almuerzo | merienda | cena - stamps the entries inside that
     # slot's time window (see meals.datetime_for_meal). None = "now".
     meal: str | None = None
+    # When the photo was taken (EXIF time for gallery images, "now" for the in-app
+    # camera). Entries are stamped on that day, inside the chosen meal's window.
+    taken_at: str | None = None
 
 
 class WgerStatus(BaseModel):

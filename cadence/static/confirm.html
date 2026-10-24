@@ -61,6 +61,7 @@
       <div class="col" id="photoCol"></div>
       <div class="col" id="itemsCol">
         <div class="meal-pick" id="mealPick" role="group" aria-label="Comida"></div>
+        <div id="mealHint" style="font-size:11.5px;color:var(--ink-soft);line-height:1.4;padding:0 4px;margin-top:-4px;"></div>
         <div class="confirm-items" id="itemsWrap"></div>
       </div>
     </div>
@@ -99,6 +100,8 @@ if (!raw) {
 const analyzeResult = JSON.parse(raw || '{"components":[]}');
 const photos = readPhotos();
 let meal = sessionStorage.getItem('cadence_meal') || null;
+const takenAt = sessionStorage.getItem('cadence_taken_at') || null; // when the photo was taken
+let mealSource = meal ? 'chosen' : 'none'; // 'chosen' = the user picked it, 'photo' = suggested from the photo time
 
 // Per-component live state: selected candidate id, its kcal/100g, grams, and
 // where it sits on which photo (null for foods added by hand).
@@ -228,16 +231,48 @@ function thumbHtml(item, idx) {
 }
 
 // ---- Meal picker: the slot the entries are stamped into (see /api/confirm) ----
+// "ayer, 1:05 p. m." - how the photo's moment reads to the user.
+function whenLabel() {
+  if (!takenAt) return '';
+  const when = new Date(takenAt);
+  if (Number.isNaN(when.getTime())) return '';
+  const startOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOf(new Date()) - startOf(when)) / 86400000);
+  const date = when.toLocaleDateString('es', { day: 'numeric', month: 'short' }).replace('.', '');
+  const day = days <= 0 ? 'hoy' : days === 1 ? 'ayer' : date;
+  const of = days <= 0 ? 'de hoy' : days === 1 ? 'de ayer' : `del ${date}`; // "de hoy", "de ayer", "del 20 oct"
+  const time = when.toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return { day, of, time };
+}
+
+// The meal is only a suggestion until the user touches it: it never locks.
+function renderMealHint() {
+  const hint = document.getElementById('mealHint');
+  const w = whenLabel();
+  const label = MEALS.find((m) => m.key === meal);
+  if (mealSource === 'photo' && w && label) {
+    hint.textContent = `Sugerido por la hora de tu foto (${w.day}, ${w.time}). Puedes cambiarlo.`;
+  } else if (mealSource === 'chosen' && label) {
+    hint.textContent = `Se registrará como ${label.label.toLowerCase()} ${w ? w.of : 'de hoy'}.`;
+  } else if (w) {
+    hint.textContent = `Elige a qué comida corresponde (foto de ${w.day}, ${w.time}).`;
+  } else {
+    hint.textContent = label ? '' : 'Elige a qué comida corresponde.';
+  }
+}
+
 function renderMealPick() {
   const wrap = document.getElementById('mealPick');
   wrap.innerHTML = MEALS.map((m) => `<button type="button" data-meal="${m.key}" aria-pressed="${meal === m.key}">${m.label}</button>`).join('');
   wrap.querySelectorAll('button').forEach((btn) => {
     btn.addEventListener('click', () => {
       meal = btn.dataset.meal;
+      mealSource = 'chosen';
       sessionStorage.setItem('cadence_meal', meal);
       renderMealPick();
     });
   });
+  renderMealHint();
 }
 
 async function selectCandidate(idx, candidateId) {
@@ -400,7 +435,7 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
     return;
   }
 
-  const payload = { items, meal };
+  const payload = { items, meal, taken_at: takenAt };
   const btn = document.getElementById('confirmBtn');
   btn.disabled = true;
   btn.textContent = 'Guardando…';
@@ -428,10 +463,11 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
 
 async function init() {
   if (!meal) {
-    // Default to the slot the clock says we're in (nothing selected at night).
+    // Suggest the slot of the photo's own time (the clock when it has none); outside
+    // every window nothing is preselected. The user can always pick another meal.
     try {
-      const now = await apiGet('api/meal-now');
-      if (now.meal && now.meal !== 'otro') meal = now.meal;
+      const suggestion = await apiGet(takenAt ? `api/meal-now?at=${encodeURIComponent(takenAt)}` : 'api/meal-now');
+      if (suggestion.meal && suggestion.meal !== 'otro') { meal = suggestion.meal; mealSource = 'photo'; }
     } catch { /* picker simply starts empty */ }
   }
   renderPhotos();

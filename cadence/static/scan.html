@@ -278,7 +278,7 @@ function setBusy(busy) {
 }
 
 // Adds this photo's result to the plate (a fresh plate, or the current one when appending).
-function storePlate(newComponents, thumb) {
+function storePlate(newComponents, thumb, takenAt) {
   const photos = appending ? readPhotos() : [];
   let components = [];
   if (appending) {
@@ -288,10 +288,13 @@ function storePlate(newComponents, thumb) {
   newComponents.forEach((c) => { c.photo = photoIdx; }); // which photo it belongs to; c.box says where
   sessionStorage.setItem('cadence_analyze_result', JSON.stringify({ components: components.concat(newComponents) }));
   writePhotos(photos);
+  // The plate keeps the first photo's time; a later photo added to it doesn't move it.
+  if (takenAt && !sessionStorage.getItem('cadence_taken_at')) sessionStorage.setItem('cadence_taken_at', takenAt);
 }
 
 async function runAnalysis(source) {
   setBusy(true);
+  const takenAt = await readTakenAt(source); // before prepareImage: re-encoding drops the EXIF
   const { blob, thumb } = await prepareImage(source);
 
   const formData = new FormData();
@@ -300,14 +303,14 @@ async function runAnalysis(source) {
   try {
     const data = await apiPost('api/analyze', formData, { isFormData: true });
     renderLiveChips(data.components);
-    storePlate(data.components, thumb);
+    storePlate(data.components, thumb, takenAt);
     setTimeout(() => { window.location.href = 'confirm.html'; }, 600);
   } catch (err) {
     setBusy(false);
     if (/identific/i.test(err.message || '')) {
       // The AI saw no food: the confirm screen has the "No logramos identificar el plato" state
       // (or, when appending, the plate we already had).
-      storePlate([], thumb);
+      storePlate([], thumb, takenAt);
       window.location.href = 'confirm.html';
       return;
     }

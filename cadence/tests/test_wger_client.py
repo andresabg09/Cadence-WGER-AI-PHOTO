@@ -216,3 +216,50 @@ def test_diary_ids_may_be_uuids(monkeypatch):
 
     assert client.delete(f"/api/diary/{entry_id}").status_code == 200
     assert deleted == [f"/api/v2/nutritiondiary/{entry_id}/"]
+
+
+def test_meal_suggestion_uses_the_photo_time_and_clamps_the_future():
+    client = TestClient(main.app)
+    # a lunch photo (naive EXIF time = the user's clock) uploaded at night still suggests lunch
+    assert client.get("/api/meal-now", params={"at": "2026-10-20T13:05:00"}).json()["meal"] == "almuerzo"
+    assert client.get("/api/meal-now", params={"at": "2026-10-20T07:40:00"}).json()["meal"] == "desayuno"
+    # an absolute instant is converted to the local zone: 01:30Z is 20:30 the day before in Panama
+    assert client.get("/api/meal-now", params={"at": "2026-10-21T01:30:00Z"}).json()["meal"] == "cena"
+    # garbage / future -> falls back to now (never later than now)
+    bad = client.get("/api/meal-now", params={"at": "mañana"}).json()
+    future = client.get("/api/meal-now", params={"at": "2999-01-01T12:00:00"}).json()
+    assert bad["meal"] == future["meal"] and future["at"].startswith(local_today_prefix())
+
+
+def local_today_prefix() -> str:
+    from app.meals import local_now
+
+    return local_now().date().isoformat()
+
+
+def test_confirm_stamps_the_photo_day_inside_the_chosen_meal(monkeypatch):
+    import json
+
+    posted = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            posted.append(json.loads(request.content))
+            return httpx.Response(201, json={"id": "uuid-1"})
+        return httpx.Response(200, json={"results": [{"id": 1}]})
+
+    _stub_wger(monkeypatch, handler)
+    client = TestClient(main.app)
+    base = {"items": [{"ingredient_id": 3, "amount_grams": 80}], "taken_at": "2026-10-20T13:05:00"}
+
+    # lunch photo, kept as lunch: exact photo time, on the photo's day
+    client.post("/api/confirm", json={**base, "meal": "almuerzo"})
+    assert posted[-1]["datetime"].startswith("2026-10-20T13:05:00")
+
+    # same photo, the user says it was dinner: that day, middle of the dinner window
+    client.post("/api/confirm", json={**base, "meal": "cena"})
+    assert posted[-1]["datetime"].startswith("2026-10-20T20:00:00")
+
+    # no taken_at (manual add): today
+    client.post("/api/confirm", json={"items": base["items"], "meal": "almuerzo"})
+    assert posted[-1]["datetime"][:10] == local_today_prefix()

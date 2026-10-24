@@ -31,6 +31,23 @@ def local_now() -> datetime:
     return datetime.now(local_tz())
 
 
+def parse_taken_at(raw: str | None, now: datetime) -> datetime:
+    """When the food was eaten, as far as we know: the photo's own timestamp.
+
+    A naive value (EXIF has no zone) is read on the user's local clock; an aware
+    one is converted. Missing/unreadable -> now, and a time in the future is
+    clamped to now (a wrong camera clock must not log meals tomorrow)."""
+    if not raw:
+        return now
+    try:
+        when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return now
+    tz = local_tz()
+    when = when.replace(tzinfo=tz) if when.tzinfo is None else when.astimezone(tz)
+    return min(when, now)
+
+
 def meal_key_for_hour(hour: int) -> str:
     if settings.breakfast_start_hour <= hour < settings.lunch_start_hour:
         return "desayuno"

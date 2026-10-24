@@ -221,8 +221,9 @@ de wger. Diseno:
   (sexo, fecha de nacimiento, estatura, peso, actividad, objetivo -> meta calculada con
   Mifflin-St Jeor en `app/nutrition.py`, ajustable de 50 en 50 kcal; guardas de seguridad: minimos
   de kcal, menores de 18 sin deficit, peso bajo no baja). Pocas opciones a la vez: lo demas se va
-  mostrando de a poco. `profile.html` = Perfil + Ajustes (Instalar app siempre disponible,
-  apariencia, peso, invitaciones y personas para el admin); `goals.html` = Objetivos.
+  mostrando de a poco. `profile.html` = Perfil (quien eres: nombre, peso, plan, actividad) y
+  `settings.html` = Ajustes (SEPARADOS por decision de Andres: Instalar app, apariencia, recordatorios, cuenta,
+  invitaciones y personas para el admin, cerrar sesion); `goals.html` = Objetivos.
 - Fechas: usar `pickDate()` (js/datepicker.js), nunca `<input type="date">` (se ve viejo y su icono es ilegible en oscuro). `color-scheme` sigue al tema.
 - Pantallas de pantalla completa (scan) se fijan a `--app-h` (= innerHeight real): en la app instalada `100dvh` puede ser mayor que lo visible y tapaba el boton de captura.
 - Al cambiar de persona en un dispositivo se borran sus caches locales (`rememberUser`).
@@ -340,6 +341,20 @@ se publica a `master` y se valida con UNA sola revision en el servidor
 - REGLA ANTI-REPETICION: antes de empezar un bloque, comparar este listado con el codigo real
   (grep de endpoints/paginas) y trabajar SOLO lo que dice FALTA; al terminar, mover lo hecho a
   HECHO en este mismo listado y subirlo en el mismo commit.
+
+## Velocidad (25 oct 2026; mantener)
+
+La app debe sentirse como app nativa. Reglas que la logran, no deshacerlas:
+- `wger_client.py`: UN pool de conexiones por proceso (`_Http`), ruta INTERNA `WGER_INTERNAL_URL` (default
+  `http://nginx` en el compose, con el Host publico) con respaldo automatico a `WGER_BASE_URL`; cache de
+  alimentos 6 h (`get_ingredient`).
+- `main.py`: `user_entries()` cachea 2 min la lectura del diario de wger; TODA escritura al diario debe llamar
+  `invalidate_entries(user.id)`. Lecturas independientes en paralelo (alimentos del dia, trozos del ano).
+- Navegador: `apiGetSWR()` (js/api.js) pinta el ultimo dato guardado al instante y lo reemplaza con el fresco;
+  toda escritura exitosa limpia ese cache (`swrClear`). El service worker (`sw.js`, `__BUILD__` sellado por
+  el servidor en cada deploy) abre paginas y scripts desde cache y los refresca detras; al desplegar una version
+  nueva muestra "Hay una version nueva - Actualizar". Fuentes de Google sin bloquear el pintado; GZip activo.
+- Pantallas nuevas: usar `apiGetSWR` para sus lecturas y no esperar a `ensureSession` antes de pedir datos.
 
 ## Navegacion y boton Atras (regla de Andres, 25 oct 2026; aplica a TODA pantalla nueva)
 

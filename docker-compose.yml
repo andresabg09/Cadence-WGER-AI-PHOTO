@@ -139,6 +139,8 @@ services:
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-lite-latest}
       WGER_API_TOKEN: ${WGER_API_TOKEN:-}
       WGER_BASE_URL: ${WGER_BASE_URL:-https://crm-cadence-wger-ai-photo.cjauws.easypanel.host}
+      # Ruta directa a wger por la red de Docker (sin salir a internet). Si falla, cadence usa WGER_BASE_URL solo.
+      WGER_INTERNAL_URL: ${WGER_INTERNAL_URL:-http://nginx}
       TIMEZONE: ${TIMEZONE:-America/Panama}
       USER_NAME: ${USER_NAME:-Andrés}
       DATA_DIR: /data

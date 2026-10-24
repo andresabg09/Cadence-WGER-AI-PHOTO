@@ -8,7 +8,10 @@
 <link rel="manifest" href="static/manifest.json">
 <link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
 <link rel="stylesheet" href="static/css/pulse.css">
 <script>
   (function () {
@@ -119,7 +122,7 @@ function renderWeight() {
   const last = points[points.length - 1];
   const ch = data.weight_change_30d;
   $('weightDelta').textContent = ch == null ? `${last.kg.toFixed(1)} kg` : `${ch < 0 ? '↓' : ch > 0 ? '↑' : '→'} ${Math.abs(ch).toFixed(1)} kg este mes`;
-  $('weightDelta').style.color = ch == null ? 'var(--ink-soft)' : (ch < 0) === (me.profile.goal !== 'gain' && me.profile.goal !== 'muscle') ? 'var(--good)' : 'var(--ink-soft)';
+  $('weightDelta').style.color = ch == null ? 'var(--ink-soft)' : (ch < 0) === (!me || (me.profile.goal !== 'gain' && me.profile.goal !== 'muscle')) ? 'var(--good)' : 'var(--ink-soft)';
   const W = 320, H = 130, padX = 10, padY = 18;
   const days = (iso) => new Date(`${iso}T12:00:00`).getTime() / 86400000;
   const t0 = days(points[0].day), t1 = Math.max(days(points[points.length - 1].day), t0 + 1);
@@ -178,19 +181,20 @@ $('addWeight').addEventListener('click', () => openSheet(`
   });
 }));
 
+function paint(fresh) { data = fresh; renderStreak(); renderWeeks(); renderWeight(); renderMedals(); }
+
 async function load() {
   try {
-    data = await apiGet('api/progress');
+    await apiGetSWR('api/progress', paint); // last numbers first, fresh ones right after
   } catch (err) {
     $('streakCard').innerHTML = `<div class="chart-empty">No se pudo cargar tu progreso: ${escapeHtml(err.message)} <button class="link-btn" onclick="load()">Reintentar</button></div>`;
-    return;
   }
-  renderStreak(); renderWeeks(); renderWeight(); renderMedals();
 }
 
 (async function init() {
+  load(); // alongside the session check, not after it
   try { me = await ensureSession(); } catch { return; }
-  load();
+  if (data) renderWeight(); // the colour of the weight change depends on your goal
 })();
 window.addEventListener('pageshow', (e) => { if (e.persisted && me) load(); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

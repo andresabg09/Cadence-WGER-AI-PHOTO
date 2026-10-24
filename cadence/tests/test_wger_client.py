@@ -297,3 +297,68 @@ def test_analyze_offers_the_ready_to_eat_staple_in_spanish(monkeypatch):
     names = [c["name"] for c in component["candidates"]]
     assert names[0] == "Arroz blanco cocido" and component["candidates"][0]["energy_kcal_100g"] == 130
     assert not ({"Cooked white rice"} & set(names[:1])) and names.count("Cooked white rice") + names.count("Arroz blanco cocido") == 1
+
+
+def _http(internal_handler, public_handler):
+    from app.wger_client import _Http
+    return _Http(httpx.Client(base_url="http://public", transport=httpx.MockTransport(public_handler)),
+                 httpx.Client(base_url="http://nginx", transport=httpx.MockTransport(internal_handler)))
+
+
+def test_internal_route_is_used_and_falls_back_to_the_public_address():
+    seen = []
+
+    def internal_ok(request):
+        seen.append("internal")
+        return httpx.Response(200, json={"ok": True})
+
+    def public(request):
+        seen.append("public")
+        return httpx.Response(200, json={"ok": True})
+
+    http = _http(internal_ok, public)
+    http.get("/x"); http.get("/x")
+    assert seen == ["internal", "internal"]
+
+    def refused(request):
+        raise httpx.ConnectError("no route")
+
+    seen.clear()
+    http = _http(refused, public)
+    assert http.get("/x").status_code == 200 and http.get("/x").status_code == 200
+    assert seen == ["public", "public"]  # remembered: not retried on every call
+
+
+def test_internal_route_that_answers_like_a_wrong_door_is_dropped_on_first_use():
+    seen = []
+    http = _http(lambda r: (seen.append("internal"), httpx.Response(400))[1], lambda r: (seen.append("public"), httpx.Response(200, json={}))[1])
+    assert http.get("/x").status_code == 200
+    assert seen == ["internal", "public"]
+
+
+def test_ingredient_reads_are_remembered_and_diary_reads_follow_writes(monkeypatch):
+    from app import main, store
+    calls = {"ingredient": 0, "diary": 0}
+
+    def handler(request):
+        if request.url.path.startswith("/api/v2/ingredient/"):
+            calls["ingredient"] += 1
+            return httpx.Response(200, json={"id": 5, "name": "Arroz", "energy": 130})
+        if request.url.path == "/api/v2/nutritiondiary/":
+            calls["diary"] += 1
+            return httpx.Response(200, json={"results": []})
+        return httpx.Response(404)
+
+    wger = client_with(handler)
+    wger.get_ingredient(5); wger.get_ingredient(5)
+    assert calls["ingredient"] == 1
+
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    me = type("U", (), {"id": 77})()
+    main.user_entries(wger, me, 1, now - timedelta(days=1), now)
+    main.user_entries(wger, me, 1, now - timedelta(days=1), now)
+    assert calls["diary"] == 1  # second read came from memory
+    main.invalidate_entries(77)
+    main.user_entries(wger, me, 1, now - timedelta(days=1), now)
+    assert calls["diary"] == 2  # a write cleared it

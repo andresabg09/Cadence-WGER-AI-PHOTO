@@ -99,8 +99,36 @@ async function ensureSession({ needOnboarded = true } = {}) {
 }
 
 async function signOut() {
+  swrClear();
   try { await apiPost('api/auth/logout', {}); } catch { /* the cookie is cleared server-side when reachable */ }
   window.location.replace('login.html');
+}
+
+// ---- Instant screens: show what this device saw last time, then replace it with the fresh answer ----
+// Kept per device (localStorage, cleared when another person signs in or on any write).
+const SWR_PREFIX = 'cadence_swr:';
+
+function swrClear() {
+  try { Object.keys(localStorage).filter((k) => k.startsWith(SWR_PREFIX)).forEach((k) => localStorage.removeItem(k)); } catch { /* no storage */ }
+}
+
+// onData(data, isStale): called with the remembered answer right away (if any), then with the fresh one.
+// Resolves with the fresh data; if the network fails but something was shown, the error is swallowed.
+async function apiGetSWR(path, onData) {
+  let shown = false;
+  try {
+    const raw = localStorage.getItem(SWR_PREFIX + path);
+    if (raw) { onData(JSON.parse(raw), true); shown = true; }
+  } catch { /* unreadable cache: just go to the network */ }
+  try {
+    const fresh = await apiGet(path);
+    try { localStorage.setItem(SWR_PREFIX + path, JSON.stringify(fresh)); } catch { /* full storage */ }
+    onData(fresh, false);
+    return fresh;
+  } catch (err) {
+    if (!shown) throw err;
+    return null;
+  }
 }
 
 async function apiGet(path) {
@@ -130,6 +158,7 @@ async function apiPost(path, body, { isFormData = false, timeoutMs = 90000 } = {
   }
   handleAuth(response);
   if (!response.ok) throw new Error(await safeText(response));
+  if (!/api\/(analyze|voice|push\/test)/.test(path)) swrClear();
   return response.json();
 }
 
@@ -141,6 +170,7 @@ async function apiPut(path, body) {
   });
   handleAuth(response);
   if (!response.ok) throw new Error(await safeText(response));
+  swrClear();
   return response.json();
 }
 
@@ -152,6 +182,7 @@ async function apiPatch(path, body) {
   });
   handleAuth(response);
   if (!response.ok) throw new Error(await safeText(response));
+  swrClear();
   return response.json();
 }
 
@@ -159,6 +190,7 @@ async function apiDelete(path) {
   const response = await fetch(path, { method: 'DELETE' });
   handleAuth(response);
   if (!response.ok) throw new Error(await safeText(response));
+  swrClear();
   return response.json();
 }
 
@@ -524,3 +556,13 @@ function flameSvg(streak, size = 15) {
   return `<svg class="flame t${flameTier(streak)}" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><path d="${FLAME_PATH}"/></svg>`;
 }
 
+
+
+// ---- A new version was deployed: the service worker took over, offer to reload (never reload by surprise) ----
+if ('serviceWorker' in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return; // first install, nothing to update
+    if (typeof showBanner === 'function') showBanner('update', 'Hay una versión nueva de cadence.', 'Actualizar', () => window.location.reload());
+  });
+}

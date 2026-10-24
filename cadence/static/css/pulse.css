@@ -760,3 +760,26 @@ body:has(.plain-page) {
 .wo-kinds button { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 64px; padding: 8px 2px; border-radius: 14px; border: 1px solid var(--card-border); background: var(--bg); color: var(--ink-soft); font: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer; }
 .wo-kinds button span { font-size: 20px; }
 .wo-kinds button[aria-pressed="true"] { border-color: rgba(61,220,132,0.6); background: rgba(61,220,132,0.14); color: var(--ink); }
+
+/* ---- Recordatorios ---- */
+.rm-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--card-border); }
+.rm-row:first-of-type { border-top: none; }
+.rm-ico { width: 40px; height: 40px; border-radius: 13px; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.rm-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.rm-text b { font-size: 13.5px; }
+.rm-text span { font: 500 11px 'Space Mono', monospace; color: var(--ink-soft); }
+.rm-extra { display: none; flex-wrap: wrap; gap: 10px; padding: 8px 0 4px; font-size: 12px; color: var(--ink-soft); align-items: center; }
+.rm-extra select, .time-pick { background: var(--bg); color: var(--ink); border: 1px solid var(--card-border); border-radius: 10px; min-height: 36px; padding: 0 8px; font: inherit; font-size: 12.5px; color-scheme: inherit; }
+.rm-text .time-pick { margin-top: 2px; width: fit-content; }
+.rm-foot { font-size: 11px; color: var(--ink-soft); padding-top: 8px; }
+.rm-device { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; line-height: 1.5; color: var(--ink-soft); }
+.rm-device b { color: var(--ink); }
+.rm-device.ok b { color: var(--good); }
+.rm-device.warn b { color: #FF8A5B; }
+.switch { position: relative; width: 48px; height: 28px; flex-shrink: 0; display: inline-block; }
+.switch input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+.switch i { position: absolute; inset: 0; border-radius: 100px; background: rgba(127,127,140,0.3); transition: background .2s; }
+.switch i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.switch input:checked + i { background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); }
+.switch input:checked + i::after { transform: translateX(20px); }
+.switch input:focus-visible + i { outline: 2px solid var(--accent-to); outline-offset: 2px; }

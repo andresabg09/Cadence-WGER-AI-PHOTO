@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>cadence · Recordatorios</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="static/css/pulse.css">
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body class="with-shell" data-page="perfil">
+<div class="app">
+  <div class="page-head" style="padding:22px 20px 12px;display:flex;align-items:center;gap:12px;">
+    <a href="profile.html" id="backLink" aria-label="Volver" class="icon-btn" style="width:44px;height:44px;border-radius:13px;flex-shrink:0;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
+    </a>
+    <div style="flex:1;min-width:0;">
+      <h1 class="disp" style="margin:0;font-size:20px;font-weight:700;">Recordatorios</h1>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">Avisos de agua, comidas y resumen semanal</div>
+    </div>
+  </div>
+
+  <div class="app-content progress-grid" style="padding-bottom:60px;">
+    <div class="col">
+      <div class="card" id="deviceCard"></div>
+      <div class="card">
+        <div class="section-title" style="margin-bottom:6px;">HIDRATACIÓN</div>
+        <div class="rm-row">
+          <span class="rm-ico">💧</span>
+          <div class="rm-text"><b>Recordar beber agua</b><span id="waterHint"></span></div>
+          <label class="switch"><input type="checkbox" id="waterOn" aria-label="Recordar beber agua"><i></i></label>
+        </div>
+        <div class="rm-extra" id="waterExtra">
+          <label>Cada <select id="waterEvery"><option value="1">1 hora</option><option value="2">2 horas</option><option value="3">3 horas</option><option value="4">4 horas</option></select></label>
+          <label>desde <select id="waterFrom" class="time-pick"></select></label>
+          <label>hasta <select id="waterTo" class="time-pick"></select></label>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <div class="section-title" style="margin-bottom:6px;">COMIDAS</div>
+        <div id="mealRows"></div>
+        <div class="rm-foot">Si ya registraste esa comida, no te avisamos.</div>
+      </div>
+      <div class="card">
+        <div class="section-title" style="margin-bottom:6px;">RESUMEN</div>
+        <div class="rm-row">
+          <span class="rm-ico">📊</span>
+          <div class="rm-text"><b>Resumen semanal</b><span id="weeklyHint"></span></div>
+          <label class="switch"><input type="checkbox" id="weeklyOn" aria-label="Resumen semanal"><i></i></label>
+        </div>
+        <div class="rm-extra" id="weeklyExtra"><label>Los domingos a las <select id="weeklyTime" class="time-pick"></select></label></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="static/js/api.js"></script>
+<script src="static/js/theme.js"></script>
+<script src="static/js/shell.js"></script>
+<script src="static/js/install.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const MEALS = [['desayuno', '🥣', 'Desayuno'], ['almuerzo', '🍲', 'Almuerzo'], ['cena', '🍽️', 'Cena']];
+const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+let prefs = null;
+let devices = 0;
+
+const TIMES = [];
+for (let h = 5; h <= 23; h += 1) for (const m of ['00', '30']) TIMES.push(`${String(h).padStart(2, '0')}:${m}`);
+const label = (t) => { const h = Number(t.slice(0, 2)); return `${h % 12 || 12}:${t.slice(3)} ${h < 12 ? 'a. m.' : 'p. m.'}`; };
+const options = (selected) => TIMES.map((t) => `<option value="${t}"${t === selected ? ' selected' : ''}>${label(t)}</option>`).join('');
+
+$('backLink').addEventListener('click', (e) => {
+  if (history.length > 1 && document.referrer.startsWith(window.location.origin)) { e.preventDefault(); history.back(); }
+});
+
+function render() {
+  const w = prefs.water;
+  $('waterOn').checked = w.on;
+  $('waterEvery').value = String(w.every_h);
+  $('waterFrom').innerHTML = options(w.from);
+  $('waterTo').innerHTML = options(w.to);
+  $('waterExtra').style.display = w.on ? 'flex' : 'none';
+  $('waterHint').textContent = `Cada ${w.every_h} ${w.every_h === 1 ? 'hora' : 'horas'} · ${label(w.from)} – ${label(w.to)}`;
+  $('mealRows').innerHTML = MEALS.map(([k, ico, name]) => `
+    <div class="rm-row">
+      <span class="rm-ico">${ico}</span>
+      <div class="rm-text"><b>${name}</b><span><select class="time-pick" data-meal-time="${k}" aria-label="Hora del ${name.toLowerCase()}">${options(prefs.meals[k].time)}</select></span></div>
+      <label class="switch"><input type="checkbox" data-meal="${k}" ${prefs.meals[k].on ? 'checked' : ''} aria-label="Avisar ${name.toLowerCase()}"><i></i></label>
+    </div>`).join('');
+  $('weeklyOn').checked = prefs.weekly.on;
+  $('weeklyTime').innerHTML = options(prefs.weekly.time);
+  $('weeklyExtra').style.display = prefs.weekly.on ? 'flex' : 'none';
+  $('weeklyHint').textContent = `Domingos · ${label(prefs.weekly.time)}`;
+  $('mealRows').querySelectorAll('[data-meal]').forEach((el) => el.addEventListener('change', () => { prefs.meals[el.dataset.meal].on = el.checked; changed(el.checked); }));
+  $('mealRows').querySelectorAll('[data-meal-time]').forEach((el) => el.addEventListener('change', () => { prefs.meals[el.dataset.mealTime].time = el.value; changed(false); }));
+}
+
+function renderDevice(state) {
+  const box = $('deviceCard');
+  const installed = window.cadenceInstall && window.cadenceInstall.isInstalled();
+  let html;
+  if (!supported) {
+    html = `<div class="rm-device warn">🔔 <span><b>Este navegador no recibe avisos.</b> ${/iphone|ipad/i.test(navigator.userAgent) && !installed
+      ? 'En iPhone primero instala cadence: toca Compartir y «Añadir a pantalla de inicio»; luego ábrela desde su ícono y vuelve aquí.'
+      : 'Prueba con Chrome o instala cadence en tu teléfono.'}</span></div>`;
+  } else if (state === 'denied') {
+    html = '<div class="rm-device warn">🚫 <span><b>Los avisos están bloqueados.</b> Actívalos para cadence en los ajustes del navegador o del teléfono y vuelve aquí.</span></div>';
+  } else if (devices > 0 && state === 'granted') {
+    html = '<div class="rm-device ok">✅ <span><b>Avisos activados en este dispositivo.</b> <button class="link-btn" id="testPush">Enviar un aviso de prueba</button></span></div>';
+  } else {
+    html = '<div class="rm-device">🔔 <span>Activa un recordatorio y te pediremos permiso para enviarte avisos en este dispositivo.</span></div>';
+  }
+  box.innerHTML = html;
+  const test = $('testPush');
+  if (test) test.addEventListener('click', async () => {
+    test.disabled = true;
+    try { await apiPost('api/push/test', {}); showToast('Aviso enviado: míralo en tu dispositivo', 'ok'); }
+    catch (err) { showToast(err.message || 'No se pudo enviar'); }
+    test.disabled = false;
+  });
+}
+
+function urlBase64ToUint8Array(base64) {
+  const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+  const raw = atob((base64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+// Permission + subscription for THIS device. Must run from a tap (iOS/Chrome require a gesture).
+async function enablePush() {
+  if (!supported) return false;
+  let permission = Notification.permission;
+  if (permission === 'default') permission = await Notification.requestPermission();
+  if (permission !== 'granted') { renderDevice(permission); return false; }
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    const { public_key } = await apiGet('api/push/key');
+    sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(public_key) });
+  }
+  const json = sub.toJSON();
+  const saved = await apiPost('api/push/subscribe', { endpoint: json.endpoint, keys: json.keys });
+  devices = saved.devices;
+  renderDevice('granted');
+  return true;
+}
+
+let saveTimer = null;
+async function changed(turnedOn) {
+  try {
+    if (turnedOn) {
+      const ok = await enablePush();
+      if (!ok) { await load(); return; } // refused: show the toggles as they really are
+    }
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      try { const saved = await apiPut('api/reminders', prefs); prefs = saved.prefs; render(); showToast('Guardado', 'ok'); }
+      catch (err) { showToast(err.message || 'No se pudo guardar'); }
+    }, 250);
+  } catch (err) {
+    showToast(err.message || 'No se pudieron activar los avisos');
+    await load();
+  }
+}
+
+$('waterOn').addEventListener('change', () => { prefs.water.on = $('waterOn').checked; render(); changed($('waterOn').checked); });
+$('waterEvery').addEventListener('change', () => { prefs.water.every_h = Number($('waterEvery').value); changed(false); });
+$('waterFrom').addEventListener('change', () => { prefs.water.from = $('waterFrom').value; changed(false); });
+$('waterTo').addEventListener('change', () => { prefs.water.to = $('waterTo').value; changed(false); });
+$('weeklyOn').addEventListener('change', () => { prefs.weekly.on = $('weeklyOn').checked; render(); changed($('weeklyOn').checked); });
+$('weeklyTime').addEventListener('change', () => { prefs.weekly.time = $('weeklyTime').value; changed(false); });
+
+async function load() {
+  const data = await apiGet('api/reminders');
+  prefs = data.prefs;
+  devices = data.devices;
+  render();
+  renderDevice(supported ? Notification.permission : 'unsupported');
+}
+
+(async function init() {
+  try { await ensureSession(); } catch { return; }
+  try { await load(); } catch (err) { showToast(err.message || 'No se pudo cargar'); }
+})();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

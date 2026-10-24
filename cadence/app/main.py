@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import accounts, auth, nutrition, store
+from . import accounts, auth, nutrition, reminders, store
 from .config import settings
 from .diagnostics import run_diagnostics
 from .progress import achievements as build_achievements, day_totals, streak_runs
@@ -66,6 +66,12 @@ from .wger_client import WgerClient, WgerError
 logger = logging.getLogger("cadence")
 app = FastAPI(title="cadence", version="0.1.0")
 app.include_router(accounts.router)
+app.include_router(reminders.router)
+
+
+@app.on_event("startup")
+def _start_reminder_scheduler():
+    reminders.start_scheduler()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 _vision_client: GeminiVisionClient | None = None
@@ -296,6 +302,16 @@ def profile_page():
 @app.get("/progress.html")
 def progress_page():
     return FileResponse("static/progress.html")
+
+
+@app.get("/reminders.html")
+def reminders_page():
+    return FileResponse("static/reminders.html")
+
+
+@app.get("/voice.html")
+def voice_page():
+    return FileResponse("static/voice.html")
 
 
 @app.get("/history.html")
@@ -628,6 +644,49 @@ def history(before: str | None = None, days: int = 14, user: store.User = Depend
         wger.close()
 
 
+def match_components(wger: WgerClient, user: store.User, detected: list) -> list[ComponentMatch]:
+    """For each food the model named: wger candidates (plus the person's own foods), best first."""
+    components = []
+    for component in detected:
+        # Search/rank with the English generic name (wger's DB language);
+        # detected_name stays the Spanish label the user sees.
+        term = component.search_name or component.name
+        raw_matches = candidate_pool(wger, term, user)
+        # The catalog may name the food differently ("chicken soup" vs "chicken noodle soup"):
+        # search the model's alternative names (and, if still thin, the Spanish one) too.
+        seen_ids = {m["id"] for m in raw_matches}
+        for extra in [*component.search_alternatives[:3], component.name]:
+            if extra.lower() == term.lower():
+                continue
+            try:
+                more = candidate_pool(wger, extra, user)
+            except Exception:  # noqa: BLE001 - alternatives are a bonus
+                continue
+            raw_matches += [m for m in more if m["id"] not in seen_ids]
+            seen_ids.update(m["id"] for m in more)
+        candidates = rank_candidates(term, raw_matches, settings.match_candidate_count,
+                                    alt=[component.name, *component.search_alternatives])
+        if candidates and candidates[0].energy_kcal_100g is None:
+            # Older wger versions don't send nutrition values with the search
+            # hit; fetch the top pick only (others load on demand through
+            # GET /api/ingredient/{id}) to keep this endpoint's latency bounded.
+            try:
+                top = wger.get_ingredient(candidates[0].id)
+                candidates[0].energy_kcal_100g = float(top.get("energy", 0) or 0)
+            except Exception:
+                pass
+        components.append(
+            ComponentMatch(
+                detected_name=component.name,
+                confidence=component.confidence,
+                estimated_grams=component.estimated_grams,
+                box=component.box,
+                candidates=candidates,
+            )
+        )
+    return components
+
+
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze(image: UploadFile, user: store.User = Depends(current_user)):
     if not user.is_admin and not store.bump_usage(user.id, local_now().date().isoformat(), settings.analyze_daily_limit):
@@ -643,48 +702,35 @@ async def analyze(image: UploadFile, user: store.User = Depends(current_user)):
 
     wger = get_wger_client()
     try:
-        components = []
-        for component in detected:
-            # Search/rank with the English generic name (wger's DB language);
-            # detected_name stays the Spanish label the user sees.
-            term = component.search_name or component.name
-            raw_matches = candidate_pool(wger, term, user)
-            # The catalog may name the food differently ("chicken soup" vs "chicken noodle soup"):
-            # search the model's alternative names (and, if still thin, the Spanish one) too.
-            seen_ids = {m["id"] for m in raw_matches}
-            for extra in [*component.search_alternatives[:3], component.name]:
-                if extra.lower() == term.lower():
-                    continue
-                try:
-                    more = candidate_pool(wger, extra, user)
-                except Exception:  # noqa: BLE001 - alternatives are a bonus
-                    continue
-                raw_matches += [m for m in more if m["id"] not in seen_ids]
-                seen_ids.update(m["id"] for m in more)
-            candidates = rank_candidates(term, raw_matches, settings.match_candidate_count,
-                                        alt=[component.name, *component.search_alternatives])
-            if candidates and candidates[0].energy_kcal_100g is None:
-                # Older wger versions don't send nutrition values with the search
-                # hit; fetch the top pick only (others load on demand through
-                # GET /api/ingredient/{id}) to keep this endpoint's latency bounded.
-                try:
-                    top = wger.get_ingredient(candidates[0].id)
-                    candidates[0].energy_kcal_100g = float(top.get("energy", 0) or 0)
-                except Exception:
-                    pass
-            components.append(
-                ComponentMatch(
-                    detected_name=component.name,
-                    confidence=component.confidence,
-                    estimated_grams=component.estimated_grams,
-                    box=component.box,
-                    candidates=candidates,
-                )
-            )
+        components = match_components(wger, user, detected)
     finally:
         wger.close()
 
     return AnalyzeResponse(components=components)
+
+
+_AUDIO_TYPES = {"audio/wav", "audio/x-wav", "audio/wave", "audio/mpeg", "audio/mp3", "audio/mp4", "audio/aac", "audio/ogg", "audio/webm", "audio/flac"}
+
+
+@app.post("/api/voice", response_model=AnalyzeResponse)
+async def voice(audio: UploadFile, user: store.User = Depends(current_user)):
+    """"Registra 200 gramos de pollo a la plancha": the audio is turned into the same list a photo gives."""
+    if not user.is_admin and not store.bump_usage(user.id, local_now().date().isoformat(), settings.analyze_daily_limit):
+        raise HTTPException(429, f"Llegaste al límite de {settings.analyze_daily_limit} análisis por día. Mañana puedes seguir; mientras tanto, busca el alimento a mano.")
+    data = await audio.read()
+    if not data:
+        raise HTTPException(400, "Audio vacío")
+    if len(data) > 4_000_000:
+        raise HTTPException(413, "El audio es demasiado largo: di solo lo que vas a registrar (máx. 60 segundos)")
+    mime = (audio.content_type or "audio/wav").split(";")[0].lower()
+    detected = get_vision_client().identify_from_audio(data, mime if mime in _AUDIO_TYPES else "audio/wav")
+    if not detected:
+        raise HTTPException(422, "No identifiqué ningún alimento en lo que dijiste")
+    wger = get_wger_client()
+    try:
+        return AnalyzeResponse(components=match_components(wger, user, detected))
+    finally:
+        wger.close()
 
 
 @app.get("/api/ingredient/{ingredient_id}", response_model=IngredientDetail)

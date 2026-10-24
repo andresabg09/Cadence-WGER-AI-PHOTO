@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>cadence · Registro por voz</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="static/css/pulse.css">
+<style>
+  .voice-card { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 30px 20px 26px; text-align: center; }
+  .mic-wrap { position: relative; width: 168px; height: 168px; display: flex; align-items: center; justify-content: center; }
+  .mic-wrap::before, .mic-wrap::after { content: ''; position: absolute; border-radius: 50%; border: 1px solid rgba(124,92,255,0.45); inset: 0; opacity: .5; pointer-events: none; }
+  .mic-wrap::after { inset: 16px; border-color: rgba(45,212,255,0.5); }
+  .listening .mic-wrap::before { animation: ring 1.6s ease-out infinite; }
+  .listening .mic-wrap::after { animation: ring 1.6s ease-out .5s infinite; }
+  @keyframes ring { from { transform: scale(.78); opacity: .9; } to { transform: scale(1.14); opacity: 0; } }
+  .mic-btn { position: relative; z-index: 1; width: 94px; height: 94px; border-radius: 50%; border: none; cursor: pointer; background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 40px -6px rgba(124,92,255,0.7); transition: transform .15s; }
+  .mic-btn:active { transform: scale(.95); }
+  .mic-btn:disabled { opacity: .55; cursor: default; }
+  .listening .mic-btn { background: linear-gradient(135deg, #FF5C9E, #FF8A5B); box-shadow: 0 0 40px -6px rgba(255,92,158,0.7); }
+  .v-state { font: 700 11px 'Space Mono', monospace; letter-spacing: .08em; color: var(--ink-soft); min-height: 14px; }
+  .v-phrase { font-size: 17px; font-weight: 600; line-height: 1.45; max-width: 330px; }
+  .v-phrase em { font-style: normal; color: var(--accent-to); }
+  .v-examples { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 380px; }
+  .v-examples div { background: var(--bg); border: 1px solid var(--card-border); border-radius: 14px; padding: 11px 14px; font-size: 12.5px; color: var(--ink-soft); text-align: left; }
+  .v-actions { display: flex; gap: 10px; width: 100%; max-width: 380px; }
+  .v-actions > * { flex: 1; min-height: 46px; }
+</style>
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body class="with-shell" data-page="escanear">
+<div class="app">
+  <div class="page-head" style="padding:22px 20px 12px;display:flex;align-items:center;gap:12px;">
+    <a href="index.html" data-leave id="backLink" aria-label="Volver" class="icon-btn" style="width:44px;height:44px;border-radius:13px;flex-shrink:0;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
+    </a>
+    <div style="flex:1;min-width:0;">
+      <h1 class="disp" style="margin:0;font-size:20px;font-weight:700;">Registro por voz</h1>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">Dilo en voz alta y confírmalo</div>
+    </div>
+  </div>
+
+  <div class="app-content" style="padding-bottom:60px;display:flex;flex-direction:column;gap:14px;max-width:560px;">
+    <div class="card voice-card" id="card">
+      <div class="mic-wrap"><button class="mic-btn" id="mic" aria-label="Empezar a hablar">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0014 0M12 18v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button></div>
+      <div class="v-state" id="state">TOCA PARA HABLAR</div>
+      <div class="v-phrase" id="phrase">Di qué comiste, por ejemplo: <em>«200 gramos de pollo a la plancha»</em></div>
+      <div class="v-actions" id="actions" style="display:none;"><button class="btn-secondary" id="cancel">Cancelar</button><button class="btn-primary" id="done">Listo, registrar</button></div>
+    </div>
+    <div class="v-examples" id="examples" style="align-self:center;">
+      <div>«Registra una taza de arroz con dos huevos revueltos»</div>
+      <div>«Me comí una manzana y un yogur natural»</div>
+      <div>«Desayuné avena con leche»</div>
+    </div>
+    <div class="form-error" id="error" role="alert"></div>
+    <a class="dashed-add" id="manual" href="search.html" data-replace style="justify-content:center;border-radius:16px;padding:14px;font-size:12.5px;font-weight:600;display:none;">🔍 Mejor buscarlo escribiendo</a>
+  </div>
+</div>
+
+<script src="static/js/api.js"></script>
+<script src="static/js/theme.js"></script>
+<script src="static/js/shell.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const MAX_SECONDS = 45;
+const appending = new URLSearchParams(location.search).get('append') === '1';
+const requestedMeal = new URLSearchParams(location.search).get('meal');
+if (requestedMeal) sessionStorage.setItem('cadence_meal', requestedMeal);
+if (requestedMeal) $('manual').href = `search.html?meal=${requestedMeal}`;
+
+let recorder = null;
+let chunks = [];
+let stream = null;
+let timer = null;
+let startedAt = 0;
+let cancelled = false;
+
+function setState(mode, text) {
+  $('card').classList.toggle('listening', mode === 'listening');
+  $('state').textContent = text;
+  $('actions').style.display = mode === 'listening' ? 'flex' : 'none';
+  $('mic').disabled = mode === 'working';
+  $('mic').setAttribute('aria-label', mode === 'listening' ? 'Terminar' : 'Empezar a hablar');
+  $('examples').style.display = mode === 'idle' ? 'flex' : 'none';
+}
+
+function showError(message) {
+  $('error').textContent = message;
+  $('error').classList.add('show');
+  $('manual').style.display = 'flex';
+}
+
+function stopTracks() { if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; }
+
+async function start() {
+  $('error').classList.remove('show');
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    showError('Este navegador no puede grabar audio. Búscalo escribiendo.');
+    return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch {
+    showError('No pude usar el micrófono. Permítelo en los ajustes del navegador o búscalo escribiendo.');
+    return;
+  }
+  cancelled = false;
+  chunks = [];
+  recorder = new MediaRecorder(stream);
+  recorder.addEventListener('dataavailable', (e) => { if (e.data && e.data.size) chunks.push(e.data); });
+  recorder.addEventListener('stop', onStopped);
+  recorder.start();
+  startedAt = Date.now();
+  setState('listening', 'ESCUCHANDO… 0:00');
+  $('phrase').innerHTML = 'Habla con naturalidad y toca <em>Listo</em> al terminar.';
+  timer = setInterval(() => {
+    const s = Math.floor((Date.now() - startedAt) / 1000);
+    $('state').textContent = `ESCUCHANDO… ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    if (s >= MAX_SECONDS) finish();
+  }, 250);
+}
+
+function finish() {
+  clearInterval(timer);
+  if (recorder && recorder.state !== 'inactive') recorder.stop();
+}
+
+function cancel() {
+  cancelled = true;
+  clearInterval(timer);
+  if (recorder && recorder.state !== 'inactive') recorder.stop();
+  stopTracks();
+  setState('idle', 'TOCA PARA HABLAR');
+  $('phrase').innerHTML = 'Di qué comiste, por ejemplo: <em>«200 gramos de pollo a la plancha»</em>';
+}
+
+// Recording formats differ per browser (webm/opus, mp4/aac): send a plain 16 kHz mono WAV that every model reads.
+async function toWav(blob) {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new Ctx();
+  const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+  ctx.close();
+  const rate = 16000;
+  const offline = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * rate)), rate);
+  const src = offline.createBufferSource();
+  src.buffer = decoded;
+  src.connect(offline.destination);
+  src.start();
+  const pcm = (await offline.startRendering()).getChannelData(0);
+  const out = new DataView(new ArrayBuffer(44 + pcm.length * 2));
+  const text = (at, s) => { for (let i = 0; i < s.length; i += 1) out.setUint8(at + i, s.charCodeAt(i)); };
+  text(0, 'RIFF'); out.setUint32(4, 36 + pcm.length * 2, true); text(8, 'WAVE'); text(12, 'fmt ');
+  out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true);
+  out.setUint32(24, rate, true); out.setUint32(28, rate * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true);
+  text(36, 'data'); out.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i += 1) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true);
+  return new Blob([out], { type: 'audio/wav' });
+}
+
+async function onStopped() {
+  stopTracks();
+  if (cancelled) return;
+  if (Date.now() - startedAt < 700 || chunks.length === 0) {
+    setState('idle', 'TOCA PARA HABLAR');
+    showError('No alcancé a escucharte. Toca el micrófono y habla un poco más.');
+    return;
+  }
+  setState('working', 'ENTENDIENDO…');
+  $('phrase').textContent = 'Identificando lo que dijiste…';
+  try {
+    const wav = await toWav(new Blob(chunks, { type: (recorder && recorder.mimeType) || 'audio/webm' }));
+    const form = new FormData();
+    form.append('audio', wav, 'voz.wav');
+    const data = await apiPost('api/voice', form, { isFormData: true });
+    // Same hand-off as a photo, just without a picture: Confirmar shows what was understood.
+    let components = [];
+    if (appending) { try { components = JSON.parse(sessionStorage.getItem('cadence_analyze_result')).components || []; } catch { components = []; } }
+    else clearScanSession();
+    data.components.forEach((c) => { c.photo = null; });
+    sessionStorage.setItem('cadence_analyze_result', JSON.stringify({ components: components.concat(data.components) }));
+    if (!appending) writePhotos([]);
+    window.location.replace('confirm.html');
+  } catch (err) {
+    setState('idle', 'TOCA PARA HABLAR');
+    $('phrase').innerHTML = 'Di qué comiste, por ejemplo: <em>«200 gramos de pollo a la plancha»</em>';
+    showError(/identifi/i.test(err.message || '') ? 'No identifiqué ningún alimento. Prueba de nuevo diciendo el alimento y la cantidad.' : (err.message || 'No se pudo procesar el audio'));
+  }
+}
+
+$('mic').addEventListener('click', () => { if (recorder && recorder.state === 'recording') finish(); else start(); });
+$('done').addEventListener('click', finish);
+$('cancel').addEventListener('click', cancel);
+window.addEventListener('pagehide', () => { cancelled = true; stopTracks(); });
+
+(async function init() {
+  try { await ensureSession(); } catch { return; }
+  setState('idle', 'TOCA PARA HABLAR');
+})();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

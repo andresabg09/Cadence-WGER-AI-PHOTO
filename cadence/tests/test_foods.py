@@ -126,3 +126,27 @@ def test_progress_and_history_read_the_persons_own_days(wger):
     assert ana.get("/api/history").json()["days"] == [] and ana.get("/api/progress").json()["streak_best"] == 0
     assert admin.delete(f"/api/weight/{noon.date().isoformat()}").status_code == 200
     assert [w["kg"] for w in admin.get("/api/weights").json()] == [82]
+
+
+class FakeEars:
+    def identify_from_audio(self, data, mime):
+        self.heard = (len(data), mime)
+        from app.schemas import DetectedComponent
+        return [DetectedComponent(name="pan de la abuela", search_name="grandma bread", estimated_grams=120, confidence=0.9)] if data != b"silence" else []
+
+
+def test_voice_turns_speech_into_the_same_candidates_a_photo_gives(wger, monkeypatch):
+    admin, ana = two_people()
+    admin.post("/api/foods", json=FOOD)
+    ears = FakeEars()
+    monkeypatch.setattr(main, "get_vision_client", lambda: ears)
+    out = admin.post("/api/voice", files={"audio": ("v.wav", b"RIFFxxxx", "audio/wav")}).json()
+    first = out["components"][0]
+    assert (first["detected_name"], first["estimated_grams"], first["box"]) == ("pan de la abuela", 120, None)
+    assert first["candidates"][0]["name"] == "Pan de la abuela" and first["candidates"][0]["id"] < 0
+    assert ears.heard == (8, "audio/wav")
+    assert ana.post("/api/voice", files={"audio": ("v.wav", b"RIFFxxxx", "audio/wav")}).json()["components"][0]["candidates"] == []  # her own foods only
+    assert admin.post("/api/voice", files={"audio": ("v.wav", b"silence", "audio/wav")}).status_code == 422
+    assert admin.post("/api/voice", files={"audio": ("v.wav", b"", "audio/wav")}).status_code == 400
+    assert admin.post("/api/voice", files={"audio": ("v.wav", b"x" * 4_100_000, "audio/wav")}).status_code == 413
+    assert new_client().post("/api/voice", files={"audio": ("v.wav", b"x", "audio/wav")}).status_code == 401

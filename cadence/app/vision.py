@@ -40,6 +40,28 @@ Responde UNICAMENTE con un JSON array, sin texto adicional, con esta forma:
 """
 
 
+_AUDIO_PROMPT = """
+Eres un asistente que anota comidas. Escucha el audio: una persona dice, en espanol,
+lo que comio o va a comer (por ejemplo "registra doscientos gramos de pollo a la plancha
+con una taza de arroz").
+
+Reglas estrictas:
+- Lista cada alimento mencionado por separado. Ignora todo lo que no sea comida.
+- NO calcules ni menciones calorias ni macros.
+- "estimated_grams": los gramos que dijo; si dijo otra medida, conviertela a gramos
+  aproximados (una taza de arroz cocido ~160, un huevo ~50, una rebanada de pan ~30,
+  un vaso de leche ~250, una cucharada ~15). Si no dijo cantidad, una porcion normal.
+- "name" va en espanol, tal como lo dijo (corto). "search_name" es el mismo alimento
+  como nombre generico corto en ingles y TAL COMO SE COME (cooked/grilled/boiled).
+  "search_alternatives": hasta 3 nombres alternativos en ingles, de mas a menos especifico.
+- "confidence": 0 a 1, que tan seguro estas de haber entendido ese alimento.
+- Si el audio no menciona ningun alimento o no se entiende, responde [].
+
+Responde UNICAMENTE con un JSON array, sin texto adicional:
+[{"name": "pollo a la plancha", "search_name": "grilled chicken breast", "search_alternatives": ["chicken breast"], "confidence": 0.9, "estimated_grams": 200}]
+"""
+
+
 class GeminiVisionClient:
     def __init__(self, api_key: str, model: str):
         self._client = genai.Client(api_key=api_key)
@@ -54,6 +76,14 @@ class GeminiVisionClient:
             ],
         )
         return _parse_components(response.text or "")
+
+
+    def identify_from_audio(self, audio_bytes: bytes, mime_type: str) -> list[DetectedComponent]:
+        response = self._client.models.generate_content(
+            model=self._model,
+            contents=[types.Part.from_bytes(data=audio_bytes, mime_type=mime_type), _AUDIO_PROMPT],
+        )
+        return _parse_components(response.text or "[]")
 
 
 def _parse_components(raw_text: str) -> list[DetectedComponent]:

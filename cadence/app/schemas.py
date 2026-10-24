@@ -235,6 +235,8 @@ class BarcodeResult(BaseModel):
     carbs: float | None = None
     fat: float | None = None
     barcode: str
+    # When nothing was found: not_listed (the databases answered: not there) | no_nutrition (listed without values, `name` is its name) | unreachable
+    reason: str | None = None
 
 
 class WorkoutIn(BaseModel):

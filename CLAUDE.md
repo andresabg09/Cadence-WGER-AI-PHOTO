@@ -325,7 +325,7 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   y los productos escaneados viven en cadence (`custom_foods`, id de ingrediente NEGATIVO) y sus
   registros en `local_entries` (id `c<n>`); `user_entries()` en main.py junta wger + locales y TODO lo
   que lee el diario (hoy, calendario, rachas, progreso, historial, recientes) pasa por ahi. Codigo de
-  barras: `GET /api/barcode/{codigo}` = alimento propio -> wger (`ingredientinfo?code=`, wger consulta
+  barras (el lector SOLO lee codigos de barras EAN/UPC/Code128, no QR; si ninguna base lo conoce, la hoja explica el motivo con `reason`: not_listed | no_nutrition | unreachable): `GET /api/barcode/{codigo}` = alimento propio -> wger (`ingredientinfo?code=`, wger consulta
   Open Food Facts por su cuenta) -> Open Food Facts directo -> hoja para crearlo; lector en
   `static/js/barcode.js` (BarcodeDetector o ZXing local en `js/vendor/`, Apache-2.0). Alimento
   personalizado: `static/js/food-sheet.js`, `POST /api/foods`. Entrenamiento: NO se usa
@@ -341,6 +341,40 @@ se publica a `master` y se valida con UNA sola revision en el servidor
 - REGLA ANTI-REPETICION: antes de empezar un bloque, comparar este listado con el codigo real
   (grep de endpoints/paginas) y trabajar SOLO lo que dice FALTA; al terminar, mover lo hecho a
   HECHO en este mismo listado y subirlo en el mismo commit.
+
+## Bloques propuestos 8-12: ideas de otra app (PLAN, NO IMPLEMENTAR hasta que Andres diga "go")
+
+Origen (25 oct 2026): Andres mando capturas de otra app de nutricion con cosas que le gustaron: puntuacion nutricional con
+premios hexagonales, niveles de proteina y fibra, agua con vasos, retos con monedas, buscador de entrenamientos y plan de
+comidas. Los disenos viven en el canvas "cadence - Diseno" (tableros "Plan 8-12 ..."); Andres los aprueba o descarta ANTES de
+tocar codigo. Reglas para todos estos bloques: las calorias y macros salen SIEMPRE de wger/alimentos propios (la IA nunca
+calcula; las puntuaciones se calculan en el servidor con formulas fijas y visibles); todo dato por persona vive en el servidor
+(nada solo en localStorage); tablas nuevas con `CREATE TABLE IF NOT EXISTS` (sin pasos manuales en el servidor); lecturas con
+`apiGetSWR`; hojas con `pushOverlay`; recompensas con `sfx.play`; cada endpoint nuevo exige `current_user` + prueba de
+aislamiento; probar con Playwright y wger simulado. Nada de candados ni "premium": todo se desbloquea. No copiar: ayuno,
+fotos de stock, tienda de monedas con dinero.
+- **Bloque 8 - Puntuacion nutricional y niveles (base de los demas).** `app/scoring.py`: puntaje 0-100 por comida y por dia
+  (Excelente/Buena/Regular/Mejorable) con formula visible ("Como se calcula"): balance de macros frente a la meta de la persona,
+  proteina de la comida frente a su parte del dia, fibra, azucar y grasa saturada, variedad y porcion. Si falta un dato (wger no
+  siempre trae fibra/azucar) NO penaliza y avisa "datos parciales". Barras "Nivel de proteina" y "Nivel de fibra" con marcador.
+  Hay que leer `fibres`, `carbohydrates_sugar`, `fat_saturated`, `sodium` de `ingredientinfo` (verificar en la instancia real) y
+  agregar fibra opcional a los alimentos propios y a los basicos preparados (archivo de la app, sin pasos en el servidor).
+  `GET /api/today` devuelve `score` por comida y del dia. Tamano M.
+- **Bloque 9 - Inicio renovado.** Tarjetas: Agua con vasos de 250 ml (meta editable por persona, `water_goal_ml`; reemplaza la
+  botella), Puntuacion del dia (anillo), "Calorias restantes / por quemar" (alterna; usa los entrenamientos), Fibra. Depende del 8. Tamano M.
+- **Bloque 10 - Premios y Retos.** Premios hexagonales calculados de los datos (los 12 logros de `progress.py` + premios por comida)
+  y guardados al desbloquearse (`awards`: persona, clave, dia). Retos diarios (4) y semanales (hasta 6) con progreso calculado
+  (90 % de la meta, registrar 2 comidas, puntuacion mayor a 70, primera comida del dia; racha de 5 dias, agua 5 dias, registrar peso,
+  3 entrenamientos), recompensa en monedas (`coin_ledger`, una vez por reto y periodo, se reclama con un toque). Pestana nueva "Retos".
+  DECISION PENDIENTE de Andres: para que sirven las monedas (recomendado: solo cosmeticos: temas, sonidos, marcos de foto; NO
+  escudos de racha, porque la racha ya no se recupera por decision suya). Los retos no pueden premiar comer de menos. Depende del 8. Tamano L.
+- **Bloque 11 - Entrenamientos con buscador.** Mas actividades (tabla MET ampliada en `nutrition.py`), lista con busqueda e
+  iconos, hoja con kcal estimadas y kcal/min (MET x peso), duraciones 15/30/60/otra, hora y nota, editar y borrar. Sigue siendo
+  estimacion y no cambia la meta. Independiente. Tamano S-M.
+- **Bloque 12 - Ideas de comidas y favoritas.** "Repetir una comida" desde tu historial (con tus propias fotos) y "Ideas para
+  completar tu dia" segun las kcal y proteina que faltan: Gemini solo propone NOMBRES de platos/ingredientes, y las calorias salen de
+  wger como en una foto (cuenta para el limite diario de IA). Sin fotos de stock (no hay licencia). Depende del 8. Tamano M.
+- Orden sugerido: 8, 9, 11, 10, 12. Cada bloque se publica completo y por separado.
 
 ## Velocidad (25 oct 2026; mantener)
 

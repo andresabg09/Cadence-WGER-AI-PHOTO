@@ -526,6 +526,10 @@ button { font-family: inherit; }
 }
 .lightbox .lb-hint { text-align: center; color: rgba(255,255,255,0.6); font-size: 11.5px; padding: 10px 0 calc(14px + env(safe-area-inset-bottom)); }
 
+.entry-sheet .sheet-notice { margin: 0 0 14px; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(255,180,84,0.4); background: rgba(255,180,84,0.1); }
+.entry-sheet .sheet-notice h3 { margin: 0 0 4px; font-size: 15px; }
+.entry-sheet .sheet-notice p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-soft); }
+
 /* ---- Calendar with streak flames ---- */
 .cal-sheet { max-width: 420px; }
 .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }

@@ -151,3 +151,15 @@ class MediaUpload(BaseModel):
     plate_id: str
     photos: list[str] = []  # data URLs of the plate photo(s)
     items: list[MediaEntry]
+
+
+class CalendarDay(BaseModel):
+    date: str
+    count: int  # diary entries that day
+    streak: int  # consecutive logged days ending on this one (1 = a new streak starts)
+
+
+class CalendarResponse(BaseModel):
+    month: str  # YYYY-MM
+    today: str
+    days: list[CalendarDay]

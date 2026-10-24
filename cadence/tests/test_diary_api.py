@@ -76,3 +76,27 @@ def test_patch_moves_meal_within_the_same_day_and_changes_amount():
         assert http.patch("/api/diary/u1", json={"amount_grams": 0}).status_code == 400
     finally:
         patcher.stop()
+
+
+def test_calendar_marks_days_and_restarts_the_streak_after_a_gap():
+    from datetime import date, datetime
+
+    class Ranged(FakeWger):
+        def get_diary_entries(self, plan, start, end):
+            return [e for e in self.entries if start <= datetime.fromisoformat(e["datetime"]) <= end]
+
+    days = ["2026-08-30", "2026-08-31", "2026-09-01", "2026-09-02",  # a run that crosses the month start
+            "2026-09-05", "2026-09-06"]                               # after a gap: starts again at 1
+    entries = [{"id": f"e{i}", "ingredient": 5, "amount": 100, "datetime": f"{d}T12:00:00-05:00"} for i, d in enumerate(days)]
+    entries.append({"id": "x", "ingredient": 5, "amount": 100, "datetime": "2026-09-02T19:00:00-05:00"})  # 2 entries that day
+    http, patcher = client(Ranged(entries))
+    try:
+        data = http.get("/api/calendar", params={"month": "2026-09"}).json()
+        by_day = {d["date"]: d for d in data["days"]}
+        assert sorted(by_day) == ["2026-09-01", "2026-09-02", "2026-09-05", "2026-09-06"]
+        assert by_day["2026-09-01"]["streak"] == 3  # Aug 30, Aug 31 and Sep 1
+        assert by_day["2026-09-02"]["streak"] == 4 and by_day["2026-09-02"]["count"] == 2
+        assert by_day["2026-09-05"]["streak"] == 1 and by_day["2026-09-06"]["streak"] == 2
+        assert http.get("/api/calendar", params={"month": "xx"}).status_code == 400
+    finally:
+        patcher.stop()

@@ -137,18 +137,28 @@ class WgerClient:
         names against the real instance (same caveat as the rest of this
         client: implemented per the known v2 schema, not yet tested live).
         """
-        response = self._client.get(
-            "/api/v2/nutritiondiary/",
-            params={
-                "plan": plan_id,
-                "datetime__gte": start.isoformat(),
-                "datetime__lte": end.isoformat(),
-                "format": "json",
-                "limit": 500,
-            },
-        )
-        response.raise_for_status()
-        return response.json().get("results", [])
+        results: list[dict] = []
+        offset = 0
+        for _ in range(20):  # 20 pages of 500 is far beyond a personal diary
+            response = self._client.get(
+                "/api/v2/nutritiondiary/",
+                params={
+                    "plan": plan_id,
+                    "datetime__gte": start.isoformat(),
+                    "datetime__lte": end.isoformat(),
+                    "format": "json",
+                    "limit": 500,
+                    "offset": offset,
+                },
+            )
+            response.raise_for_status()
+            body = response.json()
+            page = body.get("results", [])
+            results.extend(page)
+            if not body.get("next") or not page:
+                break
+            offset += len(page)
+        return results
 
     def get_ingredient(self, ingredient_id: int) -> dict:
         response = self._client.get(f"/api/v2/ingredient/{ingredient_id}/", params={"format": "json"})

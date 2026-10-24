@@ -16,6 +16,7 @@ from .meals import (
     MEAL_LABELS,
     MEAL_ORDER,
     compute_streak,
+    streak_by_day,
     datetime_for_meal,
     entry_date,
     entry_datetime,
@@ -27,6 +28,8 @@ from .meals import (
 from .schemas import (
     AnalyzeResponse,
     ComponentMatch,
+    CalendarDay,
+    CalendarResponse,
     ConfirmedEntry,
     ConfirmRequest,
     ConfirmResponse,
@@ -332,6 +335,61 @@ def today(date: str | None = None):
             meals=meals,
             streak_days=streak_days,
             user_name=settings.user_name,
+        )
+    finally:
+        wger.close()
+
+
+@app.get("/api/calendar", response_model=CalendarResponse)
+def calendar(month: str | None = None):
+    """Days with something logged in a month, each with the streak it belongs to."""
+    now = local_now()
+    real_today = now.date()
+    try:
+        first = date_type.fromisoformat(f"{month}-01") if month else real_today.replace(day=1)
+    except ValueError:
+        raise HTTPException(400, "Mes invalido (usa AAAA-MM)") from None
+    last = (first.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+
+    wger = get_wger_client()
+    try:
+        plan_id = settings.default_nutrition_plan_id or wger.find_default_nutrition_plan_id()
+        if plan_id is None:
+            return CalendarResponse(month=first.strftime("%Y-%m"), today=real_today.isoformat(), days=[])
+
+        def logged_days(start: date_type, end: date_type) -> tuple[set[date_type], dict[date_type, int]]:
+            entries = wger.get_diary_entries(
+                plan_id,
+                datetime.combine(start, time.min, tzinfo=now.tzinfo),
+                datetime.combine(end, time.max, tzinfo=now.tzinfo),
+            )
+            counts: dict[date_type, int] = {}
+            for entry in entries:
+                day = entry_date(entry)
+                if day is not None:
+                    counts[day] = counts.get(day, 0) + 1
+            return set(counts), counts
+
+        window_start = first - timedelta(days=62)
+        days, counts = logged_days(window_start, last)
+        # A streak running into the month can be older than the window: read further back until it breaks.
+        for _ in range(6):
+            if window_start not in days:
+                break
+            older_end = window_start - timedelta(days=1)
+            older_start = older_end - timedelta(days=62)
+            older_days, older_counts = logged_days(older_start, older_end)
+            days |= older_days
+            counts.update(older_counts)
+            window_start = older_start
+        streaks = streak_by_day(days)
+        return CalendarResponse(
+            month=first.strftime("%Y-%m"),
+            today=real_today.isoformat(),
+            days=[
+                CalendarDay(date=d.isoformat(), count=counts[d], streak=streaks[d])
+                for d in sorted(days) if first <= d <= last
+            ],
         )
     finally:
         wger.close()

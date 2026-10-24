@@ -43,8 +43,9 @@
       ${isIos() && !deferredPrompt ? '<div style="margin-top:12px;background:rgba(127,127,140,0.08);border:1px solid var(--card-border);border-radius:14px;padding:11px 13px;font-size:11.5px;color:var(--ink-soft);line-height:1.45;"><strong style="color:var(--ink);">¿En iPhone?</strong> Toca Compartir y luego "Añadir a pantalla de inicio".</div>' : ''}
     `;
     document.body.append(scrim, sheet);
+    pushOverlay(close);
 
-    const later = () => { set(DISMISSED_KEY, String(Date.now())); close(); };
+    const later = () => { set(DISMISSED_KEY, String(Date.now())); dismissOverlay(); };
     scrim.addEventListener('click', later);
     sheet.querySelector('#installLater').addEventListener('click', later);
     const now = sheet.querySelector('#installNow');
@@ -53,7 +54,7 @@
         deferredPrompt.prompt();
         await deferredPrompt.userChoice.catch(() => {});
         deferredPrompt = null;
-        close();
+        dismissOverlay();
       });
     }
   }
@@ -63,7 +64,7 @@
     deferredPrompt = e;
     show();
   });
-  window.addEventListener('appinstalled', () => { deferredPrompt = null; close(); });
+  window.addEventListener('appinstalled', () => { deferredPrompt = null; dismissOverlay(); });
 
   document.addEventListener('DOMContentLoaded', () => {
     set(VISITS_KEY, String(Number(get(VISITS_KEY) || 0) + 1));

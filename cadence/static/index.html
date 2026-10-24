@@ -384,7 +384,8 @@ async function openCalendar(selected, today) {
   sheet.setAttribute('aria-label', 'Calendario');
   document.body.appendChild(scrim);
   document.body.appendChild(sheet);
-  scrim.addEventListener('click', closeCalendar);
+  pushOverlay(closeCalendar);
+  scrim.addEventListener('click', () => dismissOverlay());
 
   const render = (days, loading) => {
     const [year, mon] = month.split('-').map(Number);
@@ -423,10 +424,9 @@ async function openCalendar(selected, today) {
       <div class="sheet-actions"><button type="button" class="btn-primary" id="calToday">Ir a hoy</button></div>`;
     sheet.querySelector('#calPrev').addEventListener('click', () => shiftMonth(-1));
     sheet.querySelector('#calNext').addEventListener('click', () => shiftMonth(1));
-    sheet.querySelector('#calToday').addEventListener('click', () => { closeCalendar(); goToDate(today); });
+    sheet.querySelector('#calToday').addEventListener('click', () => dismissOverlay(() => goToDate(today)));
     sheet.querySelectorAll('.cal-cell[data-date]').forEach((cell) => cell.addEventListener('click', () => {
-      closeCalendar();
-      goToDate(cell.dataset.date);
+      dismissOverlay(() => goToDate(cell.dataset.date));
     }));
   };
 
@@ -448,7 +448,6 @@ async function openCalendar(selected, today) {
   };
   show();
 }
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCalendar(); });
 
 
 // ---- Streak panel: the run in progress, its days, and the ones before ----
@@ -473,7 +472,8 @@ async function openStreaks() {
   sheet.innerHTML = '<div class="cal-loading" style="text-align:center;padding:30px 0;">Cargando tu racha…</div>';
   document.body.appendChild(scrim);
   document.body.appendChild(sheet);
-  scrim.addEventListener('click', closeStreaks);
+  pushOverlay(closeStreaks);
+  scrim.addEventListener('click', () => dismissOverlay());
 
   let data;
   try {
@@ -512,14 +512,12 @@ async function openStreaks() {
     ${previous ? `<label class="field">RACHAS ANTERIORES</label><div class="runs">${previous}</div>` : ''}
     <p class="cal-note">Solo cuenta registrar el mismo día: subir una foto vieja llena ese día pero no recupera la racha.</p>
     <div class="sheet-actions"><button type="button" class="btn-primary" id="streakCal">Ver calendario</button></div>`;
-  sheet.querySelectorAll('[data-date]').forEach((el) => el.addEventListener('click', () => { closeStreaks(); goToDate(el.dataset.date); }));
+  sheet.querySelectorAll('[data-date]').forEach((el) => el.addEventListener('click', () => dismissOverlay(() => goToDate(el.dataset.date))));
   sheet.querySelector('#streakCal').addEventListener('click', () => {
-    closeStreaks();
-    openCalendar(latestToday ? latestToday.date : data.today, data.today);
+    dismissOverlay(() => openCalendar(latestToday ? latestToday.date : data.today, data.today));
   });
 }
 document.getElementById('streakBtn').addEventListener('click', openStreaks);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeStreaks(); });
 
 // ---- Entry detail: photo, numbers, portion, meal and a note ----
 const MEAL_CHOICES = [['desayuno', 'Desayuno'], ['almuerzo', 'Almuerzo'], ['merienda', 'Merienda'], ['cena', 'Cena']];
@@ -544,6 +542,7 @@ function openLightbox(src, box) {
   box_.innerHTML = `<button class="lb-close" aria-label="Cerrar">✕</button><div class="lb-scroll"><img alt="" src="${src}"></div>
     <div class="lb-hint">Toca la foto para acercar · pellizca para más zoom</div>`;
   document.body.appendChild(box_);
+  pushOverlay(() => box_.remove());
   const scroller = box_.querySelector('.lb-scroll');
   const img = box_.querySelector('img');
   const centerOnZone = () => {
@@ -552,9 +551,7 @@ function openLightbox(src, box) {
     scroller.scrollTop = c[1] * img.clientHeight - scroller.clientHeight / 2;
   };
   img.addEventListener('click', () => { box_.classList.toggle('zoomed'); if (box_.classList.contains('zoomed')) centerOnZone(); });
-  box_.querySelector('.lb-close').addEventListener('click', () => box_.remove());
-  const onKey = (e) => { if (e.key === 'Escape') { box_.remove(); document.removeEventListener('keydown', onKey, true); e.stopPropagation(); } };
-  document.addEventListener('keydown', onKey, true);
+  box_.querySelector('.lb-close').addEventListener('click', () => dismissOverlay());
 }
 
 function closeEntryDetail() {
@@ -628,6 +625,7 @@ function openEntryDetail(entryId) {
   `;
   document.body.appendChild(scrim);
   document.body.appendChild(sheet);
+  pushOverlay(closeEntryDetail);
   const $ = (id) => sheet.querySelector(`#${id}`);
 
   $('sNote').value = item.note || readNotes()[entryId] || '';
@@ -651,13 +649,12 @@ function openEntryDetail(entryId) {
 
   $('sMinus').addEventListener('click', () => { grams = Math.max(5, grams - portionStep(grams, -1)); renderNumbers(); });
   $('sPlus').addEventListener('click', () => { grams = Math.min(2000, grams + portionStep(grams, 1)); renderNumbers(); });
-  scrim.addEventListener('click', closeEntryDetail);
+  scrim.addEventListener('click', () => dismissOverlay());
 
   $('sDelete').addEventListener('click', async () => {
     try {
       await apiDelete(`api/diary/${entryId}`);
-      closeEntryDetail();
-      loadToday();
+      dismissOverlay(loadToday);
     } catch (err) {
       $('sError').textContent = `No se pudo borrar: ${err.message}`;
       $('sError').classList.add('show');
@@ -675,8 +672,7 @@ function openEntryDetail(entryId) {
       const note = $('sNote').value;
       if (note.trim() !== (item.note || '')) await apiPut(`api/diary/${entryId}/note`, { note });
       if (Object.keys(changes).length) await apiPatch(`api/diary/${entryId}`, changes);
-      closeEntryDetail();
-      loadToday();
+      dismissOverlay(loadToday);
     } catch (err) {
       btn.disabled = false;
       $('sError').textContent = `No se pudo guardar: ${err.message}`;
@@ -684,7 +680,14 @@ function openEntryDetail(entryId) {
     }
   });
 }
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeEntryDetail(); });
+
+// Leaving to scan/search starts a flow that steps back to this entry when it ends (see api.js).
+document.addEventListener('click', (e) => {
+  const link = e.target.closest && e.target.closest('a[href]');
+  if (link && /^(scan|search)\.html/.test(link.getAttribute('href'))) {
+    try { sessionStorage.setItem(FROM_INDEX_KEY, '1'); } catch { /* no storage */ }
+  }
+});
 
 let latestToday = null;
 const syncedDays = new Set();
@@ -698,6 +701,27 @@ function syncExtrasOnce(data) {
   syncLocalExtras(items).then((moved) => { if (moved) loadToday(); });
 }
 let viewDate = new URLSearchParams(window.location.search).get('date'); // null = today
+
+// Coming back from a finished flow: open the day the plate was filed under and say where it went.
+function applyReturnHints() {
+  try {
+    const day = sessionStorage.getItem('cadence_open_date');
+    if (day) {
+      sessionStorage.removeItem('cadence_open_date');
+      viewDate = day;
+      const url = new URL(window.location.href);
+      url.searchParams.set('date', day);
+      history.replaceState(history.state, '', url);
+    }
+    const flash = sessionStorage.getItem('cadence_flash');
+    if (flash) {
+      const kind = sessionStorage.getItem('cadence_flash_kind') || 'ok';
+      sessionStorage.removeItem('cadence_flash');
+      sessionStorage.removeItem('cadence_flash_kind');
+      showToast(flash, kind);
+    }
+  } catch { /* no storage */ }
+}
 
 function isViewingToday() {
   return !latestToday || !latestToday.today || latestToday.date === latestToday.today;
@@ -764,18 +788,10 @@ async function loadToday() {
   }
 }
 
+applyReturnHints();
 loadToday();
-
-// "Guardado en 10 de octubre": said once, right after saving a plate.
-try {
-  const flash = sessionStorage.getItem('cadence_flash');
-  if (flash) {
-    const kind = sessionStorage.getItem('cadence_flash_kind') || 'ok';
-    sessionStorage.removeItem('cadence_flash');
-    sessionStorage.removeItem('cadence_flash_kind');
-    showToast(flash, kind);
-  }
-} catch { /* no flash */ }
+// Back from a flow can restore this page from the browser's memory: refresh what it shows.
+window.addEventListener('pageshow', (e) => { if (e.persisted) { applyReturnHints(); loadToday(); } });
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});

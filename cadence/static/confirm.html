@@ -47,7 +47,7 @@
 <body class="with-shell" data-page="escanear">
 <div class="app">
   <div class="page-head" style="padding:22px 20px 12px;display:flex;align-items:center;gap:12px;">
-    <a href="scan.html" aria-label="Volver" class="icon-btn" style="width:44px;height:44px;border-radius:13px;">
+    <a href="scan.html" data-replace aria-label="Volver" class="icon-btn" style="width:44px;height:44px;border-radius:13px;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
     </a>
     <div style="flex:1;">
@@ -96,7 +96,7 @@ const zoneColor = (idx) => ZONE_COLORS[idx % ZONE_COLORS.length];
 
 const raw = sessionStorage.getItem('cadence_analyze_result');
 if (!raw) {
-  window.location.href = 'scan.html';
+  window.location.replace('scan.html');
 }
 const analyzeResult = JSON.parse(raw || '{"components":[]}');
 const photos = readPhotos();
@@ -306,8 +306,8 @@ function emptyState() {
       <h3 class="disp" style="margin:14px 0 6px;font-size:15.5px;font-weight:700;">No logramos identificar el plato</h3>
       <p style="margin:0 0 18px;font-size:12px;color:var(--ink-soft);line-height:1.5;">Puede ser el ángulo, la luz, o un alimento poco común. Prueba de nuevo o regístralo a mano — toma 10 segundos.</p>
       <div style="display:flex;flex-direction:column;gap:10px;max-width:320px;margin:0 auto;">
-        <a href="scan.html${meal ? `?meal=${meal}` : ''}" class="btn-primary">📸 Tomar otra foto</a>
-        <a href="search.html?from=confirm${mealQuery}" class="btn-secondary" style="display:flex;align-items:center;justify-content:center;min-height:44px;">🔍 Buscar manualmente</a>
+        <a href="scan.html${meal ? `?meal=${meal}` : ''}" data-replace class="btn-primary">📸 Tomar otra foto</a>
+        <a href="search.html?from=confirm${mealQuery}" data-replace class="btn-secondary" style="display:flex;align-items:center;justify-content:center;min-height:44px;">🔍 Buscar manualmente</a>
         <button type="button" class="btn-secondary" id="barcodeBtn" style="min-height:44px;">▦ Escanear código de barras</button>
       </div>
     </div>`;
@@ -365,6 +365,7 @@ function renderItems() {
 
   const addMore = document.createElement('a');
   addMore.href = `search.html?from=confirm${meal ? `&meal=${meal}` : ''}`;
+  addMore.setAttribute('data-replace', '');
   addMore.className = 'dashed-add span-all';
   addMore.style.cssText = 'border-radius:18px;padding:13px;justify-content:center;gap:8px;font-size:12.5px;font-weight:600;min-height:44px;';
   addMore.innerHTML = '<span style="font-weight:800;color:var(--accent-to);">+</span> Agregar componente que falte';
@@ -373,6 +374,7 @@ function renderItems() {
 
   const morePhoto = document.createElement('a');
   morePhoto.href = `scan.html?append=1${meal ? `&meal=${meal}` : ''}`;
+  morePhoto.setAttribute('data-replace', '');
   morePhoto.className = 'add-photo span-all';
   morePhoto.innerHTML = '📷 Agregar otra foto a este registro';
   morePhoto.addEventListener('click', persistState);
@@ -467,14 +469,15 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
       sessionStorage.setItem('cadence_flash', flash);
       sessionStorage.setItem('cadence_flash_kind', saved.counts_for_streak === false ? 'warn' : 'ok');
     } catch { /* no flash */ }
-    window.location.href = saved.date ? `index.html?date=${saved.date}` : 'index.html';
+    try { if (saved.date) sessionStorage.setItem('cadence_open_date', saved.date); } catch { /* no storage */ }
+    leaveFlow(saved.date ? `index.html?date=${saved.date}` : 'index.html');
   } catch (err) {
     if (isNetworkFailure(err)) {
       // No connection: keep the plate and let the dashboard send it when we're back.
       queuePending(payload);
       clearScanSession();
       showToast('Sin conexión: tu plato se guardó y se enviará solo al volver.', 'warn');
-      setTimeout(() => { window.location.href = 'index.html'; }, 1400);
+      setTimeout(() => leaveFlow('index.html'), 1400);
       return;
     }
     // Shown twice on purpose: the toast disappears, the box stays until the next try.

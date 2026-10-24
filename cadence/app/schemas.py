@@ -167,3 +167,18 @@ class CalendarResponse(BaseModel):
     month: str  # YYYY-MM
     today: str
     days: list[CalendarDay]
+
+
+class StreakRun(BaseModel):
+    start: str
+    end: str
+    length: int
+
+
+class StreaksResponse(BaseModel):
+    today: str
+    current: StreakRun | None = None  # the streak still alive (ends today or yesterday)
+    current_days: list[str] = []  # every day of it, oldest first
+    logged_today: bool = False
+    best: int = 0
+    previous: list[StreakRun] = []  # earlier streaks, newest first

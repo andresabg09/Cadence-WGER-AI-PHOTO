@@ -151,3 +151,24 @@ def test_an_old_photo_fills_its_day_but_does_not_bring_back_a_lost_streak():
         assert http.get("/api/today").json()["streak_days"] == 3
     finally:
         patcher.stop()
+
+
+def test_streaks_lists_the_current_run_and_the_previous_ones():
+    from datetime import datetime, timedelta
+
+    class Ranged(FakeWger):
+        def get_diary_entries(self, plan, start, end):
+            return [e for e in self.entries if start <= datetime.fromisoformat(e["datetime"]) <= end]
+
+    today = local_now().date()
+    offsets = [0, 1, 2, 5, 6, 7, 8, 9, 20]  # run of 3 now, a run of 5 before it, a lone day before that
+    entries = [{"id": f"e{n}", "ingredient": 5, "amount": 100,
+                "datetime": f"{(today - timedelta(days=n)).isoformat()}T12:00:00-05:00"} for n in offsets]
+    http, patcher = client(Ranged(entries))
+    try:
+        data = http.get("/api/streaks").json()
+        assert data["current"]["length"] == 3 and data["logged_today"] is True
+        assert data["current_days"] == [(today - timedelta(days=n)).isoformat() for n in (2, 1, 0)]
+        assert [r["length"] for r in data["previous"]] == [5, 1] and data["best"] == 5
+    finally:
+        patcher.stop()

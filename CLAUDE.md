@@ -267,6 +267,9 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   descarta las que se registraron despues de su fecha (las anteriores a esta regla se aceptan).
   El calendario marca esos dias con un punto gris (hay datos, sin llama) y al guardar un registro
   tardio sale el aviso "no suma a tu racha". Tambien rige la racha de la cabecera.
+  Panel de rachas (25 oct): la pastilla del fueguito de la cabecera es un boton (`openStreaks`,
+  `GET /api/streaks`): racha actual con sus dias (cada llama crece segun el dia de la racha),
+  mejor racha y rachas anteriores (ultimos 12 meses); tocar un dia/racha abre ese dia.
 - **Bloque 3 - Datos personales.** Perfil, Objetivos (Mifflin-St Jeor, guarda goal_* del
   plan), Progreso (racha, peso desde weightentry, logros), Historial.
 - **Bloque 4 - Ajustes y habitos.** Ajustes (hub), Apariencia (toggle ya hecho),

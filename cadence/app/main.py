@@ -42,6 +42,8 @@ from .schemas import (
     MediaUpload,
     NoteUpdate,
     SearchResult,
+    StreakRun,
+    StreaksResponse,
     TodayResponse,
     WgerStatus,
 )
@@ -346,6 +348,28 @@ def today(date: str | None = None):
         wger.close()
 
 
+def diary_days(wger: WgerClient, plan_id: int, now: datetime, start: date_type, end: date_type
+               ) -> tuple[dict[date_type, int], set[date_type]]:
+    """(entries per day, days that count for the streak) between two dates."""
+    entries = wger.get_diary_entries(
+        plan_id,
+        datetime.combine(start, time.min, tzinfo=now.tzinfo),
+        datetime.combine(end, time.max, tzinfo=now.tzinfo),
+    )
+    try:
+        logged_on = store.get_logged_on([str(e["id"]) for e in entries])
+    except Exception:  # noqa: BLE001
+        logger.exception("no se pudo leer el almacen local (racha)")
+        logged_on = {}
+    counts: dict[date_type, int] = {}
+    for entry in entries:
+        day = entry_date(entry)
+        if day is not None:
+            counts[day] = counts.get(day, 0) + 1
+    counting = {entry_date(e) for e in counts_for_streak(entries, logged_on)}
+    return counts, counting
+
+
 @app.get("/api/calendar", response_model=CalendarResponse)
 def calendar(month: str | None = None):
     """Days with something logged in a month, each with the streak it belongs to."""
@@ -363,35 +387,15 @@ def calendar(month: str | None = None):
         if plan_id is None:
             return CalendarResponse(month=first.strftime("%Y-%m"), today=real_today.isoformat(), days=[])
 
-        def logged_days(start: date_type, end: date_type) -> tuple[dict[date_type, int], set[date_type]]:
-            """(entries per day, days that count for the streak) between two dates."""
-            entries = wger.get_diary_entries(
-                plan_id,
-                datetime.combine(start, time.min, tzinfo=now.tzinfo),
-                datetime.combine(end, time.max, tzinfo=now.tzinfo),
-            )
-            try:
-                logged_on = store.get_logged_on([str(e["id"]) for e in entries])
-            except Exception:  # noqa: BLE001
-                logger.exception("no se pudo leer el almacen local (calendario)")
-                logged_on = {}
-            counts: dict[date_type, int] = {}
-            for entry in entries:
-                day = entry_date(entry)
-                if day is not None:
-                    counts[day] = counts.get(day, 0) + 1
-            counting = {entry_date(e) for e in counts_for_streak(entries, logged_on)}
-            return counts, counting
-
         window_start = first - timedelta(days=62)
-        counts, counting = logged_days(window_start, last)
+        counts, counting = diary_days(wger, plan_id, now, window_start, last)
         # A streak running into the month can be older than the window: read further back until it breaks.
         for _ in range(6):
             if window_start not in counting:
                 break
             older_end = window_start - timedelta(days=1)
             older_start = older_end - timedelta(days=62)
-            older_counts, older_counting = logged_days(older_start, older_end)
+            older_counts, older_counting = diary_days(wger, plan_id, now, older_start, older_end)
             counts.update(older_counts)
             counting |= older_counting
             window_start = older_start
@@ -403,6 +407,48 @@ def calendar(month: str | None = None):
                 CalendarDay(date=d.isoformat(), count=counts[d], streak=streaks.get(d, 0))
                 for d in sorted(counts) if first <= d <= last
             ],
+        )
+    finally:
+        wger.close()
+
+
+@app.get("/api/streaks", response_model=StreaksResponse)
+def streaks():
+    """The streak in progress and the ones before it (last 12 months)."""
+    now = local_now()
+    real_today = now.date()
+    wger = get_wger_client()
+    try:
+        plan_id = settings.default_nutrition_plan_id or wger.find_default_nutrition_plan_id()
+        counting: set[date_type] = set()
+        if plan_id is not None:
+            # Three reads of ~4 months keep each wger page small.
+            for chunk in range(3):
+                end = real_today - timedelta(days=122 * chunk)
+                start = end - timedelta(days=121)
+                counting |= diary_days(wger, plan_id, now, start, end)[1]
+        runs: list[StreakRun] = []
+        run_days: list[date_type] = []
+        for day in sorted(counting) + [None]:
+            if run_days and (day is None or day != run_days[-1] + timedelta(days=1)):
+                runs.append(StreakRun(start=run_days[0].isoformat(), end=run_days[-1].isoformat(), length=len(run_days)))
+                run_days = []
+            if day is not None:
+                run_days.append(day)
+        current = None
+        if runs and date_type.fromisoformat(runs[-1].end) >= real_today - timedelta(days=1):
+            current = runs.pop()  # still alive: today may simply not be logged yet
+        runs.reverse()  # newest first
+        return StreaksResponse(
+            today=real_today.isoformat(),
+            current=current,
+            current_days=(
+                [(date_type.fromisoformat(current.start) + timedelta(days=i)).isoformat() for i in range(current.length)]
+                if current else []
+            ),
+            logged_today=real_today in counting,
+            best=max([r.length for r in runs] + ([current.length] if current else []), default=0),
+            previous=runs[:12],
         )
     finally:
         wger.close()

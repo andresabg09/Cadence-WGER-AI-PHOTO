@@ -6,6 +6,7 @@
 <title>cadence — Buscar alimento</title>
 <meta name="theme-color" content="#0A0A0F">
 <link rel="manifest" href="static/manifest.json">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
 <link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="static/css/pulse.css">
@@ -23,6 +24,8 @@
   .star-btn { width: 28px; height: 28px; border: none; background: none; cursor: pointer; font-size: 15px; color: var(--ink-soft); flex-shrink: 0; }
   .star-btn.on { color: #FFC83D; }
   .empty-hint { font-size: 12px; color: var(--ink-soft); padding: 4px 2px; }
+  @media (min-width: 600px) { #searchGrid.idle { grid-template-columns: minmax(0, 1fr); max-width: 560px; } #searchGrid.idle > .col:first-child { display: none; } }
+  .page-head { box-sizing: border-box; }
 </style>
 <script>
   (function () {
@@ -31,28 +34,31 @@
   })();
 </script>
 </head>
-<body>
+<body class="with-shell" data-page="diario">
 <div class="app">
-  <div style="padding:22px 20px 14px;display:flex;align-items:center;gap:12px;">
+  <div class="page-head" style="padding:22px 20px 14px;display:flex;align-items:center;gap:12px;">
     <a id="backLink" href="index.html" aria-label="Volver" class="icon-btn" style="width:36px;height:36px;border-radius:11px;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
     </a>
     <h1 class="disp" style="margin:0;font-size:17px;font-weight:700;">Buscar alimento</h1>
   </div>
 
-  <div style="padding:0 20px 14px;">
+  <div class="page-head" style="padding:0 20px 14px;">
     <label class="search-box">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="var(--ink-soft)" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="var(--ink-soft)" stroke-width="2" stroke-linecap="round"/></svg>
       <input id="termInput" type="search" placeholder="Buscar en wger…" autocomplete="off" aria-label="Buscar alimento">
     </label>
   </div>
 
-  <div class="app-content" style="gap:20px;padding-top:4px;">
+  <div class="app-content grid-2 idle" id="searchGrid" style="padding-top:4px;">
+    <div class="col" style="gap:20px;">
     <div id="resultsBlock" style="display:none;">
       <h2 class="section-title disp">Resultados</h2>
       <div id="results" style="display:flex;flex-direction:column;gap:8px;"></div>
     </div>
+    </div>
 
+    <div class="col" style="gap:22px;">
     <div id="favBlock">
       <h2 class="section-title disp">⭐ Favoritos</h2>
       <div id="favorites" class="chiprow"></div>
@@ -66,15 +72,18 @@
     <button id="customBtn" class="dashed-add" style="justify-content:center;border-radius:16px;padding:14px;font-size:12.5px;font-weight:600;font-family:inherit;">
       <span style="font-weight:800;color:var(--accent-to);">+</span> Crear alimento personalizado (macros manuales)
     </button>
+    </div>
   </div>
 </div>
 
 <script src="static/js/api.js"></script>
 <script src="static/js/theme.js"></script>
+<script src="static/js/shell.js"></script>
 <script>
 const FAV_KEY = 'cadence_favorites';
 const params = new URLSearchParams(location.search);
 if (params.get('from') === 'confirm') document.getElementById('backLink').href = 'confirm.html';
+if (params.get('meal')) sessionStorage.setItem('cadence_meal', params.get('meal'));
 
 function loadFavorites() {
   try { return JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); } catch { return []; }
@@ -101,6 +110,9 @@ function addFood(food) {
   let result = { components: [] };
   if (params.get('from') === 'confirm') {
     try { result = JSON.parse(sessionStorage.getItem('cadence_analyze_result')) || result; } catch { /* start fresh */ }
+  } else {
+    // A manual add from the dashboard starts a new plate: drop any old photo.
+    sessionStorage.removeItem('cadence_photo');
   }
   result.components.push({
     detected_name: food.name,
@@ -197,8 +209,11 @@ document.getElementById('termInput').addEventListener('input', (e) => {
   const resultsBlock = document.getElementById('resultsBlock');
   const idle = term.length < 2;
   resultsBlock.style.display = idle ? 'none' : 'block';
-  document.getElementById('favBlock').style.display = idle ? 'block' : 'none';
-  document.getElementById('recentBlock').style.display = idle ? 'block' : 'none';
+  document.getElementById('searchGrid').classList.toggle('idle', idle);
+  // Wide layouts keep favoritos/recientes next to the results (mockup); phones swap them.
+  const sideBySide = window.matchMedia('(min-width: 600px)').matches;
+  document.getElementById('favBlock').style.display = (idle || sideBySide) ? 'block' : 'none';
+  document.getElementById('recentBlock').style.display = (idle || sideBySide) ? 'block' : 'none';
   if (idle) return;
 
   searchTimer = setTimeout(async () => {

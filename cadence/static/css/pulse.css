@@ -293,7 +293,7 @@ button { font-family: inherit; }
 
 /* ---- Confirm bar (fixed bottom) ---- */
 .confirm-bar {
-  position: fixed; left: 0; right: 0; bottom: 0; max-width: 480px; margin: 0 auto;
+  position: fixed; left: 0; right: 0; bottom: 0; max-width: 480px; margin: 0 auto; z-index: 15;
   background: var(--bar-bg); backdrop-filter: blur(16px);
   border-top: 1px solid var(--card-border);
   padding: 14px 20px calc(26px + env(safe-area-inset-bottom));
@@ -306,4 +306,155 @@ button { font-family: inherit; }
 .chip-soft.active {
   border-color: rgba(45,212,255,0.55); color: var(--accent-to);
   background: linear-gradient(135deg, rgba(124,92,255,0.16), rgba(45,212,255,0.1));
+}
+
+/* =====================================================================
+   Responsive: celular (<600) / tablet (600-1023) / escritorio (>=1024)
+   Mockup: lienzo "cadence — Diseño", filas Tablet y Escritorio.
+   ===================================================================== */
+
+/* Two-column helper: one column on phones, two from tablet up. */
+.grid-2 { display: flex; flex-direction: column; gap: 14px; }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+/* Left navigation: only exists on desktop (built by js/shell.js). */
+.side-nav { display: none; }
+.desktop-only { display: none !important; }
+
+/* ---- Banners (sin conexión / wger no responde) ---- */
+.banner {
+  position: fixed; left: 20px; right: 20px; top: 16px; max-width: 520px; margin: 0 auto; z-index: 60;
+  border-radius: 14px; padding: 11px 13px; display: flex; align-items: center; gap: 10px;
+  font-size: 12px; font-weight: 600; line-height: 1.4;
+  background: rgba(255,138,91,0.14); border: 1px solid rgba(255,138,91,0.4); color: var(--ink);
+  backdrop-filter: blur(10px);
+}
+.banner button {
+  margin-left: auto; border: 1px solid var(--card-border); background: var(--card); color: var(--ink);
+  border-radius: 10px; min-height: 36px; padding: 0 12px; font-size: 12px; font-weight: 700; cursor: pointer;
+}
+
+/* ---- Install sheet (mockup: Instalar app) ---- */
+.install-scrim { position: fixed; inset: 0; z-index: 70; background: rgba(5,5,10,0.6); backdrop-filter: blur(2px); }
+.install-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 71; max-width: 480px; margin: 0 auto;
+  background: var(--card); border: 1px solid var(--card-border); border-bottom: none; border-radius: 28px 28px 0 0;
+  padding: 10px 24px calc(30px + env(safe-area-inset-bottom)); box-shadow: 0 -20px 50px -10px rgba(0,0,0,0.5);
+  animation: sheetUp 0.45s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.install-sheet .grab { width: 36px; height: 4px; border-radius: 100px; background: rgba(127,127,140,0.35); margin: 0 auto 18px; }
+.install-sheet .app-icon { width: 68px; height: 68px; border-radius: 22px; display: block; margin: 0 auto 16px; box-shadow: 0 0 36px -4px rgba(124,92,255,0.6); }
+
+/* ---- Confirm photo + meal chips ---- */
+.photo-card {
+  display: none; position: relative; height: 300px; border-radius: 24px; overflow: hidden;
+  border: 1px solid var(--card-border); background: #0d0b12 center / cover no-repeat;
+}
+.photo-card .chips { position: absolute; left: 16px; right: 16px; bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+.photo-chip {
+  background: rgba(10,10,15,0.75); border: 1px solid rgba(255,255,255,0.14); border-radius: 100px;
+  padding: 7px 13px; display: flex; align-items: center; gap: 7px; color: #F5F5F7; font-size: 12.5px; font-weight: 700;
+}
+.photo-chip .mono { font-size: 11px; color: #2DD4FF; }
+.meal-pick { display: flex; background: rgba(127,127,140,0.1); border: 1px solid var(--card-border); border-radius: 100px; padding: 4px; gap: 2px; }
+.meal-pick button {
+  flex: 1; border: none; border-radius: 100px; min-height: 36px; padding: 0 8px; background: transparent;
+  color: var(--ink-soft); font-size: 11.5px; font-weight: 700; cursor: pointer;
+}
+.meal-pick button[aria-pressed="true"] { background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); color: #fff; }
+.total-card { display: none; }
+
+/* Confirm layout: stacked on phones, photo + 2-col items on tablet, 2 columns on desktop. */
+.confirm-grid { display: flex; flex-direction: column; gap: 14px; }
+.confirm-items { display: flex; flex-direction: column; gap: 12px; }
+
+/* Per-row delete button: desktop has no swipe gesture (mockup shows a trash icon). */
+.row-del {
+  display: none; width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; border: 1px solid transparent;
+  background: none; color: var(--ink-soft); cursor: pointer; align-items: center; justify-content: center;
+}
+.row-del:hover { color: var(--bad); border-color: var(--card-border); }
+
+/* ---- Tablet and up ---- */
+@media (min-width: 600px) {
+  .app { max-width: 820px; }
+  .app-header { padding: 32px 36px 4px; }
+  .app-header h1 { font-size: 26px; }
+  .app-content { padding: 20px 36px 140px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+  .tab-bar { max-width: 820px; padding-left: 120px; padding-right: 120px; }
+  .tab-bar button, .tab-bar a.tab { min-width: 64px; min-height: 44px; font-size: 11px; }
+  .icon-btn { width: 44px; height: 44px; }
+  .step-btn { width: 44px; height: 44px; }
+  .step-btn.remove { width: 44px; }
+  .photo-card.has-photo { display: block; }
+  .confirm-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+  .confirm-items > .span-all { grid-column: 1 / -1; }
+  .confirm-bar { max-width: 820px; display: flex; align-items: center; gap: 24px; padding-left: 36px; padding-right: 36px; }
+  .confirm-bar .total-row { flex: 1; margin: 0 !important; flex-direction: column; align-items: flex-start !important; }
+  .confirm-bar .btn-primary { width: 320px; }
+  .scan-wide { max-width: 820px; }
+}
+
+/* ---- Desktop ---- */
+@media (min-width: 1024px) {
+  :root { --sidebar-w: 260px; }
+  body.with-shell .side-nav {
+    display: flex; flex-direction: column; gap: 6px; position: fixed; left: 0; top: 0; bottom: 0;
+    width: var(--sidebar-w); box-sizing: border-box; padding: 28px 18px;
+    border-right: 1px solid var(--card-border); background: var(--bg); z-index: 20;
+  }
+  body.with-shell .app { max-width: none; margin: 0 0 0 var(--sidebar-w); }
+  body.with-shell .app-header,
+  body.with-shell .app-content,
+  body.with-shell .page-head { max-width: 1160px; margin-left: auto; margin-right: auto; width: 100%; box-sizing: border-box; }
+  body.with-shell .app-header { padding: 32px 40px 8px; }
+  body.with-shell .app-header h1 { font-size: 28px; }
+  body.with-shell .app-content { padding: 20px 40px 48px; }
+  body.with-shell .tab-bar { display: none; }
+  .desktop-only { display: flex !important; }
+  .photo-card.has-photo { height: 420px; }
+  .confirm-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+  .confirm-items { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
+  .row-del { display: flex; }
+  .confirm-bar.in-column {
+    position: static; max-width: none; margin: 0; width: auto; display: block; border: 1px solid var(--card-border);
+    border-radius: 22px; padding: 16px; background: var(--card); backdrop-filter: none;
+  }
+  .confirm-bar.in-column .total-row { flex-direction: row !important; align-items: baseline !important; margin-bottom: 12px !important; }
+  .confirm-bar.in-column .btn-primary { width: 100%; }
+}
+
+/* ---- Side navigation items ---- */
+.side-nav .brand { display: flex; align-items: center; gap: 11px; padding: 0 8px 22px; }
+.side-nav .brand img { width: 34px; height: 34px; border-radius: 11px; }
+.side-nav .brand span { font-family: 'Space Grotesk', 'Inter', sans-serif; font-size: 20px; font-weight: 700; }
+.side-nav a.item {
+  display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; border-radius: 14px;
+  font-size: 13.5px; font-weight: 700; color: var(--ink-soft); border: 1px solid transparent;
+}
+.side-nav a.item:hover { color: var(--ink); }
+.side-nav a.item[aria-current="page"] { background: var(--card); border-color: var(--card-border); color: var(--ink); }
+.side-nav a.item[aria-current="page"] svg { color: var(--accent-to); }
+.side-nav a.scan {
+  display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; margin: 8px 0; border-radius: 15px;
+  background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); color: #fff; font-size: 14px; font-weight: 700;
+  box-shadow: 0 10px 24px -10px rgba(124,92,255,0.6);
+}
+.side-nav .grow { flex: 1; min-height: 24px; }
+.side-nav .conn {
+  margin-top: 14px; display: flex; align-items: center; gap: 9px; padding: 11px 12px; border-radius: 14px;
+  background: var(--card); border: 1px solid var(--card-border); font-size: 11.5px; color: var(--ink-soft); line-height: 1.35;
+}
+.side-nav .conn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-soft); flex-shrink: 0; }
+.side-nav .conn.ok .dot { background: var(--good); }
+.side-nav .conn.bad .dot { background: var(--bad); }
+
+.btn-upload {
+  align-items: center; gap: 8px; min-height: 40px; padding: 0 16px; border-radius: 13px;
+  background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); color: #fff; font-size: 13px; font-weight: 700;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-card, .fab, .flame, .value-live, .bottle-fill, .install-sheet { animation: none; }
 }

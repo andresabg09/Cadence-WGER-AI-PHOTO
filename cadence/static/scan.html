@@ -6,11 +6,30 @@
 <title>cadence — Escanear</title>
 <meta name="theme-color" content="#05050A">
 <link rel="manifest" href="static/manifest.json">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
 <link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="static/css/pulse.css">
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
 <style>
-  body { background: #05050A; }
+  @media (max-width: 1023px) { body { background: #05050A; } }
+  .desktop-scan { display: none; }
+  @media (min-width: 1024px) {
+    body:not(.webcam-open) .scan-root { display: none; }
+    .desktop-scan { display: flex; }
+    body.webcam-open .scan-root { display: flex; position: fixed; inset: 0; max-width: none; margin: 0; z-index: 100; min-height: 100dvh; }
+    body.webcam-open .desktop-scan, body.webcam-open .side-nav { display: none; }
+    .dropzone.over { border-color: var(--accent-to); background: radial-gradient(circle at 50% 40%, rgba(45,212,255,0.16), transparent 65%); }
+  }
+  .dropzone { min-height: 400px; border: 2px dashed rgba(124,92,255,0.45); border-radius: 20px; background: radial-gradient(circle at 50% 40%, rgba(124,92,255,0.12), transparent 65%); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; }
+  .tip { display: flex; gap: 12px; }
+  .tip .k { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; color: var(--accent-to); width: 38px; flex-shrink: 0; }
+  .tip .t { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
   .scan-root { width: 100%; max-width: 480px; margin: 0 auto; min-height: 100dvh; background: #05050A; color: #fff; display: flex; flex-direction: column; position: relative; overflow: hidden; }
   video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .veil { position: absolute; inset: 0; background: radial-gradient(circle at 50% 42%, transparent 30%, rgba(5,5,10,0.55) 100%); pointer-events: none; }
@@ -23,7 +42,48 @@
   .shutter:disabled { animation: none; opacity: 0.5; }
 </style>
 </head>
-<body>
+<body class="with-shell" data-page="escanear">
+<!-- Escritorio: subir foto o webcam (sin sensor de ángulo) -->
+<div class="app desktop-scan" style="flex-direction:column;">
+  <div class="app-header">
+    <div>
+      <div class="date">FOTO O WEBCAM</div>
+      <h1 class="disp">Escanear plato</h1>
+    </div>
+  </div>
+  <div class="app-content grid-2">
+    <div class="card" style="border-radius:26px;padding:18px;display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;align-self:flex-start;background:rgba(127,127,140,0.1);border:1px solid var(--card-border);border-radius:100px;padding:4px;">
+        <button aria-current="true" style="border:none;border-radius:100px;min-height:36px;padding:0 18px;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">Foto</button>
+        <button id="deskBarcode" style="border:none;border-radius:100px;min-height:36px;padding:0 18px;background:transparent;color:var(--ink-soft);font-size:12.5px;font-weight:700;cursor:pointer;">Código de barras</button>
+      </div>
+      <div class="dropzone" id="dropzone">
+        <div style="width:68px;height:68px;border-radius:22px;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 0 36px -4px rgba(124,92,255,0.6);">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m0 0l-4 4m4-4l4 4M5 20h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h2 class="disp" id="dropTitle" style="margin:0;font-size:21px;font-weight:700;">Arrastra una foto de tu plato</h2>
+        <p id="dropHint" style="margin:0;font-size:13px;color:var(--ink-soft);line-height:1.5;max-width:340px;">o elige un archivo de tu computador. Formatos JPG o PNG.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;">
+          <label class="btn-primary" id="pickBtn" style="width:auto;min-height:46px;padding:0 22px;font-size:13.5px;">Elegir archivo<input type="file" accept="image/*" id="deskFile" style="display:none;"></label>
+          <button class="btn-secondary" id="webcamBtn" style="min-height:46px;padding:0 22px;">Usar webcam</button>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card" style="border-radius:22px;padding:18px;display:flex;flex-direction:column;gap:14px;">
+        <h2 class="disp" style="margin:0;font-size:15px;font-weight:700;">Para mejor precisión</h2>
+        <div class="tip"><span class="k">~45°</span><span class="t">Fotografía el plato en diagonal: ni desde arriba ni al ras de la mesa.</span></div>
+        <div class="tip"><span class="k">LUZ</span><span class="t">Plato completo dentro del encuadre y con buena luz.</span></div>
+        <div class="tip"><span class="k">1 : 1</span><span class="t">Un plato por foto. La IA lista cada componente por separado y tú confirmas cuál es.</span></div>
+      </div>
+      <div style="background:rgba(127,127,140,0.06);border:1px solid var(--card-border);border-radius:18px;padding:14px 16px;display:flex;gap:10px;align-items:flex-start;">
+        <span style="font-size:13px;">📱</span>
+        <span style="font-size:12px;color:var(--ink-soft);line-height:1.5;">En el computador no hay sensor de inclinación. Desde el celular, cadence te guía en vivo hasta los 45°.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="scan-root">
   <video id="video" autoplay playsinline muted></video>
   <div class="veil"></div>
@@ -76,11 +136,17 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/shell.js"></script>
 <script>
 const TARGET_MIN = 35, TARGET_MAX = 55;
 let lastAngleOk = false;
 let facingMode = 'environment';
 let stream = null;
+
+// A new scan starts a clean session; ?meal= comes from the dashboard's "Agregar almuerzo" etc.
+clearScanSession();
+const requestedMeal = new URLSearchParams(location.search).get('meal');
+if (requestedMeal) sessionStorage.setItem('cadence_meal', requestedMeal);
 
 const video = document.getElementById('video');
 const angleBadge = document.getElementById('angleBadge');
@@ -132,6 +198,14 @@ async function initOrientation() {
   window.addEventListener('deviceorientation', handleOrientation);
 }
 
+document.querySelector('a[aria-label="Cerrar"]').addEventListener('click', (e) => {
+  if (document.body.classList.contains('webcam-open')) {
+    e.preventDefault();
+    document.body.classList.remove('webcam-open');
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+  }
+});
+
 document.getElementById('flipBtn').addEventListener('click', () => {
   facingMode = facingMode === 'environment' ? 'user' : 'environment';
   initCamera();
@@ -173,10 +247,37 @@ captureBtn.addEventListener('click', () => {
   canvas.toBlob((blob) => runAnalysis(blob), 'image/jpeg', 0.92);
 });
 
-async function runAnalysis(blob) {
-  captureBtn.disabled = true;
-  caption.textContent = 'Detectando componentes del plato…';
-  document.getElementById('scanline').style.display = 'block';
+// ---- Desktop: drop zone / file picker / webcam ----
+const dropzone = document.getElementById('dropzone');
+document.getElementById('deskFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) runAnalysis(file);
+});
+['dragenter', 'dragover'].forEach((type) => dropzone.addEventListener(type, (e) => { e.preventDefault(); dropzone.classList.add('over'); }));
+['dragleave', 'drop'].forEach((type) => dropzone.addEventListener(type, (e) => { e.preventDefault(); dropzone.classList.remove('over'); }));
+dropzone.addEventListener('drop', (e) => {
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) runAnalysis(file);
+  else showToast('Suelta una imagen JPG o PNG', 'warn');
+});
+document.getElementById('webcamBtn').addEventListener('click', () => {
+  document.body.classList.add('webcam-open');
+  initCamera();
+});
+document.getElementById('deskBarcode').addEventListener('click', () => showToast('Escaneo por código de barras: próximamente', 'warn'));
+
+function setBusy(busy) {
+  captureBtn.disabled = busy;
+  document.getElementById('scanline').style.display = busy ? 'block' : 'none';
+  caption.textContent = busy ? 'Detectando componentes del plato…' : 'Encuadra tu plato a ~45°';
+  document.getElementById('dropTitle').textContent = busy ? 'Detectando componentes del plato…' : 'Arrastra una foto de tu plato';
+  document.getElementById('dropzone').style.opacity = busy ? '0.6' : '1';
+  document.getElementById('dropzone').style.pointerEvents = busy ? 'none' : 'auto';
+}
+
+async function runAnalysis(source) {
+  setBusy(true);
+  const { blob, thumb } = await prepareImage(source);
 
   const formData = new FormData();
   formData.append('image', blob, 'plate.jpg');
@@ -185,11 +286,18 @@ async function runAnalysis(blob) {
     const data = await apiPost('api/analyze', formData, { isFormData: true });
     renderLiveChips(data.components);
     sessionStorage.setItem('cadence_analyze_result', JSON.stringify(data));
+    if (thumb) sessionStorage.setItem('cadence_photo', thumb);
     setTimeout(() => { window.location.href = 'confirm.html'; }, 600);
   } catch (err) {
-    captureBtn.disabled = false;
-    document.getElementById('scanline').style.display = 'none';
-    caption.textContent = 'No reconocimos el plato — intenta de nuevo';
+    setBusy(false);
+    if (/identific/i.test(err.message || '')) {
+      // The AI saw no food: the confirm screen has the "No logramos identificar el plato" state.
+      sessionStorage.setItem('cadence_analyze_result', JSON.stringify({ components: [] }));
+      if (thumb) sessionStorage.setItem('cadence_photo', thumb);
+      window.location.href = 'confirm.html';
+      return;
+    }
+    caption.textContent = 'No pudimos analizar la foto — intenta de nuevo';
     showToast(err.message || 'No se pudo analizar la foto');
   }
 }
@@ -207,14 +315,18 @@ function renderLiveChips(components) {
   });
 }
 
-initCamera();
-// iOS 13+ only grants sensor access from a user gesture; everywhere else
-// (Android/Chrome) the listener can start right away, otherwise the badge
-// would sit on "Activa el sensor" until the first tap.
-if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-  document.body.addEventListener('click', initOrientation, { once: true });
-} else {
-  initOrientation();
+// On a desktop layout the camera only starts when the user picks "Usar webcam";
+// asking for it on load would trigger a permission prompt next to a drop zone.
+if (!window.matchMedia('(min-width: 1024px)').matches) {
+  initCamera();
+  // iOS 13+ only grants sensor access from a user gesture; everywhere else
+  // (Android/Chrome) the listener can start right away, otherwise the badge
+  // would sit on "Activa el sensor" until the first tap.
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    document.body.addEventListener('click', initOrientation, { once: true });
+  } else {
+    initOrientation();
+  }
 }
 </script>
 </body>

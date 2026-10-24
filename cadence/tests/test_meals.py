@@ -32,3 +32,19 @@ def test_streak_uses_local_days():
 
 def test_unparseable_entry_is_otro():
     assert meal_key_for_entry({"datetime": "nope"}) == "otro"
+
+
+def test_datetime_for_meal_keeps_now_inside_slot_and_moves_it_otherwise():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.meals import datetime_for_meal
+
+    tz = ZoneInfo("America/Panama")
+    noon = datetime(2026, 10, 24, 12, 30, tzinfo=tz)
+    assert datetime_for_meal("almuerzo", noon) == noon
+    assert datetime_for_meal(None, noon) == noon
+    assert datetime_for_meal("desayuno", noon).hour == 8
+    assert datetime_for_meal("cena", noon).hour == 20
+    assert datetime_for_meal("cena", noon).date() == noon.date()
+    assert meal_key_for_entry({"datetime": datetime_for_meal("merienda", noon).isoformat()}) == "merienda"

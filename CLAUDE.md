@@ -104,7 +104,7 @@ cadence/
     wger_client.py   - cliente de la API de wger (search, crear diary entry)
     matching.py      - fuzzy matching con rapidfuzz (con tests)
     schemas.py       - modelos pydantic
-  static/camera.html - captura con guia de angulo en tiempo real (ver abajo)
+  static/            - PWA: index/scan/confirm/search.html + css/pulse.css + js/{api,shell,theme,install}.js
   tests/             - tests de matching.py (pasan: `pytest cadence/tests`)
   requirements.txt, Dockerfile, .env.example
 ```
@@ -196,12 +196,17 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   `ingredientinfo`, errores legibles, `/api/diagnostics`. Pendiente de Andres: crear plan
   de nutricion en wger, `sync-ingredients-bulk` en el contenedor `web`, implementar.
   Sale cuando el diagnostico esta todo verde.
-- **Bloque 1 - Responsive tablet y escritorio.** Layout adaptable de Inicio, Escaneo,
-  Confirmar, Buscar (barra lateral en escritorio, 2-3 columnas); en escritorio el escaneo
-  es "subir foto / webcam" (sin sensor de angulo).
-- **Bloque 2 - Flujo central real.** Probar con foto real; ajustar campos de wger segun el
-  diagnostico; elegir comida al registrar (desayuno/almuerzo/cena); Estados y errores
-  (sin conexion, IA no reconocio, wger no responde, diario vacio); iconos PNG + Instalar app.
+- **Bloque 1 - Responsive tablet y escritorio (HECHO).** Breakpoints 600/1024 en
+  `static/css/pulse.css`; barra lateral en escritorio via `static/js/shell.js`
+  (`<body class="with-shell" data-page="...">`); escritorio: escaneo = subir foto/webcam
+  (sin sensor), confirmar con foto + total en la columna derecha; tablet: 2 columnas.
+- **Bloque 2 - Flujo central real (HECHO salvo la prueba con foto real).** Comida elegible
+  al registrar (`meal` -> `datetime_for_meal`), imagen reducida antes de subir, estados
+  (sin conexion con cola offline en localStorage, wger no responde con "Reintentar", diario
+  vacio, "no logramos identificar el plato"), iconos PNG + hoja "Instalar app"
+  (`static/js/install.js`), `/api/wger-status`, `/api/meal-now`, y el diagnostico profundo
+  (`/api/diagnostics?deep=1`) crea y borra un registro de prueba en wger. Pendiente: probar
+  con una foto real y ajustar campos de wger si el diagnostico lo pide.
 - **Bloque 3 - Datos personales.** Perfil, Objetivos (Mifflin-St Jeor, guarda goal_* del
   plan), Progreso (racha, peso desde weightentry, logros), Historial.
 - **Bloque 4 - Ajustes y habitos.** Ajustes (hub), Apariencia (toggle ya hecho),

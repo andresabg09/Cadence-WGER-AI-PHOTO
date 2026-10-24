@@ -7,8 +7,14 @@
 <meta name="theme-color" content="#0A0A0F">
 <link rel="manifest" href="static/manifest.json">
 <link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="static/css/pulse.css">
+<style>
+  .gram-btn { width: 36px; height: 36px; border-radius: 11px; font-size: 16px; font-weight: 700; cursor: pointer; }
+  @media (max-width: 599px) { .gram-btn { width: 32px; height: 32px; } }
+  @media (min-width: 600px) and (max-width: 1023px) { .gram-btn { width: 44px; height: 44px; } }
+</style>
 <script>
   (function () {
     var t = localStorage.getItem('cadence_theme') || 'dark';
@@ -16,40 +22,59 @@
   })();
 </script>
 </head>
-<body>
+<body class="with-shell" data-page="escanear">
 <div class="app">
-  <div style="padding:22px 20px 12px;display:flex;align-items:center;gap:12px;">
-    <a href="scan.html" aria-label="Volver" class="icon-btn" style="width:36px;height:36px;border-radius:11px;">
+  <div class="page-head" style="padding:22px 20px 12px;display:flex;align-items:center;gap:12px;">
+    <a href="scan.html" aria-label="Volver" class="icon-btn" style="width:44px;height:44px;border-radius:13px;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
     </a>
     <div style="flex:1;">
-      <h1 class="disp" style="margin:0;font-size:17px;font-weight:700;">Confirma tu plato</h1>
-      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:1px;" id="subtitle">✨ cargando…</div>
+      <h1 class="disp" style="margin:0;font-size:20px;font-weight:700;">Confirma tu plato</h1>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;" id="subtitle">cargando…</div>
     </div>
   </div>
 
-  <div class="app-content" id="itemsWrap" style="padding-bottom:140px;"></div>
+  <div class="app-content" style="padding-bottom:150px;">
+    <div class="confirm-grid">
+      <div class="col" id="photoCol">
+        <div class="photo-card" id="photoCard"><div class="chips" id="photoChips"></div></div>
+      </div>
+      <div class="col" id="itemsCol">
+        <div class="meal-pick" id="mealPick" role="group" aria-label="Comida"></div>
+        <div class="confirm-items" id="itemsWrap"></div>
+      </div>
+    </div>
+  </div>
 
-  <div class="confirm-bar">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+  <div class="confirm-bar" id="confirmBar">
+    <div class="total-row" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
       <span style="font-size:12px;color:var(--ink-soft);font-weight:600;">TOTAL DEL PLATO</span>
       <span class="disp" id="totalKcal" style="font-size:19px;font-weight:700;">0 kcal</span>
     </div>
     <button class="btn-primary" id="confirmBtn">
       Confirmar y registrar
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
     </button>
   </div>
 </div>
 
 <script src="static/js/api.js"></script>
 <script src="static/js/theme.js"></script>
+<script src="static/js/shell.js"></script>
 <script>
+const MEALS = [
+  { key: 'desayuno', label: 'Desayuno' },
+  { key: 'almuerzo', label: 'Almuerzo' },
+  { key: 'merienda', label: 'Merienda' },
+  { key: 'cena', label: 'Cena' },
+];
+
 const raw = sessionStorage.getItem('cadence_analyze_result');
 if (!raw) {
   window.location.href = 'scan.html';
 }
 const analyzeResult = JSON.parse(raw || '{"components":[]}');
+let meal = sessionStorage.getItem('cadence_meal') || null;
 
 // Per-component live state: selected candidate id, its kcal/100g, grams.
 const state = analyzeResult.components.map((component) => {
@@ -58,6 +83,7 @@ const state = analyzeResult.components.map((component) => {
   const selected = component.candidates.find((c) => c.id === component.selectedId) || component.candidates[0];
   return {
     detected_name: component.detected_name,
+    confidence: component.confidence ?? null,
     candidates: component.candidates,
     selectedId: selected ? selected.id : null,
     energyPer100g: selected ? (selected.energy_kcal_100g || 0) : 0,
@@ -68,15 +94,25 @@ const state = analyzeResult.components.map((component) => {
 function persistState() {
   const merged = state.map((item) => ({
     detected_name: item.detected_name,
-    confidence: null,
+    confidence: item.confidence,
     candidates: item.candidates,
     selectedId: item.selectedId,
     grams: item.grams,
   }));
   sessionStorage.setItem('cadence_analyze_result', JSON.stringify({ components: merged }));
+  if (meal) sessionStorage.setItem('cadence_meal', meal);
 }
 
-document.getElementById('subtitle').textContent = `✨ ${state.length} componente${state.length === 1 ? '' : 's'} identificado${state.length === 1 ? '' : 's'} por IA`;
+function renderSubtitle() {
+  const ai = state.filter((item) => item.confidence != null).length;
+  const manual = state.length - ai;
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  let text;
+  if (state.length === 0) text = 'Sin componentes';
+  else if (ai === 0) text = plural(manual, 'alimento agregado', 'alimentos agregados');
+  else text = `✨ ${plural(ai, 'identificado', 'identificados')} por IA${manual ? ` · ${plural(manual, 'manual', 'manuales')}` : ''}`;
+  document.getElementById('subtitle').textContent = text;
+}
 
 function itemKcal(item) {
   return (item.energyPer100g * item.grams) / 100;
@@ -85,6 +121,33 @@ function itemKcal(item) {
 function renderTotal() {
   const total = state.reduce((sum, item) => sum + itemKcal(item), 0);
   document.getElementById('totalKcal').textContent = `${Math.round(total)} kcal`;
+}
+
+// ---- Photo (tablet/desktop only; CSS keeps it hidden on phones) ----
+function renderPhoto() {
+  const photo = sessionStorage.getItem('cadence_photo');
+  if (!photo) return;
+  const card = document.getElementById('photoCard');
+  card.style.backgroundImage = `url("${photo}")`;
+  card.classList.add('has-photo');
+  const chips = document.getElementById('photoChips');
+  chips.innerHTML = state
+    .filter((item) => item.confidence != null)
+    .map((item) => `<div class="photo-chip"><span>${escapeHtml(item.detected_name)}</span><span class="mono">${Math.round(item.confidence * 100)}%</span></div>`)
+    .join('');
+}
+
+// ---- Meal picker: the slot the entries are stamped into (see /api/confirm) ----
+function renderMealPick() {
+  const wrap = document.getElementById('mealPick');
+  wrap.innerHTML = MEALS.map((m) => `<button type="button" data-meal="${m.key}" aria-pressed="${meal === m.key}">${m.label}</button>`).join('');
+  wrap.querySelectorAll('button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      meal = btn.dataset.meal;
+      sessionStorage.setItem('cadence_meal', meal);
+      renderMealPick();
+    });
+  });
 }
 
 async function selectCandidate(idx, candidateId) {
@@ -105,18 +168,34 @@ async function selectCandidate(idx, candidateId) {
   renderItems();
 }
 
+function emptyState() {
+  const mealQuery = meal ? `&meal=${meal}` : '';
+  return `
+    <div class="empty-state span-all">
+      <span style="font-size:36px;">🤔</span>
+      <h3 class="disp" style="margin:14px 0 6px;font-size:15.5px;font-weight:700;">No logramos identificar el plato</h3>
+      <p style="margin:0 0 18px;font-size:12px;color:var(--ink-soft);line-height:1.5;">Puede ser el ángulo, la luz, o un alimento poco común. Prueba de nuevo o regístralo a mano — toma 10 segundos.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;max-width:320px;margin:0 auto;">
+        <a href="scan.html${meal ? `?meal=${meal}` : ''}" class="btn-primary">📸 Tomar otra foto</a>
+        <a href="search.html?from=confirm${mealQuery}" class="btn-secondary" style="display:flex;align-items:center;justify-content:center;min-height:44px;">🔍 Buscar manualmente</a>
+        <button type="button" class="btn-secondary" id="barcodeBtn" style="min-height:44px;">▦ Escanear código de barras</button>
+      </div>
+    </div>`;
+}
+
 function renderItems() {
   const wrap = document.getElementById('itemsWrap');
   wrap.innerHTML = '';
+  renderSubtitle();
+
+  const bar = document.getElementById('confirmBar');
+  document.getElementById('mealPick').style.display = state.length === 0 ? 'none' : 'flex';
+  bar.style.display = state.length === 0 ? 'none' : '';
 
   if (state.length === 0) {
-    wrap.innerHTML = `
-      <div class="empty-state">
-        <span style="font-size:36px;">🤔</span>
-        <h3 class="disp" style="margin:14px 0 6px;font-size:15.5px;font-weight:700;">No logramos identificar el plato</h3>
-        <p style="margin:0 0 18px;font-size:12px;color:var(--ink-soft);line-height:1.5;">Prueba de nuevo con otro ángulo o mejor luz.</p>
-        <a href="scan.html" class="btn-primary" style="display:inline-flex;">📸 Tomar otra foto</a>
-      </div>`;
+    wrap.innerHTML = emptyState();
+    const barcode = document.getElementById('barcodeBtn');
+    if (barcode) barcode.addEventListener('click', () => showToast('Escaneo por código de barras: próximamente', 'warn'));
     return;
   }
 
@@ -135,10 +214,10 @@ function renderItems() {
     card.innerHTML = `
       <div style="display:flex;gap:11px;">
         <div style="width:52px;height:52px;border-radius:14px;background:linear-gradient(140deg,#7C5CFF,#2DD4FF);flex-shrink:0;opacity:0.35;"></div>
-        <div style="flex:1;">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
             <span style="font-size:14px;font-weight:700;">${escapeHtml(item.detected_name)}</span>
-            <span class="disp" id="kcal-${idx}" style="font-size:13px;font-weight:700;color:var(--accent-to);">${Math.round(itemKcal(item))} kcal</span>
+            <span class="disp" id="kcal-${idx}" style="font-size:13px;font-weight:700;color:var(--accent-to);white-space:nowrap;">${Math.round(itemKcal(item))} kcal</span>
           </div>
           <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;">${pills || '<span style="font-size:11px;color:var(--ink-soft);">Sin coincidencias en wger — búscalo manualmente.</span>'}</div>
         </div>
@@ -146,9 +225,9 @@ function renderItems() {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:11px;padding-top:11px;border-top:1px solid var(--card-border);">
         <span style="font-size:11.5px;color:var(--ink-soft);font-weight:600;">Cantidad</span>
         <div style="display:flex;align-items:center;gap:10px;">
-          <button data-idx="${idx}" data-delta="-10" class="gram-btn" style="width:26px;height:26px;border-radius:9px;border:1px solid var(--card-border);background:var(--bg);color:var(--ink);font-weight:700;cursor:pointer;">−</button>
-          <span class="mono" id="grams-${idx}" style="font-size:13px;font-weight:700;min-width:44px;text-align:center;">${item.grams} g</span>
-          <button data-idx="${idx}" data-delta="10" class="gram-btn" style="width:26px;height:26px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));color:#fff;font-weight:700;cursor:pointer;">+</button>
+          <button data-idx="${idx}" data-delta="-10" class="gram-btn" aria-label="Menos" style="border:1px solid var(--card-border);background:var(--bg);color:var(--ink);">−</button>
+          <span class="mono" id="grams-${idx}" style="font-size:13px;font-weight:700;min-width:54px;text-align:center;">${item.grams} g</span>
+          <button data-idx="${idx}" data-delta="10" class="gram-btn" aria-label="Más" style="border:none;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));color:#fff;">+</button>
         </div>
       </div>
     `;
@@ -156,14 +235,15 @@ function renderItems() {
   });
 
   const addMore = document.createElement('a');
-  addMore.href = 'search.html?from=confirm';
-  addMore.className = 'dashed-add';
-  addMore.style.cssText = 'border-radius:18px;padding:13px;justify-content:center;gap:8px;font-size:12.5px;font-weight:600;';
+  addMore.href = `search.html?from=confirm${meal ? `&meal=${meal}` : ''}`;
+  addMore.className = 'dashed-add span-all';
+  addMore.style.cssText = 'border-radius:18px;padding:13px;justify-content:center;gap:8px;font-size:12.5px;font-weight:600;min-height:44px;';
   addMore.innerHTML = '<span style="font-weight:800;color:var(--accent-to);">+</span> Agregar componente que falte';
   addMore.addEventListener('click', persistState);
   wrap.appendChild(addMore);
 
   const note = document.createElement('div');
+  note.className = 'span-all';
   note.style.cssText = 'display:flex;gap:7px;align-items:flex-start;padding:2px 4px;';
   note.innerHTML = '<span style="font-size:12px;">ℹ️</span><span style="font-size:11px;color:var(--ink-soft);line-height:1.4;">La IA identifica los alimentos — las calorías reales siempre vienen de la base de datos de wger.</span>';
   wrap.appendChild(note);
@@ -185,6 +265,21 @@ function renderItems() {
   renderTotal();
 }
 
+// On desktop the total + confirm button live in the right column (mockup);
+// below that they stay as a fixed bar at the bottom.
+const desktopMq = window.matchMedia('(min-width: 1024px)');
+function placeBar() {
+  const bar = document.getElementById('confirmBar');
+  if (desktopMq.matches) {
+    document.getElementById('itemsCol').appendChild(bar);
+    bar.classList.add('in-column');
+  } else {
+    document.querySelector('.app').appendChild(bar);
+    bar.classList.remove('in-column');
+  }
+}
+desktopMq.addEventListener('change', placeBar);
+
 document.getElementById('confirmBtn').addEventListener('click', async () => {
   const items = state
     .filter((item) => item.selectedId)
@@ -199,22 +294,44 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
     return;
   }
 
+  const payload = { items, meal };
   const btn = document.getElementById('confirmBtn');
   btn.disabled = true;
   btn.textContent = 'Guardando…';
 
   try {
-    await apiPost('api/confirm', { items });
-    sessionStorage.removeItem('cadence_analyze_result');
+    await apiPost('api/confirm', payload);
+    clearScanSession();
     window.location.href = 'index.html';
   } catch (err) {
+    if (isNetworkFailure(err)) {
+      // No connection: keep the plate and let the dashboard send it when we're back.
+      queuePending(payload);
+      clearScanSession();
+      showToast('Sin conexión: tu plato se guardó y se enviará solo al volver.', 'warn');
+      setTimeout(() => { window.location.href = 'index.html'; }, 1400);
+      return;
+    }
     showToast(`No se pudo guardar en wger: ${err.message}`);
     btn.disabled = false;
     btn.innerHTML = 'Confirmar y registrar';
   }
 });
 
-renderItems();
+async function init() {
+  if (!meal) {
+    // Default to the slot the clock says we're in (nothing selected at night).
+    try {
+      const now = await apiGet('api/meal-now');
+      if (now.meal && now.meal !== 'otro') meal = now.meal;
+    } catch { /* picker simply starts empty */ }
+  }
+  renderPhoto();
+  renderMealPick();
+  renderItems();
+  placeBar();
+}
+init();
 </script>
 </body>
 </html>

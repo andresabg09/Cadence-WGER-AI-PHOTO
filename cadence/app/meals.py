@@ -43,6 +43,32 @@ def meal_key_for_hour(hour: int) -> str:
     return "otro"
 
 
+def meal_window(meal: str) -> tuple[int, int] | None:
+    return {
+        "desayuno": (settings.breakfast_start_hour, settings.lunch_start_hour),
+        "almuerzo": (settings.lunch_start_hour, settings.snack_start_hour),
+        "merienda": (settings.snack_start_hour, settings.dinner_start_hour),
+        "cena": (settings.dinner_start_hour, settings.dinner_end_hour),
+    }.get(meal)
+
+
+def datetime_for_meal(meal: str | None, now: datetime) -> datetime:
+    """Timestamp to log an entry under `meal`.
+
+    wger has no meal-slot field, so the slot is encoded in the time of day.
+    If `now` already falls inside the chosen slot we keep it; otherwise the
+    entry is stamped at the middle of that slot, today, so it shows up under
+    the meal the user picked instead of whatever the clock says.
+    """
+    window = meal_window(meal) if meal else None
+    if window is None:
+        return now
+    start, end = window
+    if start <= now.hour < end:
+        return now
+    return now.replace(hour=(start + end) // 2, minute=0, second=0, microsecond=0)
+
+
 def entry_datetime(entry: dict) -> datetime | None:
     """The entry's timestamp expressed in the user's timezone."""
     raw = entry.get("datetime", "")

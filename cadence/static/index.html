@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#0A0A0F">
 <link rel="manifest" href="static/manifest.json">
 <link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="static/icons/icon.svg">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="static/css/pulse.css">
 <script>
@@ -17,7 +17,7 @@
   })();
 </script>
 </head>
-<body>
+<body class="with-shell" data-page="diario">
 <div class="app">
   <div class="app-header">
     <div>
@@ -25,6 +25,10 @@
       <h1 class="disp" id="greeting">Hola</h1>
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
+      <a href="scan.html" class="btn-upload desktop-only">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m0 0l-4 4m4-4l4 4M5 20h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Subir foto
+      </a>
       <div class="streak-pill">
         <span class="flame">🔥</span>
         <span class="mono" id="streakValue" style="font-weight:700;color:var(--ember);font-size:13px;">–</span>
@@ -38,7 +42,8 @@
     </div>
   </div>
 
-  <div class="app-content">
+  <div class="app-content grid-2">
+    <div class="col">
     <!-- Hero: ring + macros -->
     <div class="hero-card">
       <div class="blob-wrap"><div class="blob"></div></div>
@@ -89,6 +94,9 @@
       </div>
     </div>
 
+    </div>
+
+    <div class="col">
     <!-- Meals -->
     <div style="display:flex;flex-direction:column;gap:10px;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:0 2px;">
@@ -101,6 +109,7 @@
         </div>
       </div>
       <div id="mealsList"></div>
+    </div>
     </div>
   </div>
 
@@ -121,6 +130,8 @@
 
 <script src="static/js/api.js"></script>
 <script src="static/js/theme.js"></script>
+<script src="static/js/shell.js"></script>
+<script src="static/js/install.js"></script>
 <script>
 const WATER_GOAL_ML = 2000;
 const WATER_STEP_ML = 250;
@@ -219,6 +230,9 @@ function mealItemRow(item, mealKey) {
           <div style="font-size:13px;font-weight:700;">${escapeHtml(item.name)}</div>
           <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${Math.round(item.amount_grams)} g · ${Math.round(item.kcal)} kcal</div>
         </div>
+        <button class="row-del" aria-label="Borrar ${escapeHtml(item.name)}">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2m-9 0l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
       </div>
     </div>
   `;
@@ -238,7 +252,7 @@ function mealCard(meal, key) {
     </div>
     ${meal.items.map((item) => mealItemRow(item, key)).join('')}
     ${addLabel ? `
-    <a href="search.html" style="display:flex;align-items:center;gap:8px;padding:2px 0 0;color:var(--ink-soft);">
+    <a href="search.html?meal=${key}" style="display:flex;align-items:center;gap:8px;padding:2px 0 0;color:var(--ink-soft);min-height:44px;">
       <span style="width:22px;height:22px;border-radius:8px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--accent-to);">+</span>
       <span style="font-size:12px;font-weight:600;">Agregar otro alimento ${addLabel}</span>
     </a>` : ''}
@@ -248,7 +262,7 @@ function mealCard(meal, key) {
 
 function dashedAdd(label) {
   const link = document.createElement('a');
-  link.href = 'scan.html';
+  link.href = `scan.html?meal=${label}`;
   link.className = 'dashed-add';
   link.innerHTML = `
     <span style="width:28px;height:28px;border-radius:10px;background:var(--card);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--accent-to);">+</span>
@@ -264,6 +278,18 @@ function renderMeals(meals) {
 
   const container = document.createElement('div');
   container.style.cssText = 'display:flex;flex-direction:column;gap:10px;';
+
+  if (meals.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <span style="font-size:36px;">🍽️</span>
+        <h3 class="disp" style="margin:14px 0 6px;font-size:15.5px;font-weight:700;">Aún no registras nada hoy</h3>
+        <p style="margin:0 0 18px;font-size:12px;color:var(--ink-soft);line-height:1.5;">Toma una foto de tu primer plato del día y empieza tu racha.</p>
+        <a href="scan.html" class="btn-primary" style="display:inline-flex;width:auto;padding:13px 22px;">✨ Escanear mi primer plato</a>
+      </div>`;
+    list.appendChild(container);
+    return;
+  }
 
   // Desayuno / almuerzo / cena always show (card or dashed "agregar", per the
   // mockup); merienda and otro only appear once something is logged in them.
@@ -294,7 +320,7 @@ function wireSwipeToDelete() {
       content.addEventListener(type, () => { startX = null; });
     });
 
-    delBtn.addEventListener('click', async () => {
+    const remove = async () => {
       const entryId = row.dataset.entryId;
       try {
         await apiDelete(`api/diary/${entryId}`);
@@ -303,7 +329,10 @@ function wireSwipeToDelete() {
       } catch (err) {
         showToast(`No se pudo borrar: ${err.message}`);
       }
-    });
+    };
+    delBtn.addEventListener('click', remove);
+    const rowDel = row.querySelector('.row-del');
+    if (rowDel) rowDel.addEventListener('click', remove);
   });
 }
 
@@ -313,8 +342,10 @@ async function loadToday() {
   const dateLabel = document.getElementById('todayLabel');
 
   try {
+    await flushPending().catch(() => {});
     const data = await apiGet('api/today');
     latestToday = data;
+    hideBanner('wger');
 
     // Label from the server's "today" (user's timezone), not the device clock.
     dateLabel.textContent = new Date(`${data.date}T12:00:00`)
@@ -332,7 +363,8 @@ async function loadToday() {
     document.getElementById('waterPlus').onclick = () => setWaterMl(data.date, getWaterMl(data.date) + WATER_STEP_ML);
     document.getElementById('waterMinus').onclick = () => setWaterMl(data.date, getWaterMl(data.date) - WATER_STEP_ML);
   } catch (err) {
-    showToast(`No se pudo cargar tu diario: ${err.message}`);
+    if (!navigator.onLine) return; // the offline banner already explains it
+    showBanner('wger', `No pudimos cargar tu diario: ${err.message}`, 'Reintentar', loadToday);
   }
 }
 

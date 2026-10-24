@@ -60,3 +60,64 @@ def test_diagnostics_lists_every_missing_piece(monkeypatch):
     assert report["ok"] is False
     assert failed == {"Existe un plan de nutricion", "wger tiene ingredientes cargados"}
     assert all(c["fix"] for c in report["checks"] if not c["ok"])
+
+
+def _stub_wger(monkeypatch, handler):
+    monkeypatch.setattr(main.settings, "wger_api_token", "x")
+    monkeypatch.setattr(main, "get_wger_client", lambda: client_with(handler))
+
+
+def test_confirm_stamps_entries_inside_the_chosen_meal(monkeypatch):
+    posted = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            import json
+
+            posted.append(json.loads(request.content))
+            return httpx.Response(201, json={"id": 55})
+        return httpx.Response(200, json={"results": [{"id": 1}]})
+
+    _stub_wger(monkeypatch, handler)
+    response = TestClient(main.app).post(
+        "/api/confirm",
+        json={"items": [{"ingredient_id": 3, "amount_grams": 120}], "meal": "desayuno"},
+    )
+    assert response.status_code == 200
+    assert posted and posted[0]["plan"] == 1 and posted[0]["ingredient"] == 3
+    from app.meals import meal_key_for_entry
+
+    assert meal_key_for_entry(posted[0]) == "desayuno"
+
+
+def test_wger_status_reports_reachability(monkeypatch):
+    main._wger_status_cache.update(at=0.0, value=None)
+    _stub_wger(monkeypatch, lambda request: httpx.Response(200, json={"results": []}))
+    assert TestClient(main.app).get("/api/wger-status").json() == {"ok": True, "detail": None}
+
+    main._wger_status_cache.update(at=0.0, value=None)
+    _stub_wger(monkeypatch, lambda request: httpx.Response(500))
+    assert TestClient(main.app).get("/api/wger-status").json()["ok"] is False
+
+
+def test_deep_diagnostics_writes_and_deletes_a_test_entry():
+    from app import diagnostics
+
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.method, request.url.path))
+        if request.url.path == "/api/v2/nutritionplan/":
+            return httpx.Response(200, json={"results": [{"id": 4}]})
+        if request.url.path == "/api/v2/ingredientinfo/":
+            return httpx.Response(200, json={"results": [{"id": 9, "name": "Chicken", "energy": 165}]})
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": 77})
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        return httpx.Response(200, json={"results": []})
+
+    report = diagnostics.run_diagnostics(client_with(handler), deep=True)
+    write = next(c for c in report["checks"] if c["name"].startswith("Registrar y borrar"))
+    assert write["ok"] is True
+    assert ("DELETE", "/api/v2/nutritiondiary/77/") in calls

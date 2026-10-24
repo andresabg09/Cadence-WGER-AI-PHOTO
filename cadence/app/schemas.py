@@ -39,6 +39,14 @@ class ConfirmItem(BaseModel):
 class ConfirmRequest(BaseModel):
     items: list[ConfirmItem]
     plan_id: int | None = None
+    # desayuno | almuerzo | merienda | cena - stamps the entries inside that
+    # slot's time window (see meals.datetime_for_meal). None = "now".
+    meal: str | None = None
+
+
+class WgerStatus(BaseModel):
+    ok: bool
+    detail: str | None = None
 
 
 class ConfirmedEntry(BaseModel):

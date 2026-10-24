@@ -1,3 +1,4 @@
+from time import monotonic
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, time, timedelta
 
@@ -13,6 +14,7 @@ from .meals import (
     MEAL_LABELS,
     MEAL_ORDER,
     compute_streak,
+    datetime_for_meal,
     entry_date,
     entry_datetime,
     local_now,
@@ -30,6 +32,7 @@ from .schemas import (
     MealItem,
     SearchResult,
     TodayResponse,
+    WgerStatus,
 )
 from .vision import GeminiVisionClient
 from .wger_client import WgerClient, WgerError
@@ -76,6 +79,37 @@ def get_wger_client() -> WgerClient:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/meal-now")
+def meal_now():
+    """Which meal slot the clock (in TIMEZONE) falls in; 'otro' outside all windows."""
+    return {"meal": meal_key_for_entry({"datetime": local_now().isoformat()})}
+
+
+_wger_status_cache: dict = {"at": 0.0, "value": None}
+
+
+@app.get("/api/wger-status", response_model=WgerStatus)
+def wger_status():
+    """Cheap reachability probe for the sidebar dot / offline banner (cached 60 s)."""
+    now = monotonic()
+    cached = _wger_status_cache["value"]
+    if cached is not None and now - _wger_status_cache["at"] < 60:
+        return cached
+    if not settings.wger_api_token:
+        result = WgerStatus(ok=False, detail="WGER_API_TOKEN no esta configurado")
+    else:
+        wger = get_wger_client()
+        try:
+            wger._client.get("/api/v2/nutritionplan/", params={"limit": 1, "format": "json"}).raise_for_status()
+            result = WgerStatus(ok=True)
+        except Exception as exc:  # noqa: BLE001 - any failure means "not reachable"
+            result = WgerStatus(ok=False, detail=type(exc).__name__)
+        finally:
+            wger.close()
+    _wger_status_cache.update(at=now, value=result)
+    return result
 
 
 @app.get("/api/diagnostics")
@@ -362,10 +396,11 @@ def confirm(request: ConfirmRequest):
     try:
         plan_id = request.plan_id or settings.default_nutrition_plan_id or wger.get_default_nutrition_plan_id()
 
+        when = datetime_for_meal(request.meal, local_now())
         created = []
         for item in request.items:
             try:
-                diary_entry_id = wger.log_diary_entry(plan_id, item.ingredient_id, item.amount_grams)
+                diary_entry_id = wger.log_diary_entry(plan_id, item.ingredient_id, item.amount_grams, when)
             except WgerError as exc:
                 raise HTTPException(502, str(exc)) from exc
             created.append(

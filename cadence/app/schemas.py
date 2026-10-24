@@ -228,6 +228,10 @@ class WaterGoalIn(BaseModel):
     ml: int | None = Field(default=None, ge=500, le=8000)  # None = automatic (from the person's weight)
 
 
+class BulkDelete(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=40)
+
+
 class NoteUpdate(BaseModel):
     note: str | None = None
 

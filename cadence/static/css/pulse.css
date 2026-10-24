@@ -1055,3 +1055,12 @@ html { -webkit-text-size-adjust: 100%; }
 
 /* leaving for another section: a short fade while its sound finishes */
 body.nav-leaving { opacity: 0; transition: opacity 0.2s ease-in 0.12s; }
+
+/* delete a whole plate: swipe its photo left, or the trash on the photo */
+.pg-swipe { position: relative; overflow: hidden; border-radius: 13px; }
+.pg-swipe .pg-photo { position: relative; z-index: 1; transition: transform 0.25s ease; touch-action: pan-y; }
+.pg-swipe .pg-photo.open { transform: translateX(-96px); }
+.pg-del { position: absolute; top: 0; right: 0; bottom: 0; width: 96px; border: 0; border-radius: 0 13px 13px 0; background: linear-gradient(135deg, #FF5C5C, #D63B3B); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; font: 700 11px 'Inter', sans-serif; cursor: pointer; opacity: 0; transition: opacity 0.2s; }
+.pg-swipe:has(.pg-photo.open) .pg-del { opacity: 1; }
+.pg-trash { position: absolute; z-index: 2; top: 8px; right: 8px; width: 36px; height: 36px; border: 0; border-radius: 12px; background: rgba(10, 10, 15, 0.62); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); transition: opacity 0.2s; }
+.pg-swipe:has(.pg-photo.open) .pg-trash { opacity: 0; pointer-events: none; }

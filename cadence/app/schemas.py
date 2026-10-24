@@ -70,6 +70,8 @@ class ConfirmResponse(BaseModel):
     created: list[ConfirmedEntry]
     # Local day the plate was filed under (the photo's day), so the app can open that day.
     date: str | None = None
+    # False for an old photo: it fills that day's diary but does not count for the streak.
+    counts_for_streak: bool = True
 
 
 class IngredientDetail(BaseModel):
@@ -156,7 +158,9 @@ class MediaUpload(BaseModel):
 class CalendarDay(BaseModel):
     date: str
     count: int  # diary entries that day
-    streak: int  # consecutive logged days ending on this one (1 = a new streak starts)
+    # Consecutive same-day-logged days ending on this one (1 = a new streak starts).
+    # 0 = the day has entries but they were all added later (old photos): no flame.
+    streak: int
 
 
 class CalendarResponse(BaseModel):

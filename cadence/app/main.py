@@ -16,6 +16,7 @@ from .meals import (
     MEAL_LABELS,
     MEAL_ORDER,
     compute_streak,
+    counts_for_streak,
     streak_by_day,
     datetime_for_meal,
     entry_date,
@@ -235,7 +236,12 @@ def today(date: str | None = None):
         day_end = datetime.combine(today_date, time.max, tzinfo=now.tzinfo)
         entries = wger.get_diary_entries(plan_id, history_start, day_end)
 
-        streak_days = compute_streak(entries, today_date)
+        try:
+            logged_on = store.get_logged_on([str(e["id"]) for e in entries])
+        except Exception:  # noqa: BLE001
+            logger.exception("no se pudo leer el almacen local (racha)")
+            logged_on = {}
+        streak_days = compute_streak(counts_for_streak(entries, logged_on), today_date)
         if shown_date < history_start.date():
             # Older than the streak window: read that day on its own.
             day_start = datetime.combine(shown_date, time.min, tzinfo=now.tzinfo)
@@ -357,38 +363,45 @@ def calendar(month: str | None = None):
         if plan_id is None:
             return CalendarResponse(month=first.strftime("%Y-%m"), today=real_today.isoformat(), days=[])
 
-        def logged_days(start: date_type, end: date_type) -> tuple[set[date_type], dict[date_type, int]]:
+        def logged_days(start: date_type, end: date_type) -> tuple[dict[date_type, int], set[date_type]]:
+            """(entries per day, days that count for the streak) between two dates."""
             entries = wger.get_diary_entries(
                 plan_id,
                 datetime.combine(start, time.min, tzinfo=now.tzinfo),
                 datetime.combine(end, time.max, tzinfo=now.tzinfo),
             )
+            try:
+                logged_on = store.get_logged_on([str(e["id"]) for e in entries])
+            except Exception:  # noqa: BLE001
+                logger.exception("no se pudo leer el almacen local (calendario)")
+                logged_on = {}
             counts: dict[date_type, int] = {}
             for entry in entries:
                 day = entry_date(entry)
                 if day is not None:
                     counts[day] = counts.get(day, 0) + 1
-            return set(counts), counts
+            counting = {entry_date(e) for e in counts_for_streak(entries, logged_on)}
+            return counts, counting
 
         window_start = first - timedelta(days=62)
-        days, counts = logged_days(window_start, last)
+        counts, counting = logged_days(window_start, last)
         # A streak running into the month can be older than the window: read further back until it breaks.
         for _ in range(6):
-            if window_start not in days:
+            if window_start not in counting:
                 break
             older_end = window_start - timedelta(days=1)
             older_start = older_end - timedelta(days=62)
-            older_days, older_counts = logged_days(older_start, older_end)
-            days |= older_days
+            older_counts, older_counting = logged_days(older_start, older_end)
             counts.update(older_counts)
+            counting |= older_counting
             window_start = older_start
-        streaks = streak_by_day(days)
+        streaks = streak_by_day(counting)
         return CalendarResponse(
             month=first.strftime("%Y-%m"),
             today=real_today.isoformat(),
             days=[
-                CalendarDay(date=d.isoformat(), count=counts[d], streak=streaks[d])
-                for d in sorted(days) if first <= d <= last
+                CalendarDay(date=d.isoformat(), count=counts[d], streak=streaks.get(d, 0))
+                for d in sorted(counts) if first <= d <= last
             ],
         )
     finally:
@@ -615,6 +628,12 @@ def confirm(request: ConfirmRequest):
                     diary_entry_id=diary_entry_id,
                 )
             )
-        return ConfirmResponse(created=created, date=when.astimezone(local_tz()).date().isoformat())
+        entry_day = when.astimezone(local_tz()).date()
+        real_today = local_now().date()
+        try:
+            store.set_logged_on([c.diary_entry_id for c in created], real_today.isoformat())
+        except Exception:  # noqa: BLE001 - the plate is already in wger; only the streak bookkeeping is lost
+            logger.exception("no se pudo anotar el dia de registro")
+        return ConfirmResponse(created=created, date=entry_day.isoformat(), counts_for_streak=entry_day >= real_today)
     finally:
         wger.close()

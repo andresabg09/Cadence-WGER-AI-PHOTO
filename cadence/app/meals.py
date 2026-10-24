@@ -135,3 +135,21 @@ def streak_by_day(days: set[date]) -> dict[date, int]:
     for day in sorted(days):
         counts[day] = counts.get(day - timedelta(days=1), 0) + 1
     return counts
+
+
+def counts_for_streak(entries: list[dict], logged_on: dict[str, str]) -> list[dict]:
+    """The entries that keep a streak alive: registered on the very day they are dated.
+
+    Adding an old photo fills the diary of that day but cannot bring a lost streak back, so an
+    entry registered on a later day does not count. Entries with no record (registered before
+    cadence kept one) are trusted.
+    """
+    counted = []
+    for entry in entries:
+        day = entry_date(entry)
+        if day is None:
+            continue
+        registered = logged_on.get(str(entry.get("id")))
+        if registered is None or registered <= day.isoformat():
+            counted.append(entry)
+    return counted

@@ -31,6 +31,9 @@ def _connect() -> sqlite3.Connection:
         " entry_id TEXT PRIMARY KEY, note TEXT, crop BLOB, plate_key TEXT, box TEXT)"
     )
     conn.execute("CREATE TABLE IF NOT EXISTS plates (key TEXT PRIMARY KEY, data BLOB NOT NULL)")
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(entry_meta)")}
+    if "logged_on" not in columns:  # day the entry was really registered (streaks need it)
+        conn.execute("ALTER TABLE entry_meta ADD COLUMN logged_on TEXT")
     return conn
 
 
@@ -103,3 +106,26 @@ def delete_entry(entry_id: str) -> None:
     with closing(_connect()) as conn, conn:
         conn.execute("DELETE FROM entry_meta WHERE entry_id = ?", (str(entry_id),))
         conn.execute("DELETE FROM plates WHERE key NOT IN (SELECT plate_key FROM entry_meta WHERE plate_key IS NOT NULL)")
+
+
+def set_logged_on(entry_ids: list[str], day: str) -> None:
+    """Remember the real day each entry was registered (not the day the food was eaten)."""
+    with closing(_connect()) as conn, conn:
+        for entry_id in entry_ids:
+            conn.execute("INSERT OR IGNORE INTO entry_meta (entry_id) VALUES (?)", (str(entry_id),))
+            conn.execute("UPDATE entry_meta SET logged_on = ? WHERE entry_id = ?", (day, str(entry_id)))
+
+
+def get_logged_on(entry_ids: list[str]) -> dict[str, str]:
+    """entry id -> ISO day it was registered; entries registered before this existed are absent."""
+    found: dict[str, str] = {}
+    ids = [str(i) for i in entry_ids]
+    with closing(_connect()) as conn:
+        for start in range(0, len(ids), 500):  # SQLite caps the number of ? in one statement
+            chunk = ids[start:start + 500]
+            marks = ",".join("?" * len(chunk))
+            for entry_id, day in conn.execute(
+                f"SELECT entry_id, logged_on FROM entry_meta WHERE logged_on IS NOT NULL AND entry_id IN ({marks})", chunk
+            ):
+                found[entry_id] = day
+    return found

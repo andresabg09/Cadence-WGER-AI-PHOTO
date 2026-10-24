@@ -325,14 +325,51 @@ async function prepareImage(file, maxDim = 1280) {
 
 const SCAN_SESSION_KEYS = ['cadence_analyze_result', 'cadence_photos', 'cadence_meal', 'cadence_taken_at', 'cadence_water_ml'];
 
-// Water lives per day on this device (the bar in the diary). Returns the new total for that day.
-function addWater(dateIso, ml) {
+// ---- Water: kept per person on the server, so every device and browser shows the same bar ----
+const WATER_PENDING_KEY = 'cadence_water_pending';
+const readWaterPending = () => { try { return JSON.parse(localStorage.getItem(WATER_PENDING_KEY) || '[]'); } catch { return []; } };
+const writeWaterPending = (list) => { try { localStorage.setItem(WATER_PENDING_KEY, JSON.stringify(list)); } catch { /* storage unavailable */ } };
+
+// Adds (or removes, negative) millilitres to a day. Returns the day's new total, or null when offline: it is queued and sent later.
+async function addWater(dateIso, ml) {
   try {
-    const key = `cadence_water_${dateIso}`;
-    const next = Math.min(10000, (Number(localStorage.getItem(key)) || 0) + ml);
-    localStorage.setItem(key, String(next));
-    return next;
-  } catch { return 0; }
+    return (await apiPost('api/water', { date: dateIso, add_ml: ml })).ml;
+  } catch (err) {
+    if (!isNetworkFailure(err)) throw err;
+    writeWaterPending([...readWaterPending(), { date: dateIso, add_ml: ml }]);
+    return null;
+  }
+}
+
+async function flushWater() {
+  let list = readWaterPending();
+  while (list.length) {
+    try {
+      await apiPost('api/water', list[0]);
+    } catch (err) {
+      if (isNetworkFailure(err)) break;
+      // the server refused it (a bad date): drop it so it cannot block the rest
+    }
+    list = list.slice(1);
+    writeWaterPending(list);
+  }
+}
+
+// Water saved by older versions only lived in this browser (cadence_water_<day>): send it up once, then forget it.
+async function importLocalWater() {
+  const days = {};
+  const keys = [];
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      const m = /^cadence_water_(\d{4}-\d{2}-\d{2})$/.exec(key || '');
+      const ml = m ? Number(localStorage.getItem(key)) : 0;
+      if (m && ml > 0) { days[m[1]] = ml; keys.push(key); }
+    }
+  } catch { return; }
+  if (!keys.length) return;
+  await apiPost('api/water/import', { days });
+  keys.forEach((key) => { try { localStorage.removeItem(key); } catch { /* ignore */ } });
 }
 function clearScanSession() {
   SCAN_SESSION_KEYS.forEach((key) => sessionStorage.removeItem(key));

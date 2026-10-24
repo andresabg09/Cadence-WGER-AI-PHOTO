@@ -562,10 +562,13 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
     if (window.sfx) sfx.play(items.length ? (photos.length ? 'photo' : 'save') : 'water'); // the reward: a bell for the meal, a shutter + bell for a photo, a drop for water
     let waterLine = '';
     if (waterMl > 0) {
-      const before = Number(localStorage.getItem(`cadence_water_${saved.date}`)) || 0;
-      const after = addWater(saved.date, waterMl);
-      waterLine = ` · 💧 +${waterMl} ml de agua`;
-      if (before < 2000 && after >= 2000) sessionStorage.setItem('cadence_water_goal', '1');
+      try {
+        const after = await addWater(saved.date, waterMl); // null when offline: queued and sent later
+        waterLine = ` · 💧 +${waterMl} ml de agua`;
+        if (after !== null && after - waterMl < 2000 && after >= 2000) sessionStorage.setItem('cadence_water_goal', '1');
+      } catch {
+        waterLine = ' · no pude sumar el agua';
+      }
     }
     // Each diary entry remembers its own zoomed crop (same order as the items we sent).
     // Photos and crops go to the server store; if that fails the plate is already saved in wger,

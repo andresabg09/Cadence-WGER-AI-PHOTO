@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DetectedComponent(BaseModel):
@@ -152,6 +152,21 @@ class TodayResponse(BaseModel):
     meals: list[MealGroup]
     streak_days: int
     user_name: str
+    water_ml: int = 0
+
+
+class WaterAdd(BaseModel):
+    date: str
+    add_ml: int = Field(ge=-10000, le=10000)
+
+
+class WaterImport(BaseModel):
+    days: dict[str, int]
+
+
+class WaterOut(BaseModel):
+    date: str
+    ml: int
 
 
 class NoteUpdate(BaseModel):

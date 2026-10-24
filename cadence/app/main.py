@@ -35,6 +35,9 @@ from .meals import (
     parse_taken_at,
 )
 from .schemas import (
+    WaterAdd,
+    WaterImport,
+    WaterOut,
     AnalyzeResponse,
     ComponentMatch,
     CalendarDay,
@@ -379,6 +382,36 @@ def goals_page():
     return FileResponse("static/goals.html")
 
 
+def _water_day(raw: str) -> str:
+    try:
+        day = date_type.fromisoformat(raw)
+    except ValueError:
+        raise HTTPException(400, "Fecha invalida (usa AAAA-MM-DD)") from None
+    if day > local_now().date() + timedelta(days=1):  # a day of slack for devices in another timezone
+        raise HTTPException(422, "No se puede registrar agua en el futuro")
+    return day.isoformat()
+
+
+@app.post("/api/water", response_model=WaterOut)
+def add_water(body: WaterAdd, user: store.User = Depends(current_user)):
+    """Water is kept per person on the server (it used to live only in one browser): add or remove millilitres of a day."""
+    day = _water_day(body.date)
+    return WaterOut(date=day, ml=store.add_water(user.id, day, body.add_ml))
+
+
+@app.post("/api/water/import")
+def import_water(body: WaterImport, user: store.User = Depends(current_user)):
+    """One-time upload of the water a device had saved locally before it was kept on the server."""
+    days = {}
+    for raw, ml in list(body.days.items())[:400]:
+        try:
+            days[date_type.fromisoformat(raw).isoformat()] = int(ml)
+        except ValueError:
+            continue
+    store.import_water(user.id, days)
+    return {"imported": len(days)}
+
+
 @app.get("/api/today", response_model=TodayResponse)
 def today(date: str | None = None, user: store.User = Depends(current_user)):
     """The diary of one day (default: today in the user's timezone)."""
@@ -507,6 +540,7 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
             meals=meals,
             streak_days=streak_days,
             user_name=user.name,
+            water_ml=store.water_ml(user.id, shown_date.isoformat()),
         )
     finally:
         wger.close()

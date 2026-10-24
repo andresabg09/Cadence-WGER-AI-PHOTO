@@ -189,18 +189,25 @@ const ADD_MORE_LABEL = { desayuno: 'al desayuno', almuerzo: 'al almuerzo', merie
 
 document.getElementById('profileBtn').addEventListener('click', () => { window.location.href = 'profile.html'; });
 
-function waterStorageKey(dateIso) {
-  return `cadence_water_${dateIso}`;
-}
-
-function getWaterMl(dateIso) {
-  return Number(localStorage.getItem(waterStorageKey(dateIso)) || 0);
-}
-
-function setWaterMl(dateIso, ml) {
-  const clamped = Math.max(0, ml);
-  localStorage.setItem(waterStorageKey(dateIso), String(clamped));
-  renderWater(clamped);
+// The bar is the server's number for that day (shared by every device); +/- change it at once and confirm with the server.
+let waterInflight = 0;
+async function changeWater(data, delta) {
+  const before = data.water_ml || 0;
+  const next = Math.max(0, before + delta);
+  if (next === before) return;
+  data.water_ml = next;
+  renderWater(next);
+  waterInflight += 1;
+  try {
+    const total = await addWater(data.date, next - before);
+    if (total !== null && waterInflight === 1) { data.water_ml = total; renderWater(total); }
+  } catch (err) {
+    data.water_ml = before;
+    renderWater(before);
+    showToast(`No se pudo guardar el agua: ${err.message}`, 'error');
+  } finally {
+    waterInflight -= 1;
+  }
 }
 
 function renderWater(ml) {
@@ -982,23 +989,25 @@ function paintToday(data, stale) {
   renderMacroBars(data.totals, data.goal);
   renderInsight(data.totals, data.goal);
   renderMeals(data.meals);
-  renderWater(getWaterMl(data.date));
+  renderWater(data.water_ml || 0);
   renderWorkouts(data);
 
   if (!stale) { celebrate(data); noteStreak(data); syncExtrasOnce(data); }
   document.getElementById('waterPlus').onclick = () => {
-    const before = getWaterMl(data.date);
-    setWaterMl(data.date, before + WATER_STEP_ML);
+    const before = data.water_ml || 0;
+    changeWater(data, WATER_STEP_ML);
     if (window.sfx) sfx.play(before < WATER_GOAL_ML && before + WATER_STEP_ML >= WATER_GOAL_ML ? 'goal' : 'water'); // a drop; the full bottle gets the chime
     if (before < WATER_GOAL_ML && before + WATER_STEP_ML >= WATER_GOAL_ML) showToast('💧 ¡Meta de agua cumplida!', 'ok');
   };
-  document.getElementById('waterMinus').onclick = () => { setWaterMl(data.date, getWaterMl(data.date) - WATER_STEP_ML); if (window.sfx) sfx.play('tick'); };
+  document.getElementById('waterMinus').onclick = () => { changeWater(data, -WATER_STEP_ML); if (window.sfx) sfx.play('tick'); };
 }
 
 async function loadToday() {
   Object.keys(calCache).forEach((k) => delete calCache[k]);
   try {
     await flushPending().catch(() => {});
+    await flushWater().catch(() => {});
+    await importLocalWater().catch(() => {});
     // The last diary this device saw shows at once; the fresh one replaces it a moment later.
     await apiGetSWR(viewDate ? `api/today?date=${encodeURIComponent(viewDate)}` : 'api/today', paintToday);
   } catch (err) {

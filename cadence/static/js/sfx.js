@@ -140,6 +140,10 @@
       tone(t + 0.25, E6, 1.0, { gain: 0.09, bell: true });
       air(t + 0.2, 0.35, 6000, 11000, { gain: 0.02, type: 'highpass', q: 0.5 });
     },
+    // Collecting coins: two bright metallic pings.
+    coin(t) { tone(t, 1760, 0.5, { gain: 0.13, bell: true }); tone(t + 0.07, 2637, 0.6, { gain: 0.1, bell: true }); air(t, 0.06, 5000, 9000, { gain: 0.03, type: 'highpass' }); },
+    // A new award: a quick rise and a bright chord.
+    award(t) { riser(t, 0.16, 400, 1200, { gain: 0.05 }); [C5, G5, C6].forEach((f, i) => tone(t + 0.14 + i * 0.07, f, 1.0, { gain: 0.16 - i * 0.02, bell: true })); tone(t + 0.3, E6, 1.2, { gain: 0.08, bell: true }); },
     shutter(t) { air(t, 0.03, 3600, 2600, { gain: 0.16, q: 2 }); air(t + 0.05, 0.05, 2200, 1500, { gain: 0.1, q: 2 }); },
     photo(t) { air(t, 0.03, 3600, 2600, { gain: 0.16, q: 2 }); air(t + 0.05, 0.05, 2200, 1500, { gain: 0.1, q: 2 }); [E5, B5, E6].forEach((f, i) => tone(t + 0.16 + i * 0.085, f, 0.9, { gain: 0.17 - i * 0.03, bell: true })); },
     water(t) { tone(t, 980, 0.16, { glideTo: 310, gain: 0.26, send: 0.6 }); tone(t + 0.09, 620, 0.1, { glideTo: 1100, gain: 0.09, send: 0.5 }); air(t, 0.05, 2800, 1200, { gain: 0.05 }); },
@@ -163,12 +167,12 @@
     error(t) { tone(t, 247, 0.22, { gain: 0.14 }); tone(t + 0.13, 196, 0.3, { gain: 0.13 }); },
   };
 
-  const BUZZ = { enterProgress: 8, streakOpen: [12, 70, 40], add: 10, pick: 6, open: 8, save: [14, 40, 14], photo: [10, 30, 18], water: 10, goal: [20, 50, 20, 50, 40], streak: [16, 40, 30], error: [30, 40, 30], remove: 12 };
+  const BUZZ = { coin: [10, 30, 10], award: [14, 40, 14, 40, 24], enterProgress: 8, streakOpen: [12, 70, 40], add: 10, pick: 6, open: 8, save: [14, 40, 14], photo: [10, 30, 18], water: 10, goal: [20, 50, 20, 50, 40], streak: [16, 40, 30], error: [30, 40, 30], remove: 12 };
 
   function play(name, opts) {
     const s = settings();
     if (!s.on || !SOUNDS[name]) return;
-    try { if (navigator.vibrate && BUZZ[name]) navigator.vibrate(BUZZ[name]); } catch { /* no haptics */ }
+    try { if (navigator.vibrate && BUZZ[name] && navigator.userActivation && navigator.userActivation.hasBeenActive) navigator.vibrate(BUZZ[name]); } catch { /* no haptics */ }
     if (!build()) return;
     if (ctx.state === 'suspended') {
       ctx.resume().catch(() => {});

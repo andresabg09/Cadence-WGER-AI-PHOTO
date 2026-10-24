@@ -141,6 +141,10 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="5" stroke="var(--accent-to)" stroke-width="1.8"/><path d="M8 10h8M8 14h5" stroke="var(--accent-to)" stroke-width="1.8"/></svg>
       <span>Diario</span>
     </button>
+    <a class="tab" id="retosBtn" href="challenges.html">
+      <span class="tab-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3z" stroke="var(--ink-soft)" stroke-width="1.8" stroke-linejoin="round"/></svg><i class="tab-dot" id="retosDot" hidden></i></span>
+      <span>Retos</span>
+    </a>
     <div class="launcher" id="launcher">
       <div class="lc-halo"></div>
       <span class="lc-meal mono" id="lcMeal"></span>
@@ -172,6 +176,10 @@
     <a class="tab" id="progressBtn" href="progress.html">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 19V9M12 19V5M19 19v-7" stroke="var(--ink-soft)" stroke-width="1.8" stroke-linecap="round"/></svg>
       <span>Progreso</span>
+    </a>
+    <a class="tab" id="perfilBtn" href="profile.html">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.6" stroke="var(--ink-soft)" stroke-width="1.8"/><path d="M5 20c1.4-3.8 4.2-5.6 7-5.6s5.6 1.8 7 5.6" stroke="var(--ink-soft)" stroke-width="1.8"/></svg>
+      <span>Perfil</span>
     </a>
   </div>
 </div>
@@ -1059,6 +1067,19 @@ function celebrate(data) {
   lines.forEach(([sound, opts, text], i) => setTimeout(() => { if (window.sfx) sfx.play(sound, opts); showToast(text, 'ok'); }, 650 + i * 1100));
 }
 
+// Awards earned by what was just logged (only today's): a chime and a line, a little after the other celebrations.
+function celebrateAwards(data) {
+  const fresh = data.awards_new || [];
+  if (!fresh.length || data.today !== data.date) return;
+  setTimeout(() => {
+    if (window.sfx) sfx.play('award');
+    showToast(fresh.length === 1 ? `🏆 ¡Premio nuevo: ${fresh[0].title}!` : `🏆 ¡${fresh.length} premios nuevos!`, 'ok');
+  }, 1900);
+}
+
+// A dot on the Retos tab when there are coins to collect.
+function paintRetosDot(d) { const dot = document.getElementById('retosDot'); if (dot) dot.hidden = !d.claimable; }
+
 function noteStreak(data) {
   if (data.today !== data.date) return;
   try { localStorage.setItem('cadence_streak_seen', String(data.streak_days)); } catch { /* no storage */ }
@@ -1085,7 +1106,7 @@ function paintToday(data, stale) {
   renderWorkouts(data);
   cadenceWorkouts.load().then(() => { if (latestToday === data) renderWorkouts(data); }).catch(() => {}); // activity names and icons
 
-  if (!stale) { celebrate(data); noteStreak(data); syncExtrasOnce(data); }
+  if (!stale) { celebrate(data); noteStreak(data); syncExtrasOnce(data); celebrateAwards(data); }
   document.getElementById('waterGoalBtn').onclick = () => openWaterGoal(data);
   const setMode = (mode) => { kcalMode = mode; try { localStorage.setItem('cadence_kcal_mode', mode); } catch { /* no storage */ } if (window.sfx) sfx.play('tick'); renderRing(data); renderInsight(data); };
   document.getElementById('modeLeft').onclick = () => setMode('left');
@@ -1100,6 +1121,7 @@ async function loadToday() {
     await importLocalWater().catch(() => {});
     // The last diary this device saw shows at once; the fresh one replaces it a moment later.
     await apiGetSWR(viewDate ? `api/today?date=${encodeURIComponent(viewDate)}` : 'api/today', paintToday);
+    apiGetSWR('api/challenges', paintRetosDot).catch(() => {}); // the dot on the Retos tab
   } catch (err) {
     if (!navigator.onLine) return; // the offline banner already explains it
     showBanner('wger', `No pudimos cargar tu diario: ${err.message}`, 'Reintentar', loadToday);

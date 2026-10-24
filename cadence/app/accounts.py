@@ -96,6 +96,8 @@ class MeOut(BaseModel):
     profile: ProfileOut
     targets: TargetsOut | None = None
     avatar_v: int | None = None  # version of the profile picture (None = no picture); GET /api/avatar?v=...
+    frame: str | None = None  # the profile-picture frame bought with coins and worn now
+    themes: list[str] = []  # colour themes bought with coins (each device picks which one to use)
 
 
 # ------------------------------------------------------------------ helpers
@@ -119,6 +121,8 @@ def me_out(user: store.User) -> MeOut:
                            target_weight_kg=user.target_weight_kg),
         targets=targets,
         avatar_v=store.avatar_version(user.id),
+        frame=store.equipped_items(user.id).get("frame"),
+        themes=sorted(k for k in store.owned_items(user.id) if k.startswith("tema_")),
     )
 
 

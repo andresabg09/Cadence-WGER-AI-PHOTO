@@ -158,6 +158,12 @@ class LevelsOut(BaseModel):
     fibre: LevelOut | None = None  # None: no food has fibre data
 
 
+class AwardBrief(BaseModel):
+    key: str
+    title: str
+    art: str
+
+
 class MealGroup(BaseModel):
     key: str
     label: str
@@ -165,6 +171,7 @@ class MealGroup(BaseModel):
     items: list[MealItem]
     score: ScoreOut | None = None
     levels: LevelsOut | None = None
+    awards: list[AwardBrief] = []
 
 
 class WorkoutOut(BaseModel):
@@ -199,6 +206,7 @@ class TodayResponse(BaseModel):
     water_goal_ml: int = 2000
     water_goal_auto: bool = True
     burn: "BurnOut | None" = None
+    awards_new: list[AwardBrief] = []  # awards earned by this very request (today only): the app celebrates them
 
 
 class WaterAdd(BaseModel):
@@ -370,3 +378,75 @@ class HistoryResponse(BaseModel):
     goal_kcal: float
     days: list[HistoryDay]  # newest first, only days with something
     next_before: str | None = None  # ask again with this to go further back
+
+
+class AwardOut(BaseModel):
+    key: str
+    title: str
+    hint: str
+    art: str
+    category: str  # comida | constancia | agua | movimiento
+    kind: str  # milestone | meal
+    unlocked: bool
+    value: int = 0  # progress towards `target`
+    target: int = 1
+    count: int = 0  # times earned (meal awards can be earned again and again)
+    last_day: str | None = None
+
+
+class AwardsResponse(BaseModel):
+    unlocked: int
+    total: int
+    awards: list[AwardOut]
+    new: list[AwardBrief] = []
+
+
+class ShopItemOut(BaseModel):
+    key: str
+    title: str
+    hint: str
+    price: int
+    slot: str  # theme | frame
+    owned: bool
+    equipped: bool
+
+
+class ChallengeOut(BaseModel):
+    key: str
+    period: str  # day | week
+    title: str
+    hint: str
+    art: str
+    now: int
+    total: int
+    reward: int
+    state: str  # todo | ready | claimed
+    note: str | None = None
+
+
+class ChallengesResponse(BaseModel):
+    coins: int
+    daily: list[ChallengeOut]
+    weekly: list[ChallengeOut]
+    hours_left: int
+    days_left: int
+    claimable: int
+    shop: list[ShopItemOut]
+
+
+class ClaimIn(BaseModel):
+    key: str
+
+
+class ClaimOut(BaseModel):
+    coins: int
+    amount: int
+
+
+class ShopBuyIn(BaseModel):
+    item: str
+
+
+class ShopEquipIn(BaseModel):
+    slot: str
+    item: str | None = None

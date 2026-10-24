@@ -6,6 +6,9 @@ class DetectedComponent(BaseModel):
     # Generic English food name used to query/rank against wger's ingredient
     # DB (language 2). Falls back to `name` when the model doesn't provide it.
     search_name: str | None = None
+    # Other short English names for the same food ("chicken soup" -> "chicken noodle soup"):
+    # wger's catalog often names it differently, so each is searched too.
+    search_alternatives: list[str] = []
     confidence: float | None = None
     # Portion the model sees on the plate. Only a starting point for the
     # quantity stepper - the user always confirms, calories come from wger.

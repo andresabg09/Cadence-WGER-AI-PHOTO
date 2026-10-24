@@ -48,3 +48,16 @@ def test_garbage_images_are_ignored_and_empty_note_clears():
     store.set_note("e2", "hola")
     store.set_note("e2", "   ")
     assert store.get_meta(["e2"])["e2"]["note"] is None
+
+
+def test_food_added_by_hand_joins_the_plate_group(monkeypatch):
+    monkeypatch.setattr(main, "get_wger_client", lambda: OwnPlanWger())
+    http = TestClient(main.app, raise_server_exceptions=False)
+    body = {"plate_id": "g1", "photos": [PNG], "items": [
+        {"entry_id": "g1", "crop": PNG, "photo": 0, "box": [0.1, 0.2, 0.3, 0.4]},
+        {"entry_id": "g2", "crop": None, "photo": None, "box": [0.5, 0.5, 0.1, 0.1]},
+    ]}
+    assert http.post("/api/entry-media", json=body).json() == {"saved": 2}
+    meta = store.get_meta(["g1", "g2"])
+    assert meta["g1"]["plate_key"] == meta["g2"]["plate_key"] == "1-g1:0"
+    assert meta["g2"]["box"] is None  # it is not located in the photo

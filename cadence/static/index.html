@@ -399,10 +399,11 @@ async function openCalendar(selected, today) {
       const info = byDay[iso];
       const future = iso > today;
       const cls = ['cal-cell', iso === selected ? 'selected' : '', iso === today ? 'today' : '', info ? 'has' : '', future ? 'future' : ''].join(' ');
-      const aria = info ? `${day}, racha de ${info.streak} ${info.streak === 1 ? 'día' : 'días'}` : `${day}`;
+      const late = info && info.streak === 0; // entries exist, but all were added after the day: no flame
+      const aria = !info ? `${day}` : late ? `${day}, registrado después, sin racha` : `${day}, racha de ${info.streak} ${info.streak === 1 ? 'día' : 'días'}`;
       cells.push(`<button type="button" class="${cls}" data-date="${iso}" ${future ? 'disabled' : ''} aria-label="${aria}">
         <span class="cal-num">${day}</span>
-        <span class="cal-flame">${info ? `${flameSvg(info.streak)}<b>${info.streak}</b>` : ''}</span>
+        <span class="cal-flame">${!info ? '' : late ? '<i class="cal-late" title="Registrado después: no suma a la racha"></i>' : `${flameSvg(info.streak)}<b>${info.streak}</b>`}</span>
       </button>`);
     }
     const atCurrentMonth = month >= monthKey(today);
@@ -418,7 +419,7 @@ async function openCalendar(selected, today) {
         <span>${flameSvg(1, 12)} 1-2</span><span>${flameSvg(3, 12)} 3-6</span><span>${flameSvg(7, 12)} 7-13</span>
         <span>${flameSvg(14, 12)} 14-29</span><span>${flameSvg(30, 12)} 30+</span>
       </div>
-      <p class="cal-note">El número es tu racha: días seguidos con algo registrado. Si falta un día, vuelve a 1.</p>
+      <p class="cal-note">El número es tu racha: días seguidos en que registraste <strong>ese mismo día</strong>. Si falta un día, vuelve a 1 y subir una foto vieja no la recupera. El punto gris <i class="cal-late"></i> marca un día con registros añadidos después.</p>
       <div class="sheet-actions"><button type="button" class="btn-primary" id="calToday">Ir a hoy</button></div>`;
     sheet.querySelector('#calPrev').addEventListener('click', () => shiftMonth(-1));
     sheet.querySelector('#calNext').addEventListener('click', () => shiftMonth(1));
@@ -697,7 +698,12 @@ loadToday();
 // "Guardado en 10 de octubre": said once, right after saving a plate.
 try {
   const flash = sessionStorage.getItem('cadence_flash');
-  if (flash) { sessionStorage.removeItem('cadence_flash'); showToast(flash, 'ok'); }
+  if (flash) {
+    const kind = sessionStorage.getItem('cadence_flash_kind') || 'ok';
+    sessionStorage.removeItem('cadence_flash');
+    sessionStorage.removeItem('cadence_flash_kind');
+    showToast(flash, kind);
+  }
 } catch { /* no flash */ }
 
 if ('serviceWorker' in navigator) {

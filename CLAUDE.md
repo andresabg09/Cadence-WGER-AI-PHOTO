@@ -261,6 +261,12 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   con su racha (dias seguidos que terminan ese dia; tras un hueco vuelve a 1). Color por racha:
   1-2 ambar, 3-6 naranja, 7-13 rojo, 14-29 magenta con brillo, 30+ violeta con brillo. La racha que
   entra al mes se calcula leyendo hacia atras hasta que se rompe (`streak_by_day` en meals.py).
+  Regla de la racha (25 oct, decision de Andres): subir una foto vieja NO recupera ni extiende la
+  racha. Solo cuenta un dia si algo se registro ESE mismo dia. `entry_meta.logged_on` (store.py)
+  guarda el dia real de registro de cada entrada al confirmar; `counts_for_streak` (meals.py)
+  descarta las que se registraron despues de su fecha (las anteriores a esta regla se aceptan).
+  El calendario marca esos dias con un punto gris (hay datos, sin llama) y al guardar un registro
+  tardio sale el aviso "no suma a tu racha". Tambien rige la racha de la cabecera.
 - **Bloque 3 - Datos personales.** Perfil, Objetivos (Mifflin-St Jeor, guarda goal_* del
   plan), Progreso (racha, peso desde weightentry, logros), Historial.
 - **Bloque 4 - Ajustes y habitos.** Ajustes (hub), Apariencia (toggle ya hecho),

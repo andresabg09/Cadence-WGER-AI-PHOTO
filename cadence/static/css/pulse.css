@@ -556,3 +556,6 @@ button { font-family: inherit; }
 .cal-legend { display: flex; justify-content: space-between; margin: 14px 2px 0; font-size: 10.5px; color: var(--ink-soft); font-weight: 600; }
 .cal-legend span { display: inline-flex; align-items: center; gap: 4px; }
 .cal-note { margin: 10px 0 0; font-size: 11.5px; color: var(--ink-soft); line-height: 1.45; }
+
+.cal-late { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: rgba(127,127,140,0.7); vertical-align: middle; }
+.cal-cell .cal-late { margin-top: 2px; }

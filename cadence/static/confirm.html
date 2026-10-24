@@ -459,7 +459,14 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
     const dayLabel = saved.date
       ? new Date(`${saved.date}T12:00:00`).toLocaleDateString('es', { day: 'numeric', month: 'long' })
       : 'tu diario';
-    try { sessionStorage.setItem('cadence_flash', `Guardado en ${dayLabel}`); } catch { /* no flash */ }
+    // An old photo fills its day but cannot extend (or bring back) a streak: say so, once.
+    const flash = saved.counts_for_streak === false
+      ? `Guardado en ${dayLabel}. Es un registro tardío: no suma a tu racha, que solo cuenta si registras el mismo día.`
+      : `Guardado en ${dayLabel}`;
+    try {
+      sessionStorage.setItem('cadence_flash', flash);
+      sessionStorage.setItem('cadence_flash_kind', saved.counts_for_streak === false ? 'warn' : 'ok');
+    } catch { /* no flash */ }
     window.location.href = saved.date ? `index.html?date=${saved.date}` : 'index.html';
   } catch (err) {
     if (isNetworkFailure(err)) {

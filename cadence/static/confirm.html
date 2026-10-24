@@ -216,7 +216,7 @@ function focusItem(idx, { scroll = false } = {}) {
 async function hydrateThumbs() {
   await Promise.all(state.map(async (item, idx) => {
     if (item.photo == null || !photos[item.photo]) return;
-    if (!item.crop) item.crop = await cropThumb(photos[item.photo], item.box || [0, 0, 1, 1], 140);
+    if (!item.crop) item.crop = await cropThumb(photos[item.photo], item.box || [0, 0, 1, 1]);
     const el = document.querySelector(`.thumb-wrap[data-idx="${idx}"] .thumb-photo`);
     if (el && item.crop) el.style.backgroundImage = `url('${item.crop}')`;
   }));
@@ -446,8 +446,14 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
   try {
     const saved = await apiPost('api/confirm', payload);
     // Each diary entry remembers its own zoomed crop (same order as the items we sent).
-    await rememberThumbs(saved.created, chosen.map((item) => item.crop));
-    try { await rememberPlate(saved.created, chosen, photos); } catch { /* the photo is a nicety */ }
+    // Photos and crops go to the server store; if that fails the plate is already saved in wger,
+    // so keep a copy on this device and the diary moves it up on the next visit.
+    try {
+      await uploadMedia(saved.created, chosen, photos);
+    } catch {
+      await rememberThumbs(saved.created, chosen.map((item) => item.crop));
+      try { await rememberPlate(saved.created, chosen, photos); } catch { /* the photo is a nicety */ }
+    }
     clearScanSession();
     // Open the day the plate was filed under (the photo's day), and say where it went.
     const dayLabel = saved.date

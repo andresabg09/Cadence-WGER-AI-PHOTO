@@ -30,6 +30,16 @@ async function apiPost(path, body, { isFormData = false, timeoutMs = 90000 } = {
   return response.json();
 }
 
+async function apiPut(path, body) {
+  const response = await fetch(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(await safeText(response));
+  return response.json();
+}
+
 async function apiPatch(path, body) {
   const response = await fetch(path, {
     method: 'PATCH',
@@ -145,8 +155,10 @@ async function prepareImage(file, maxDim = 1280) {
       canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       return canvas;
     };
-    const blob = await new Promise((resolve) => draw(maxDim).toBlob(resolve, 'image/jpeg', 0.85));
-    const thumb = draw(800).toDataURL('image/jpeg', 0.75); // also the source for per-ingredient crops
+    const canvas = draw(maxDim);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.88));
+    // Same pixels as the upload: it is the source of every crop and the photo kept with the record.
+    const thumb = canvas.toDataURL('image/jpeg', 0.88);
     return { blob: blob || file, thumb };
   } catch {
     return { blob: file, thumb: null };
@@ -181,7 +193,7 @@ function loadImage(src) {
 }
 
 // Square, zoomed and centred on the ingredient's zone. box = [x, y, w, h] as 0-1 fractions.
-async function cropThumb(src, box, size = 140) {
+async function cropThumb(src, box, size = 220, quality = 0.88) {
   const img = await loadImage(src);
   if (!img) return null;
   const W = img.naturalWidth;
@@ -196,9 +208,13 @@ async function cropThumb(src, box, size = 140) {
   const sx = Math.max(0, Math.min(W - side, cx - side / 2));
   const sy = Math.max(0, Math.min(H - side, cy - side / 2));
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  canvas.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, size, size);
-  return canvas.toDataURL('image/jpeg', 0.8);
+  // Never ask for more pixels than the zone has: upscaling is what made crops look soft.
+  const out = Math.max(64, Math.min(size, Math.round(side)));
+  canvas.width = canvas.height = out;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, sx, sy, side, side, 0, 0, out, out);
+  return canvas.toDataURL('image/jpeg', quality);
 }
 
 // ---- The diary keeps each entry's own crop (localStorage, newest 150) ----
@@ -218,7 +234,58 @@ function rememberThumbs(created, crops) {
   try { localStorage.setItem(THUMBS_KEY, JSON.stringify(map)); } catch { /* storage full or unavailable */ }
 }
 
-// ---- Notes ("observaciones") per diary entry: kept on this device, like the crops ----
+// ---- Photos and notes live on the server (cadence's own store); what is local is only a fallback ----
+// created[i] is the diary entry of chosen[i]. Sends the plate photo(s) and a sharp crop per ingredient.
+async function uploadMedia(created, chosen, photos) {
+  if (!created || !created.length) return;
+  const items = [];
+  for (let i = 0; i < created.length; i += 1) {
+    const item = chosen[i];
+    if (!item) continue;
+    const hasPhoto = item.photo != null && photos[item.photo];
+    const crop = hasPhoto && item.box ? await cropThumb(photos[item.photo], item.box, 420, 0.9) : (item.crop || null);
+    items.push({ entry_id: created[i].diary_entry_id, crop, photo: hasPhoto ? item.photo : null, box: item.box || null });
+  }
+  await apiPost('api/entry-media', { plate_id: created[0].diary_entry_id, photos, items }, { timeoutMs: 120000 });
+}
+
+function forgetLocal(entryId) {
+  const thumbs = readThumbs(); delete thumbs[entryId];
+  const links = readJsonKey(ENTRY_PLATE_KEY); delete links[entryId];
+  try {
+    localStorage.setItem(THUMBS_KEY, JSON.stringify(thumbs));
+    localStorage.setItem(ENTRY_PLATE_KEY, JSON.stringify(links));
+  } catch { /* nothing to free */ }
+  writeNote(entryId, '');
+}
+
+// Entries saved before the server kept extras (or while it was unreachable): move what this
+// device remembers up to the server. Returns true when something moved (the page may refresh).
+async function syncLocalExtras(items) {
+  let moved = false;
+  const notes = readNotes();
+  for (const item of items) {
+    const id = item.diary_entry_id;
+    try {
+      const localNote = notes[id];
+      if (localNote && !item.note) { await apiPut(`api/diary/${id}/note`, { note: localNote }); moved = true; }
+      const crop = readThumbs()[id];
+      const plate = readEntryPlate(id);
+      if ((crop && !item.has_crop) || (plate && !item.plate_key)) {
+        await apiPost('api/entry-media', {
+          plate_id: `legacy-${id}`,
+          photos: plate ? [plate.photo] : [],
+          items: [{ entry_id: id, crop: item.has_crop ? null : crop || null, photo: plate ? 0 : null, box: plate ? plate.box : null }],
+        });
+        moved = true;
+      }
+      if (moved && (localNote || crop || plate)) forgetLocal(id);
+    } catch { /* try again on the next visit */ }
+  }
+  return moved;
+}
+
+// ---- Notes ("observaciones") per diary entry: legacy local copy, moved to the server by syncLocalExtras ----
 const NOTES_KEY = 'cadence_notes';
 
 function readNotes() {

@@ -19,5 +19,21 @@ class Settings(BaseSettings):
     match_candidate_count: int = 3
     default_nutrition_plan_id: int | None = None
 
+    # Meal-slot time windows (24h, local server time) - used to bucket wger
+    # diary entries into desayuno/almuerzo/merienda/cena since wger itself
+    # doesn't tag entries with a meal slot. Adjust to taste.
+    breakfast_start_hour: int = 5
+    lunch_start_hour: int = 11
+    snack_start_hour: int = 15
+    dinner_start_hour: int = 18
+    dinner_end_hour: int = 23
+
+    # Fallback daily goals shown on the dashboard when the active wger
+    # nutrition plan has no goal_* values set.
+    fallback_goal_kcal: float = 2500
+    fallback_goal_protein_g: float = 175
+    fallback_goal_carbs_g: float = 250
+    fallback_goal_fat_g: float = 70
+
 
 settings = Settings()

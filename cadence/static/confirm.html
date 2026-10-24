@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>cadence — Confirmar</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="static/css/pulse.css">
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+<div class="app">
+  <div style="padding:22px 20px 12px;display:flex;align-items:center;gap:12px;">
+    <a href="scan.html" aria-label="Volver" class="icon-btn" style="width:36px;height:36px;border-radius:11px;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
+    </a>
+    <div style="flex:1;">
+      <h1 class="disp" style="margin:0;font-size:17px;font-weight:700;">Confirma tu plato</h1>
+      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:1px;" id="subtitle">✨ cargando…</div>
+    </div>
+  </div>
+
+  <div class="app-content" id="itemsWrap" style="padding-bottom:140px;"></div>
+
+  <div style="position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;background:rgba(15,15,20,0.9);backdrop-filter:blur(16px);border-top:1px solid var(--card-border);padding:14px 20px calc(26px + env(safe-area-inset-bottom));">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+      <span style="font-size:12px;color:var(--ink-soft);font-weight:600;">TOTAL DEL PLATO</span>
+      <span class="disp" id="totalKcal" style="font-size:19px;font-weight:700;">0 kcal</span>
+    </div>
+    <button class="btn-primary" id="confirmBtn">
+      Confirmar y registrar
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+</div>
+
+<script src="static/js/api.js"></script>
+<script src="static/js/theme.js"></script>
+<script>
+const raw = sessionStorage.getItem('cadence_analyze_result');
+if (!raw) {
+  window.location.href = 'scan.html';
+}
+const analyzeResult = JSON.parse(raw || '{"components":[]}');
+
+// Per-component live state: selected candidate id, its kcal/100g, grams.
+const state = analyzeResult.components.map((component) => {
+  const top = component.candidates[0];
+  return {
+    detected_name: component.detected_name,
+    candidates: component.candidates,
+    selectedId: top ? top.id : null,
+    energyPer100g: top ? (top.energy_kcal_100g || 0) : 0,
+    grams: 100,
+  };
+});
+
+document.getElementById('subtitle').textContent = `✨ ${state.length} componente${state.length === 1 ? '' : 's'} identificado${state.length === 1 ? '' : 's'} por IA`;
+
+function itemKcal(item) {
+  return (item.energyPer100g * item.grams) / 100;
+}
+
+function renderTotal() {
+  const total = state.reduce((sum, item) => sum + itemKcal(item), 0);
+  document.getElementById('totalKcal').textContent = `${Math.round(total)} kcal`;
+}
+
+async function selectCandidate(idx, candidateId) {
+  const item = state[idx];
+  item.selectedId = candidateId;
+  const candidate = item.candidates.find((c) => c.id === candidateId);
+  if (candidate.energy_kcal_100g != null) {
+    item.energyPer100g = candidate.energy_kcal_100g;
+  } else {
+    try {
+      const detail = await apiGet(`api/ingredient/${candidateId}`);
+      candidate.energy_kcal_100g = detail.energy_kcal_100g;
+      item.energyPer100g = detail.energy_kcal_100g;
+    } catch (err) {
+      showToast(`No se pudo cargar info del alimento: ${err.message}`);
+    }
+  }
+  renderItems();
+}
+
+function renderItems() {
+  const wrap = document.getElementById('itemsWrap');
+  wrap.innerHTML = '';
+
+  if (state.length === 0) {
+    wrap.innerHTML = `
+      <div class="empty-state">
+        <span style="font-size:36px;">🤔</span>
+        <h3 class="disp" style="margin:14px 0 6px;font-size:15.5px;font-weight:700;">No logramos identificar el plato</h3>
+        <p style="margin:0 0 18px;font-size:12px;color:var(--ink-soft);line-height:1.5;">Prueba de nuevo con otro ángulo o mejor luz.</p>
+        <a href="scan.html" class="btn-primary" style="display:inline-flex;">📸 Tomar otra foto</a>
+      </div>`;
+    return;
+  }
+
+  state.forEach((item, idx) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.display = 'flex';
+    card.style.flexDirection = 'column';
+    card.style.gap = '0';
+
+    const pills = item.candidates.map((c) => {
+      const active = c.id === item.selectedId;
+      return `<button data-idx="${idx}" data-cid="${c.id}" class="candidate-pill" style="font-size:10.5px;border-radius:100px;padding:4px 9px;font-weight:700;cursor:pointer;border:1px solid ${active ? 'rgba(45,212,255,0.55)' : 'var(--card-border)'};background:${active ? 'linear-gradient(135deg, rgba(124,92,255,0.16), rgba(45,212,255,0.1))' : 'rgba(255,255,255,0.04)'};color:${active ? 'var(--accent-to)' : 'var(--ink-soft)'};">${active ? '✓ ' : ''}${c.name} ${Math.round(c.score * 100)}%</button>`;
+    }).join('');
+
+    card.innerHTML = `
+      <div style="display:flex;gap:11px;">
+        <div style="width:52px;height:52px;border-radius:14px;background:linear-gradient(140deg,#7C5CFF,#2DD4FF);flex-shrink:0;opacity:0.35;"></div>
+        <div style="flex:1;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:14px;font-weight:700;">${item.detected_name}</span>
+            <span class="disp" id="kcal-${idx}" style="font-size:13px;font-weight:700;color:var(--accent-to);">${Math.round(itemKcal(item))} kcal</span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;">${pills || '<span style="font-size:11px;color:var(--ink-soft);">Sin coincidencias en wger — búscalo manualmente.</span>'}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:11px;padding-top:11px;border-top:1px solid var(--card-border);">
+        <span style="font-size:11.5px;color:var(--ink-soft);font-weight:600;">Cantidad</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button data-idx="${idx}" data-delta="-10" class="gram-btn" style="width:26px;height:26px;border-radius:9px;border:1px solid var(--card-border);background:var(--bg);color:var(--ink);font-weight:700;cursor:pointer;">−</button>
+          <span class="mono" id="grams-${idx}" style="font-size:13px;font-weight:700;min-width:44px;text-align:center;">${item.grams} g</span>
+          <button data-idx="${idx}" data-delta="10" class="gram-btn" style="width:26px;height:26px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));color:#fff;font-weight:700;cursor:pointer;">+</button>
+        </div>
+      </div>
+    `;
+    wrap.appendChild(card);
+  });
+
+  wrap.querySelectorAll('.candidate-pill').forEach((btn) => {
+    btn.addEventListener('click', () => selectCandidate(Number(btn.dataset.idx), Number(btn.dataset.cid)));
+  });
+  wrap.querySelectorAll('.gram-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.idx);
+      const delta = Number(btn.dataset.delta);
+      state[idx].grams = Math.max(10, state[idx].grams + delta);
+      document.getElementById(`grams-${idx}`).textContent = `${state[idx].grams} g`;
+      document.getElementById(`kcal-${idx}`).textContent = `${Math.round(itemKcal(state[idx]))} kcal`;
+      renderTotal();
+    });
+  });
+
+  renderTotal();
+}
+
+document.getElementById('confirmBtn').addEventListener('click', async () => {
+  const items = state
+    .filter((item) => item.selectedId)
+    .map((item) => ({
+      ingredient_id: item.selectedId,
+      amount_grams: item.grams,
+      detected_name: item.detected_name,
+    }));
+
+  if (items.length === 0) {
+    showToast('No hay nada que confirmar todavía');
+    return;
+  }
+
+  const btn = document.getElementById('confirmBtn');
+  btn.disabled = true;
+  btn.textContent = 'Guardando…';
+
+  try {
+    await apiPost('api/confirm', { items });
+    sessionStorage.removeItem('cadence_analyze_result');
+    window.location.href = 'index.html';
+  } catch (err) {
+    showToast(`No se pudo guardar en wger: ${err.message}`);
+    btn.disabled = false;
+    btn.innerHTML = 'Confirmar y registrar';
+  }
+});
+
+renderItems();
+</script>
+</body>
+</html>

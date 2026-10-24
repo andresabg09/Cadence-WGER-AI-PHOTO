@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>cadence — Escanear</title>
+<meta name="theme-color" content="#05050A">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="static/css/pulse.css">
+<style>
+  body { background: #05050A; }
+  .scan-root { width: 100%; max-width: 480px; margin: 0 auto; min-height: 100dvh; background: #05050A; color: #fff; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+  video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .veil { position: absolute; inset: 0; background: radial-gradient(circle at 50% 42%, transparent 30%, rgba(5,5,10,0.55) 100%); pointer-events: none; }
+  @keyframes scanline { 0% { top: 14%; opacity: 0; } 10% { opacity: 1; } 50% { top: 82%; opacity: 1; } 90% { opacity: 1; } 100% { top: 14%; opacity: 0; } }
+  .scanline { animation: scanline 2.8s ease-in-out infinite; }
+  @keyframes chipIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .chip-in { animation: chipIn 0.4s ease-out both; }
+  @keyframes shutterPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0), 0 0 0 6px rgba(255,255,255,0.12); } 50% { box-shadow: 0 0 0 0 rgba(255,255,255,0), 0 0 0 10px rgba(255,255,255,0.22); } }
+  .shutter { animation: shutterPulse 2s ease-in-out infinite; }
+  .shutter:disabled { animation: none; opacity: 0.5; }
+</style>
+</head>
+<body>
+<div class="scan-root">
+  <video id="video" autoplay playsinline muted></video>
+  <div class="veil"></div>
+
+  <!-- Scan brackets -->
+  <div style="position:absolute;left:32px;right:32px;top:180px;height:300px;">
+    <div style="position:absolute;left:0;top:0;width:34px;height:34px;border-top:3px solid var(--accent-to);border-left:3px solid var(--accent-to);border-radius:10px 0 0 0;"></div>
+    <div style="position:absolute;right:0;top:0;width:34px;height:34px;border-top:3px solid var(--accent-to);border-right:3px solid var(--accent-to);border-radius:0 10px 0 0;"></div>
+    <div style="position:absolute;left:0;bottom:0;width:34px;height:34px;border-bottom:3px solid var(--accent-to);border-left:3px solid var(--accent-to);border-radius:0 0 0 10px;"></div>
+    <div style="position:absolute;right:0;bottom:0;width:34px;height:34px;border-bottom:3px solid var(--accent-to);border-right:3px solid var(--accent-to);border-radius:0 0 10px 0;"></div>
+    <div class="scanline" id="scanline" style="position:absolute;left:6px;right:6px;height:2px;background:linear-gradient(90deg,transparent,var(--accent-to),transparent);box-shadow:0 0 14px var(--accent-to);display:none;"></div>
+  </div>
+
+  <!-- Top bar -->
+  <div style="position:relative;padding:24px 20px 0;display:flex;align-items:center;justify-content:space-between;z-index:2;">
+    <a href="index.html" aria-label="Cerrar" style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.12);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+    </a>
+    <div id="angleBadge" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:100px;padding:7px 13px;">
+      <span id="angleDot" style="width:7px;height:7px;border-radius:50%;background:#8B8B96;"></span>
+      <span class="mono" id="angleText" style="font-size:12px;font-weight:700;">Activa el sensor</span>
+    </div>
+    <button id="flashBtn" aria-label="Flash" style="width:38px;height:38px;border-radius:50%;border:none;background:rgba(255,255,255,0.12);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+
+  <!-- Toggle Foto / Código de barras -->
+  <div style="position:relative;z-index:2;margin:14px auto 0;display:flex;background:rgba(10,10,15,0.65);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.12);border-radius:100px;padding:4px;width:fit-content;">
+    <button id="modePhoto" style="border:none;border-radius:100px;padding:7px 16px;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));color:#fff;font-size:12px;font-weight:700;cursor:pointer;">📷 Foto</button>
+    <button id="modeBarcode" style="border:none;border-radius:100px;padding:7px 16px;background:transparent;color:rgba(255,255,255,0.65);font-size:12px;font-weight:700;cursor:pointer;">▦ Código</button>
+  </div>
+
+  <div id="liveChips" style="position:relative;z-index:2;margin-top:auto;padding:0 20px 14px;display:flex;flex-direction:column;gap:8px;"></div>
+
+  <div style="position:relative;z-index:2;padding:0 24px 18px;text-align:center;">
+    <span class="disp" id="caption" style="font-size:13.5px;font-weight:600;color:rgba(255,255,255,0.85);">Encuadra tu plato a ~45°</span>
+  </div>
+
+  <div style="position:relative;z-index:2;padding:10px 0 calc(38px + env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:center;gap:46px;">
+    <label style="width:44px;height:44px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="3" stroke="#fff" stroke-width="1.6"/><circle cx="8.5" cy="10" r="1.6" fill="#fff"/><path d="M3 16l5-4 4 3 4-5 5 6" stroke="#fff" stroke-width="1.5"/></svg>
+      <input type="file" accept="image/*" id="fileInput" style="display:none;">
+    </label>
+    <button id="captureBtn" class="shutter" aria-label="Capturar" style="width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));cursor:pointer;"></button>
+    <button id="flipBtn" aria-label="Girar cámara" style="width:44px;height:44px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 9a8 8 0 0113-5.3L19 6M20 15a8 8 0 01-13 5.3L5 18" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/><path d="M17 3v4h-4M7 21v-4h4" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+</div>
+
+<script src="static/js/api.js"></script>
+<script>
+const TARGET_MIN = 35, TARGET_MAX = 55;
+let lastAngleOk = false;
+let facingMode = 'environment';
+let stream = null;
+
+const video = document.getElementById('video');
+const angleDot = document.getElementById('angleDot');
+const angleText = document.getElementById('angleText');
+const caption = document.getElementById('caption');
+const captureBtn = document.getElementById('captureBtn');
+
+async function initCamera() {
+  if (stream) stream.getTracks().forEach((t) => t.stop());
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false });
+    video.srcObject = stream;
+  } catch (e) {
+    caption.textContent = 'No se pudo acceder a la cámara: ' + e.message;
+  }
+}
+
+function handleOrientation(event) {
+  const beta = event.beta;
+  if (beta === null || beta === undefined) return;
+  const tilt = Math.abs(90 - Math.abs(beta));
+  const ok = tilt >= TARGET_MIN && tilt <= TARGET_MAX;
+  lastAngleOk = ok;
+  angleDot.style.background = ok ? 'var(--good)' : '#FF8A5B';
+  if (ok) {
+    angleText.textContent = '✓ Ángulo correcto';
+    angleText.style.color = 'var(--good)';
+  } else if (tilt < TARGET_MIN) {
+    angleText.textContent = 'Inclina más el teléfono';
+    angleText.style.color = '#fff';
+  } else {
+    angleText.textContent = 'Baja un poco el teléfono';
+    angleText.style.color = '#fff';
+  }
+}
+
+async function initOrientation() {
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const permission = await DeviceOrientationEvent.requestPermission();
+      if (permission !== 'granted') return;
+    } catch {
+      return;
+    }
+  }
+  window.addEventListener('deviceorientation', handleOrientation);
+}
+
+document.getElementById('flipBtn').addEventListener('click', () => {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  initCamera();
+});
+
+document.getElementById('modeBarcode').addEventListener('click', () => showToast('Escaneo por código de barras: próximamente', 'warn'));
+
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) runAnalysis(file);
+});
+
+captureBtn.addEventListener('click', () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  canvas.toBlob((blob) => runAnalysis(blob), 'image/jpeg', 0.92);
+});
+
+async function runAnalysis(blob) {
+  captureBtn.disabled = true;
+  caption.textContent = 'Detectando componentes del plato…';
+  document.getElementById('scanline').style.display = 'block';
+
+  const formData = new FormData();
+  formData.append('image', blob, 'plate.jpg');
+
+  try {
+    const data = await apiPost('api/analyze', formData, { isFormData: true });
+    renderLiveChips(data.components);
+    sessionStorage.setItem('cadence_analyze_result', JSON.stringify(data));
+    setTimeout(() => { window.location.href = 'confirm.html'; }, 600);
+  } catch (err) {
+    captureBtn.disabled = false;
+    document.getElementById('scanline').style.display = 'none';
+    caption.textContent = 'No reconocimos el plato — intenta de nuevo';
+    showToast(err.message || 'No se pudo analizar la foto');
+  }
+}
+
+function renderLiveChips(components) {
+  const wrap = document.getElementById('liveChips');
+  wrap.innerHTML = '';
+  components.forEach((c, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'chip-in';
+    chip.style.cssText = `animation-delay:${i * 0.12}s;background:rgba(10,10,15,0.75);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.12);border-radius:100px;padding:8px 14px;display:flex;align-items:center;gap:7px;width:fit-content;`;
+    const confidence = c.confidence != null ? Math.round(c.confidence * 100) : null;
+    chip.innerHTML = `<span style="font-size:12.5px;font-weight:700;">${c.detected_name}</span>${confidence !== null ? `<span class="mono" style="font-size:11px;color:var(--accent-to);font-weight:700;">${confidence}%</span>` : ''}`;
+    wrap.appendChild(chip);
+  });
+}
+
+initCamera();
+document.body.addEventListener('click', initOrientation, { once: true });
+</script>
+</body>
+</html>

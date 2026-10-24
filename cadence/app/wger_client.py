@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import httpx
 
@@ -58,6 +58,37 @@ class WgerClient:
         # recently created plan (highest id) is used as the logging target.
         return max(results, key=lambda p: p["id"])["id"]
 
+    def get_nutrition_plan(self, plan_id: int) -> dict:
+        response = self._client.get(f"/api/v2/nutritionplan/{plan_id}/", params={"format": "json"})
+        response.raise_for_status()
+        return response.json()
+
+    def get_diary_entries(self, plan_id: int, date_from: date, date_to: date) -> list[dict]:
+        """Entries for `plan_id` whose date falls in [date_from, date_to] (inclusive).
+
+        wger's /nutritiondiary/ endpoint filters by exact "datetime" range via
+        datetime__gte / datetime__lte - TODO verify these exact filter param
+        names against the real instance (same caveat as the rest of this
+        client: implemented per the known v2 schema, not yet tested live).
+        """
+        response = self._client.get(
+            "/api/v2/nutritiondiary/",
+            params={
+                "plan": plan_id,
+                "datetime__gte": f"{date_from.isoformat()}T00:00:00",
+                "datetime__lte": f"{date_to.isoformat()}T23:59:59",
+                "format": "json",
+                "limit": 200,
+            },
+        )
+        response.raise_for_status()
+        return response.json().get("results", [])
+
+    def get_ingredient(self, ingredient_id: int) -> dict:
+        response = self._client.get(f"/api/v2/ingredient/{ingredient_id}/", params={"format": "json"})
+        response.raise_for_status()
+        return response.json()
+
     def log_diary_entry(
         self,
         plan_id: int,
@@ -75,6 +106,11 @@ class WgerClient:
         if response.status_code >= 400:
             raise WgerError(f"wger rechazo el registro de comida: {response.status_code} {response.text}")
         return response.json()["id"]
+
+    def delete_diary_entry(self, entry_id: int) -> None:
+        response = self._client.delete(f"/api/v2/nutritiondiary/{entry_id}/")
+        if response.status_code not in (200, 202, 204):
+            raise WgerError(f"wger rechazo el borrado del registro: {response.status_code} {response.text}")
 
     def close(self) -> None:
         self._client.close()

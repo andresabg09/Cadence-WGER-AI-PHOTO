@@ -70,6 +70,25 @@ Responde UNICAMENTE con un JSON array, sin texto adicional:
 """
 
 
+_IDEAS_PROMPT = """
+Eres un asistente practico de comidas para una persona en Panama/Latinoamerica. Sugiere {count} ideas de {meal}
+sencillas, con ingredientes comunes y faciles de conseguir. La persona aun puede comer unas {kcal} kcal y unos {protein} g
+de proteina hoy: usa eso solo como guia para elegir porciones razonables (comidas ligeras si queda poco, completas si queda mucho).
+
+Reglas estrictas:
+- NO escribas calorias, macros ni cantidades nutricionales en la respuesta. Solo nombres de platos, ingredientes y gramos.
+- Cada idea lleva de 2 a 5 ingredientes, cada uno con su peso aproximado en gramos (entero) tal como se come.
+- "name" de la idea y de cada ingrediente en espanol, cortos. "search_name": el ingrediente como nombre generico corto en
+  ingles y TAL COMO SE COME (cooked/grilled/boiled): "plain yogurt", "cooked oatmeal", "banana".
+  "search_alternatives": hasta 2 nombres alternativos en ingles.
+- "tag": una sola palabra entre "Rapida", "Ligera", "Completa", "Alta en proteina" (o null).
+- Las ideas deben ser distintas entre si. Evita lo que ya comio hoy: {eaten}.
+{liked}
+Responde UNICAMENTE con un JSON array, sin texto adicional:
+[{{"name": "Yogur con avena y banano", "tag": "Rapida", "items": [{{"name": "yogur natural", "search_name": "plain yogurt", "search_alternatives": ["yogurt"], "grams": 200}}, {{"name": "avena cocida", "search_name": "cooked oatmeal", "search_alternatives": [], "grams": 150}}]}}]
+"""
+
+
 class GeminiVisionClient:
     def __init__(self, api_key: str, model: str):
         self._client = genai.Client(api_key=api_key)
@@ -85,6 +104,14 @@ class GeminiVisionClient:
         )
         return _parse_components(response.text or "")
 
+
+    def suggest_meals(self, *, meal: str, kcal_left: int, protein_left: int, eaten: list[str], liked: list[str], count: int = 4) -> list[dict]:
+        """Meal ideas as names, ingredients and grams. The calories are looked up in wger afterwards, never asked of the model."""
+        prompt = _IDEAS_PROMPT.format(
+            count=count, meal=meal, kcal=kcal_left, protein=protein_left, eaten=", ".join(eaten[:12]) or "nada todavia",
+            liked=f"Cosas que esta persona come seguido (puedes inspirarte, sin repetirlas igual): {', '.join(liked[:10])}." if liked else "")
+        response = self._client.models.generate_content(model=self._model, contents=[prompt])
+        return _parse_ideas(response.text or "[]")
 
     def identify_from_audio(self, audio_bytes: bytes, mime_type: str) -> list[DetectedComponent]:
         response = self._client.models.generate_content(
@@ -111,6 +138,31 @@ def _parse_components(raw_text: str) -> list[DetectedComponent]:
         )
         for item in data
     ]
+
+
+TAGS = {"rapida": "Rápida", "ligera": "Ligera", "completa": "Completa", "alta en proteina": "Alta en proteína"}
+
+
+def _parse_ideas(raw_text: str) -> list[dict]:
+    match = re.search(r"\[.*\]", raw_text, re.DOTALL)
+    try:
+        data = json.loads(match.group(0) if match else raw_text)
+    except ValueError:
+        return []
+    ideas = []
+    for item in data if isinstance(data, list) else []:
+        if not isinstance(item, dict) or not str(item.get("name") or "").strip():
+            continue
+        items = []
+        for part in item.get("items") or []:
+            grams = _sane_grams(part.get("grams")) if isinstance(part, dict) else None
+            if grams and str(part.get("name") or "").strip():
+                items.append({"name": str(part["name"]).strip()[:60], "search_name": (part.get("search_name") or "").strip() or None,
+                              "search_alternatives": _alternatives(part.get("search_alternatives")), "grams": grams})
+        if len(items) >= 2:
+            tag = TAGS.get(re.sub(r"\s+", " ", str(item.get("tag") or "").lower().replace("á", "a").replace("í", "i")).strip())
+            ideas.append({"name": str(item["name"]).strip()[:70], "tag": tag, "items": items[:5]})
+    return ideas[:6]
 
 
 def _alternatives(raw) -> list[str]:

@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="cadence">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>cadence · Ideas</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
+<link rel="stylesheet" href="static/css/pulse.css">
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body class="with-shell" data-page="ideas">
+<div class="app">
+  <div class="page-head" style="padding:22px 20px 12px;display:flex;align-items:center;gap:12px;">
+    <a href="index.html" aria-label="Volver" class="icon-btn" style="width:44px;height:44px;border-radius:13px;flex-shrink:0;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
+    </a>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:10.5px;color:var(--ink-soft);font-weight:700;letter-spacing:.06em;">PARA COMPLETAR TU DÍA</div>
+      <h1 class="disp" style="margin:0;font-size:20px;font-weight:700;">Ideas de comidas</h1>
+    </div>
+  </div>
+  <div class="app-content progress-grid" style="padding-bottom:60px;">
+    <div class="col">
+      <div class="card id-left" id="leftCard"><div class="skeleton" style="height:96px;"></div></div>
+      <div class="id-meals" id="mealChips" role="tablist" aria-label="Comida"></div>
+      <div class="card" id="favCard" style="display:none;">
+        <div class="card-head"><b>Repite una comida</b><span class="when">de tu historial</span></div>
+        <div class="id-fav-row" id="favRow"></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card" id="ideasCard"><div class="skeleton" style="height:260px;"></div></div>
+      <div class="rule-note"><span>✓</span><span>La IA solo propone nombres de platos e ingredientes. Las calorías salen siempre de la base de alimentos, como con una foto.</span></div>
+    </div>
+  </div>
+</div>
+
+<script src="static/js/api.js"></script>
+<script src="static/js/bits.js"></script>
+<script src="static/js/sfx.js"></script>
+<script src="static/js/theme.js"></script>
+<script src="static/js/shell.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const MEALS = [['desayuno', 'Desayuno'], ['almuerzo', 'Almuerzo'], ['merienda', 'Merienda'], ['cena', 'Cena']];
+const LABEL = Object.fromEntries(MEALS);
+const params = new URLSearchParams(location.search);
+let meal = params.get('meal');
+let left = { kcal: 0, protein: 0 };
+let loadSeq = 0;
+
+function tile(name, size) {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  const initial = bits.esc((name.trim()[0] || '?').toUpperCase());
+  return `<span class="id-tile" style="width:${size}px;height:${size}px;background:linear-gradient(135deg,hsl(${h} 55% 30%),hsl(${(h + 50) % 360} 60% 45%));">${initial}</span>`;
+}
+
+function paintLeft(d) {
+  left = { kcal: d.kcal_left, protein: d.protein_left };
+  const inner = `<b class="mono" style="font-size:15px;">${d.kcal_left}</b><span style="font-size:9.5px;color:var(--ink-soft);">kcal</span>`;
+  $('leftCard').innerHTML = d.done
+    ? `<div class="id-left-in">${bits.ring(76, 100, '<span style="font-size:24px;">✓</span>', 7)}<div><div class="md-label">TU DÍA</div><div class="md-big disp" style="font-size:22px;">¡Meta cumplida!</div><div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">Ya llegaste a tus calorías de hoy. No hace falta comer más.</div></div></div>`
+    : `<div class="id-left-in">${bits.ring(76, 100, inner, 7)}<div><div class="md-label">TE FALTAN</div><div class="md-big disp" style="font-size:22px;">${d.kcal_left} kcal · ${d.protein_left} g proteína</div><div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">Ideas para ${LABEL[d.meal] ? LABEL[d.meal].toLowerCase() : 'ahora'}, según lo que te queda de hoy.</div></div></div>`;
+}
+
+function paintMeals() {
+  $('mealChips').innerHTML = MEALS.map(([k, l]) => `<button type="button" role="tab" class="chip-soft${k === meal ? ' active' : ''}" aria-selected="${k === meal}" data-meal="${k}">${l}</button>`).join('');
+  $('mealChips').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.meal === meal) return;
+    meal = b.dataset.meal;
+    if (window.sfx) sfx.play('pick');
+    paintMeals();
+    loadIdeas(false);
+  }));
+}
+
+function itemsLine(items) { return items.map((i) => `${bits.esc(i.name)} ${Math.round(i.grams)} g`).join(' · '); }
+
+function paintFavorites(list) {
+  $('favCard').style.display = list.length ? '' : 'none';
+  $('favRow').innerHTML = list.map((f, idx) => {
+    const photo = f.photo
+      ? `<span class="id-photo" style="background-image:url('${f.photo}')"><em class="id-own">TU FOTO</em></span>`
+      : tile(f.items[0].name, 112).replace('class="id-tile"', 'class="id-tile id-photo"');
+    return `<div class="id-fav"><div class="id-fav-pic">${photo}</div>
+      <div class="id-fav-name">${bits.esc(f.items.slice(0, 2).map((i) => i.name).join(' + '))}</div>
+      <div class="id-sub mono">${f.kcal} kcal · ${f.times} ${f.times === 1 ? 'vez' : 'veces'}</div>
+      <button type="button" class="id-add" data-fav="${idx}">Repetir</button></div>`;
+  }).join('');
+  $('favRow').querySelectorAll('[data-fav]').forEach((b) => b.addEventListener('click', () => add(b, list[+b.dataset.fav].items, list[+b.dataset.fav].kcal, list[+b.dataset.fav].protein_g)));
+}
+
+function paintIdeas(d) {
+  if (d.done) { $('ideasCard').innerHTML = '<p class="id-empty">Hoy ya cubriste tus calorías. Mañana habrá ideas nuevas.</p>'; return; }
+  if (!d.ideas.length) {
+    $('ideasCard').innerHTML = `<p class="id-empty">No encontré ideas que pueda calcular con tu base de alimentos.</p><button type="button" class="btn-secondary" id="again">Probar de nuevo</button>`;
+    $('again').addEventListener('click', () => loadIdeas(true));
+    return;
+  }
+  $('ideasCard').innerHTML = `<div class="card-head"><b>Ideas para ti</b><button type="button" class="link-btn" id="again">Otras ideas</button></div>` + d.ideas.map((idea, idx) => {
+    const more = idea.protein_g >= 15 ? `<span class="id-tag good">+${Math.round(idea.protein_g)} g proteína</span>` : '';
+    const tag = idea.tag ? `<span class="id-tag">${bits.esc(idea.tag)}</span>` : '';
+    return `<div class="id-idea">${tile(idea.name, 64)}<div class="id-main"><div class="id-name">${bits.esc(idea.name)}</div>
+      <div class="id-sub">${itemsLine(idea.items)}</div>
+      <div class="id-meta"><span class="mono">${idea.kcal} kcal</span>${tag}${more}</div></div>
+      <button type="button" class="id-add" data-idea="${idx}">Agregar</button></div>`;
+  }).join('');
+  $('again').addEventListener('click', () => loadIdeas(true));
+  $('ideasCard').querySelectorAll('[data-idea]').forEach((b) => b.addEventListener('click', () => { const i = d.ideas[+b.dataset.idea]; add(b, i.items, i.kcal, i.protein_g); }));
+}
+
+async function add(btn, items, kcal, protein) {
+  btn.disabled = true;
+  try {
+    await apiPost('api/confirm', { meal, items: items.map((i) => ({ ingredient_id: i.ingredient_id, amount_grams: i.grams })) });
+    swrClear();
+    if (window.sfx) sfx.play('save');
+    btn.textContent = 'Agregado ✓';
+    btn.classList.add('done');
+    left = { kcal: Math.max(0, left.kcal - kcal), protein: Math.max(0, left.protein - protein) };
+    showToast(`Agregado a ${LABEL[meal] || 'tu día'}`, 'ok');
+  } catch (err) { showToast(err.message); btn.disabled = false; }
+}
+
+async function loadIdeas(refresh) {
+  const seq = ++loadSeq;
+  $('ideasCard').innerHTML = '<div class="id-thinking"><span class="spin"></span><span>Pensando ideas para ti…</span></div>';
+  try {
+    const d = await apiGet(`api/ideas?meal=${meal}${refresh ? '&refresh=true' : ''}`);
+    if (seq !== loadSeq) return;
+    paintLeft(d);
+    paintIdeas(d);
+  } catch (err) {
+    if (seq !== loadSeq) return;
+    $('ideasCard').innerHTML = `<p class="id-empty" style="color:var(--bad);">${bits.esc(err.message)}</p><button type="button" class="btn-secondary" id="again">Reintentar</button>`;
+    $('again').addEventListener('click', () => loadIdeas(false));
+  }
+}
+
+(async function start() {
+  if (!MEALS.some(([k]) => k === meal)) {
+    try { const now = await apiGet('api/meal-now'); meal = MEALS.some(([k]) => k === now.meal) ? now.meal : 'cena'; } catch { meal = 'almuerzo'; }
+  }
+  paintMeals();
+  apiGet('api/favorites').then(paintFavorites).catch(() => {});
+  loadIdeas(false);
+})();
+</script>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

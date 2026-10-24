@@ -371,9 +371,16 @@ fotos de stock, tienda de monedas con dinero.
 - **Bloque 11 - Entrenamientos con buscador (HECHO, 25 oct 2026).** `nutrition.ACTIVITIES` (34 actividades con MET del Compendio; las claves antiguas siguen valiendo), `GET /api/activities` (kcal por minuto con tu peso), `POST/PATCH/DELETE /api/workouts` (hora `at` y edicion que recalcula), `static/js/workouts.js` (buscador, hoja con duraciones 15/30/60/otro, tocar un entrenamiento lo edita). Texto original del plan: Mas actividades (tabla MET ampliada en `nutrition.py`), lista con busqueda e
   iconos, hoja con kcal estimadas y kcal/min (MET x peso), duraciones 15/30/60/otra, hora y nota, editar y borrar. Sigue siendo
   estimacion y no cambia la meta. Independiente. Tamano S-M.
-- **Bloque 12 - Ideas de comidas y favoritas.** "Repetir una comida" desde tu historial (con tus propias fotos) y "Ideas para
-  completar tu dia" segun las kcal y proteina que faltan: Gemini solo propone NOMBRES de platos/ingredientes, y las calorias salen de
-  wger como en una foto (cuenta para el limite diario de IA). Sin fotos de stock (no hay licencia). Depende del 8. Tamano M.
+- **Bloque 12 - Ideas de comidas y favoritas (HECHO, 25 oct 2026).** `ideas.html` (ruta `/ideas.html`, item "Ideas de comidas" de la
+  barra lateral y tarjeta "Ideas para completar tu dia" en Inicio solo hoy y con mas de 150 kcal por comer). `GET /api/favorites`
+  (`_favorites` en main.py): agrupa los ultimos 60 dias por (dia, comida), la "receta" = conjunto de ingredientes; top 8 por veces y
+  recencia, con la foto del plato de la persona si la hay (chip "TU FOTO"); "Repetir" = `POST /api/confirm` con la comida elegida.
+  `GET /api/ideas?meal=&refresh=`: kcal/proteina que faltan = meta - lo comido hoy; si faltan < 120 kcal responde `done` sin llamar a
+  Gemini. `vision.suggest_meals` (prompt: SOLO nombres y gramos, nunca calorias) -> cada ingrediente se busca con `match_components`
+  (descarta los de parecido < 0.55; una idea con < 2 ingredientes resueltos se descarta) -> kcal/proteina de wger/alimentos propios ->
+  ordenadas por cercania a lo que falta. Cuenta para `ANALYZE_DAILY_LIMIT` (admin libre); cache 30 min por persona/dia/comida/tramo.
+  Sin fotos de stock: mosaico de color con la inicial. Fotos para las ideas ("comunidad"): idea futura, NO hecha. `apiGet` ahora usa
+  `cache: 'no-store'` (al volver con Atras el navegador repetia la respuesta vieja del diario). Sin verificar con Gemini real.
 - Orden sugerido: 8, 9, 11, 10, 12. Cada bloque se publica completo y por separado.
 
 ## Velocidad (25 oct 2026; mantener)

@@ -71,6 +71,11 @@ from .schemas import (
     ConfirmedEntry,
     ConfirmRequest,
     ConfirmResponse,
+    DetectedComponent,
+    FavoriteItem,
+    FavoriteOut,
+    IdeaOut,
+    IdeasResponse,
     DiaryUpdate,
     FoodIn,
     IngredientDetail,
@@ -390,6 +395,11 @@ def reminders_page():
 @app.get("/voice.html")
 def voice_page():
     return FileResponse("static/voice.html")
+
+
+@app.get("/ideas.html")
+def ideas_page():
+    return FileResponse("static/ideas.html")
 
 
 @app.get("/challenges.html")
@@ -1523,5 +1533,175 @@ def confirm(request: ConfirmRequest, user: store.User = Depends(current_user)):
         except Exception:  # noqa: BLE001 - the plate is already in wger; only the streak bookkeeping is lost
             logger.exception("no se pudo anotar el dia de registro")
         return ConfirmResponse(created=created, date=entry_day.isoformat(), counts_for_streak=entry_day >= real_today)
+    finally:
+        wger.close()
+
+
+# ------------------------------------------------------------------ favorites and ideas for the rest of the day
+FAVORITE_DAYS = 60
+IDEAS_TTL = 1800
+IDEAS_MIN_KCAL = 120  # below this left in the day there is nothing to complete
+_ideas_cache: dict[tuple, tuple[float, IdeasResponse]] = {}
+
+
+def _favorites(wger: WgerClient, user: store.User, limit: int = 8) -> list[FavoriteOut]:
+    """Meals this person repeats: the same set of foods logged on several days, most repeated first."""
+    now = local_now()
+    start = datetime.combine(now.date() - timedelta(days=FAVORITE_DAYS), time.min, tzinfo=now.tzinfo)
+    entries = user_entries(wger, user, plan_for(wger, user, create=False), start, datetime.combine(now.date(), time.max, tzinfo=now.tzinfo))
+    groups: dict[tuple, list[dict]] = {}
+    for entry in entries:
+        day = entry_date(entry)
+        if day is not None:
+            groups.setdefault((day, meal_key_for_entry(entry)), []).append(entry)
+    seen: dict[frozenset, dict] = {}
+    for (day, meal), members in sorted(groups.items(), key=lambda kv: kv[0][0]):
+        key = frozenset(e["ingredient"] for e in members)
+        found = seen.setdefault(key, {"times": 0})
+        found.update(times=found["times"] + 1, day=day, meal=meal, members=members)  # the later day wins
+    ranked = sorted(seen.items(), key=lambda kv: (-kv[1]["times"], -kv[1]["day"].toordinal()))[: limit * 2]
+
+    infos: dict[int, dict] = {}
+
+    def info(ingredient_id: int) -> dict:
+        if ingredient_id not in infos:
+            try:
+                infos[ingredient_id] = ingredient_info(wger, user, ingredient_id)
+            except Exception:  # noqa: BLE001 - one unreadable food only drops that meal
+                infos[ingredient_id] = {}
+        return infos[ingredient_id]
+
+    wanted = {i for key, _ in ranked for i in key}
+    if len(wanted) > 1:
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            list(pool.map(info, wanted))
+    meta = store.get_meta([str(e["id"]) for _, found in ranked for e in found["members"]]) if ranked else {}
+    out: list[FavoriteOut] = []
+    for key, found in ranked:
+        items, kcal, protein, ok = [], 0.0, 0.0, True
+        for entry in found["members"]:
+            data = info(entry["ingredient"])
+            if not data.get("name"):
+                ok = False
+                break
+            grams = float(entry["amount"])
+            kcal += (scoring.number(data.get("energy")) or 0.0) * grams / 100
+            protein += (scoring.number(data.get("protein")) or 0.0) * grams / 100
+            items.append(FavoriteItem(ingredient_id=entry["ingredient"], name=data["name"], grams=grams))
+        if not ok or kcal < 50:
+            continue
+        plate = next((meta[str(e["id"])]["plate_key"] for e in found["members"] if meta.get(str(e["id"]), {}).get("plate_key")), None)
+        out.append(FavoriteOut(key="-".join(str(i) for i in sorted(key)), meal=found["meal"], times=found["times"],
+                               last_day=found["day"].isoformat(), kcal=round(kcal), protein_g=round(protein, 1),
+                               photo=f"api/media/plate/{plate}" if plate else None, items=items))
+    return out[:limit]
+
+
+@app.get("/api/favorites", response_model=list[FavoriteOut])
+def favorites(user: store.User = Depends(current_user)):
+    """"Repetir una comida": what this person eats again and again, with their own photo when they took one."""
+    wger = get_wger_client()
+    try:
+        return _favorites(wger, user)
+    except WgerError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    finally:
+        wger.close()
+
+
+def _idea_item(wger: WgerClient, user: store.User, component: DetectedComponent) -> FavoriteItem | None:
+    """A food the model named, found in the catalog; None when nothing in it reads as the same food."""
+    matched = match_components(wger, user, [component])[0]
+    if not matched.candidates or matched.candidates[0].score < 0.55:
+        return None
+    top = matched.candidates[0]
+    return FavoriteItem(ingredient_id=top.id, name=top.name, grams=float(component.estimated_grams or 100))
+
+
+@app.get("/api/ideas", response_model=IdeasResponse)
+def ideas(meal: str | None = None, refresh: bool = False, user: store.User = Depends(current_user)):
+    """Ideas to complete the day. The model only proposes names and grams: every calorie comes from the catalog."""
+    now = local_now()
+    meal = meal if meal in MEAL_ORDER else meal_key_for_entry({"datetime": now.isoformat()})
+    goal = _goal_obj(user)
+    wger = get_wger_client()
+    try:
+        plan_id = plan_for(wger, user, create=False)
+        start = datetime.combine(now.date(), time.min, tzinfo=now.tzinfo)
+        day_entries = [e for e in user_entries(wger, user, plan_id, start, datetime.combine(now.date(), time.max, tzinfo=now.tzinfo))
+                       if entry_date(e) == now.date()]
+        eaten_kcal = eaten_protein = 0.0
+        eaten_names: list[str] = []
+        for entry in day_entries:
+            try:
+                data = ingredient_info(wger, user, entry["ingredient"])
+            except Exception:  # noqa: BLE001
+                continue
+            grams = float(entry["amount"])
+            eaten_kcal += (scoring.number(data.get("energy")) or 0.0) * grams / 100
+            eaten_protein += (scoring.number(data.get("protein")) or 0.0) * grams / 100
+            eaten_names.append(data.get("name", ""))
+        kcal_left = max(0, round(goal.kcal - eaten_kcal))
+        protein_left = max(0, round(goal.protein_g - eaten_protein))
+        if kcal_left < IDEAS_MIN_KCAL:
+            return IdeasResponse(meal=meal, kcal_left=kcal_left, protein_left=protein_left, ideas=[], done=True)
+
+        cache_key = (user.id, now.date().isoformat(), meal, kcal_left // 50, protein_left // 10)
+        hit = _ideas_cache.get(cache_key)
+        if hit and not refresh and monotonic() - hit[0] < IDEAS_TTL:
+            return hit[1]
+        if not user.is_admin and not store.bump_usage(user.id, now.date().isoformat(), settings.analyze_daily_limit):
+            raise HTTPException(429, f"Llegaste al límite de {settings.analyze_daily_limit} análisis por día. Mañana puedes seguir.")
+
+        liked = list(dict.fromkeys(i.name for fav in _favorites(wger, user, 4) for i in fav.items))
+        try:
+            proposals = get_vision_client().suggest_meals(meal=MEAL_LABELS[meal].lower(), kcal_left=kcal_left, protein_left=protein_left,
+                                                          eaten=[n for n in eaten_names if n], liked=liked)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("no se pudieron pedir ideas")
+            raise HTTPException(502, "No pude pensar ideas ahora. Intenta de nuevo en un momento.") from exc
+
+        flat = [(i, j, DetectedComponent(name=part["name"], search_name=part.get("search_name"),
+                                         search_alternatives=part.get("search_alternatives") or [], estimated_grams=int(part["grams"])))
+                for i, idea in enumerate(proposals) for j, part in enumerate(idea["items"])]
+
+        def resolve(row):
+            try:
+                return _idea_item(wger, user, row[2])
+            except Exception:  # noqa: BLE001 - a food that cannot be looked up only drops that ingredient
+                logger.exception("no se pudo buscar %s", row[2].name)
+                return None
+
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            found = list(pool.map(resolve, flat))
+        by_idea: dict[int, list[FavoriteItem]] = {}
+        for (i, _j, _c), item in zip(flat, found):
+            if item is not None:
+                by_idea.setdefault(i, []).append(item)
+
+        infos: dict[int, dict] = {}
+        built: list[IdeaOut] = []
+        for i, idea in enumerate(proposals):
+            items = by_idea.get(i, [])
+            if len(items) < 2:
+                continue
+            kcal = protein = 0.0
+            for item in items:
+                if item.ingredient_id not in infos:
+                    infos[item.ingredient_id] = ingredient_info(wger, user, item.ingredient_id)
+                data = infos[item.ingredient_id]
+                kcal += (scoring.number(data.get("energy")) or 0.0) * item.grams / 100
+                protein += (scoring.number(data.get("protein")) or 0.0) * item.grams / 100
+            if kcal < 40 or kcal > kcal_left * 1.4:
+                continue  # the catalog says it is nothing, or far more than what is left
+            built.append(IdeaOut(name=idea["name"], tag=idea.get("tag"), kcal=round(kcal), protein_g=round(protein, 1), items=items))
+        built.sort(key=lambda idea: abs(idea.kcal - min(kcal_left, 700) * 0.7))
+        result = IdeasResponse(meal=meal, kcal_left=kcal_left, protein_left=protein_left, ideas=built[:4])
+        if len(_ideas_cache) > 200:
+            _ideas_cache.clear()
+        _ideas_cache[cache_key] = (monotonic(), result)
+        return result
+    except WgerError as exc:
+        raise HTTPException(502, str(exc)) from exc
     finally:
         wger.close()

@@ -15,6 +15,7 @@ const SHELL_FILES = [
   'goals.html',
   'progress.html',
   'challenges.html',
+  'ideas.html',
   'awards.html',
   'history.html',
   'reminders.html',

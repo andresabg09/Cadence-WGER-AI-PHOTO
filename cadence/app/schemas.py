@@ -450,3 +450,36 @@ class ShopBuyIn(BaseModel):
 class ShopEquipIn(BaseModel):
     slot: str
     item: str | None = None
+
+
+class FavoriteItem(BaseModel):
+    ingredient_id: int
+    name: str
+    grams: float
+
+
+class FavoriteOut(BaseModel):
+    key: str
+    meal: str
+    times: int  # how many times this same set of foods was logged in the last two months
+    last_day: str
+    kcal: float
+    protein_g: float
+    photo: str | None = None  # the person's own photo of it (path under /api/media)
+    items: list[FavoriteItem]
+
+
+class IdeaOut(BaseModel):
+    name: str
+    tag: str | None = None
+    kcal: float
+    protein_g: float
+    items: list[FavoriteItem]  # already matched to foods in wger (or the person's own): ready to log
+
+
+class IdeasResponse(BaseModel):
+    meal: str
+    kcal_left: int
+    protein_left: int
+    ideas: list[IdeaOut]
+    done: bool = False  # the day's goal is already reached: nothing to complete

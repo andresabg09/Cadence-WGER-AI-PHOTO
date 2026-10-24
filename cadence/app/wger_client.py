@@ -79,6 +79,18 @@ class WgerClient:
             if item.get("id") is not None
         ]
 
+    def get_ingredient_by_code(self, code: str) -> dict | None:
+        """A product by barcode. wger itself falls back to Open Food Facts (and stores the
+        product) when its own catalog lacks the code."""
+        response = self._client.get("/api/v2/ingredientinfo/", params={"code": code, "limit": 1, "format": "json"})
+        response.raise_for_status()
+        results = response.json().get("results", [])
+        if not results or results[0].get("id") is None:
+            return None
+        item = results[0]
+        return {"id": item["id"], "name": item.get("name"), "image": item.get("image"), "energy": item.get("energy"),
+                "protein": item.get("protein"), "carbohydrates": item.get("carbohydrates"), "fat": item.get("fat")}
+
     def _search_ingredients_legacy(self, term: str, limit: int) -> list[dict]:
         response = self._client.get(
             "/api/v2/ingredient/search/",

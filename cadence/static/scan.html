@@ -123,6 +123,7 @@
 
   <div style="position:relative;z-index:2;padding:0 24px 18px;text-align:center;">
     <span class="disp" id="caption" style="font-size:13.5px;font-weight:600;color:rgba(255,255,255,0.85);">Encuadra tu plato a ~45°</span>
+    <div><button id="typeCode" style="display:none;margin-top:8px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;border-radius:100px;padding:8px 16px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;min-height:36px;">⌨️ Escribir el código</button></div>
   </div>
 
   <div style="position:relative;z-index:2;padding:10px 0 calc(30px + env(safe-area-inset-bottom, 0px));display:flex;align-items:center;justify-content:center;gap:46px;">
@@ -139,6 +140,8 @@
 
 <script src="static/js/api.js"></script>
 <script src="static/js/shell.js"></script>
+<script src="static/js/food-sheet.js"></script>
+<script src="static/js/barcode.js"></script>
 <script>
 function fitScreen() { document.documentElement.style.setProperty('--app-h', `${window.innerHeight}px`); }
 fitScreen();
@@ -237,7 +240,74 @@ document.getElementById('flashBtn').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('modeBarcode').addEventListener('click', () => showToast('Escaneo por código de barras: próximamente', 'warn'));
+// ---- Barcode mode: read the code on the live camera, look it up, and send it to Confirmar ----
+let barcodeMode = false;
+let stopBarcode = null;
+const modePhoto = document.getElementById('modePhoto');
+const modeBarcode = document.getElementById('modeBarcode');
+const ON = 'linear-gradient(135deg,var(--accent-from),var(--accent-to))';
+
+function addScannedFood(food) {
+  // Same shape the AI gives: a plate with one food (100 g to start; the stepper adjusts it).
+  storePlate([{ detected_name: food.name, confidence: null, estimated_grams: 100, box: null,
+    candidates: [{ id: food.id, name: food.name, score: 1, energy_kcal_100g: food.energy_kcal_100g }] }], null, null);
+  window.location.replace('confirm.html');
+}
+
+async function handleCode(code) {
+  caption.textContent = 'Buscando el producto…';
+  try {
+    const found = await apiGet(`api/barcode/${code}`);
+    if (found.found && found.id != null) {
+      addScannedFood({ id: found.id, name: found.name, energy_kcal_100g: found.kcal });
+    } else if (found.found) {
+      openFoodSheet({ name: found.name, kcal: found.kcal, protein: found.protein, carbs: found.carbs, fat: found.fat, barcode: code },
+        addScannedFood);
+      afterSheet();
+    } else {
+      showToast('No encontré ese código: puedes crearlo con sus valores', 'warn');
+      openFoodSheet({ barcode: code }, addScannedFood);
+      afterSheet();
+    }
+  } catch (err) {
+    showToast(err.message || 'No se pudo buscar el código');
+    setBarcodeMode(true);
+  }
+}
+
+// If the person closes the sheet without saving, go back to scanning.
+function afterSheet() {
+  const watcher = setInterval(() => {
+    if (!document.querySelector('.entry-sheet')) { clearInterval(watcher); if (barcodeMode) setBarcodeMode(true); }
+  }, 400);
+}
+
+async function setBarcodeMode(on) {
+  barcodeMode = on;
+  if (stopBarcode) { stopBarcode(); stopBarcode = null; }
+  modeBarcode.style.background = on ? ON : 'transparent';
+  modeBarcode.style.color = on ? '#fff' : 'rgba(255,255,255,0.65)';
+  modePhoto.style.background = on ? 'transparent' : ON;
+  modePhoto.style.color = on ? 'rgba(255,255,255,0.65)' : '#fff';
+  document.body.classList.toggle('barcode-mode', on);
+  captureBtn.style.visibility = on ? 'hidden' : 'visible';
+  document.getElementById('typeCode').style.display = on ? 'inline-block' : 'none';
+  caption.textContent = on ? 'Apunta la cámara al código de barras' : 'Encuadra tu plato a ~45°';
+  if (!on) return;
+  if (!stream) await initCamera();
+  try {
+    stopBarcode = await startBarcodeScan(video, (code) => { stopBarcode = null; handleCode(code); });
+  } catch (err) {
+    showToast(err.message || 'No se pudo iniciar el lector', 'warn');
+  }
+}
+modeBarcode.addEventListener('click', () => setBarcodeMode(true));
+modePhoto.addEventListener('click', () => setBarcodeMode(false));
+document.getElementById('typeCode').addEventListener('click', () => {
+  if (stopBarcode) { stopBarcode(); stopBarcode = null; }
+  openBarcodeTyping(handleCode);
+  afterSheet();
+});
 
 document.getElementById('fileInput').addEventListener('change', (e) => {
   const file = e.target.files[0];
@@ -273,7 +343,11 @@ document.getElementById('webcamBtn').addEventListener('click', () => {
   document.body.classList.add('webcam-open');
   initCamera();
 });
-document.getElementById('deskBarcode').addEventListener('click', () => showToast('Escaneo por código de barras: próximamente', 'warn'));
+document.getElementById('deskBarcode').addEventListener('click', async () => {
+  document.body.classList.add('webcam-open');
+  await initCamera();
+  setBarcodeMode(true);
+});
 
 function setBusy(busy) {
   captureBtn.disabled = busy;
@@ -342,7 +416,7 @@ function renderLiveChips(components) {
 // On a desktop layout the camera only starts when the user picks "Usar webcam";
 // asking for it on load would trigger a permission prompt next to a drop zone.
 if (!window.matchMedia('(min-width: 1024px)').matches) {
-  initCamera();
+  initCamera().then(() => { if (new URLSearchParams(location.search).get('mode') === 'barcode') setBarcodeMode(true); });
   // iOS 13+ only grants sensor access from a user gesture; everywhere else
   // (Android/Chrome) the listener can start right away, otherwise the badge
   // would sit on "Activa el sensor" until the first tap.

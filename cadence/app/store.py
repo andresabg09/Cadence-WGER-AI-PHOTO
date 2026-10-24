@@ -42,6 +42,19 @@ CREATE TABLE IF NOT EXISTS invites (
 CREATE TABLE IF NOT EXISTS resets (
   code_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS custom_foods (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL,
+  kcal REAL NOT NULL, protein REAL NOT NULL DEFAULT 0, carbs REAL NOT NULL DEFAULT 0, fat REAL NOT NULL DEFAULT 0,
+  barcode TEXT, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS local_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, food_id INTEGER NOT NULL,
+  grams REAL NOT NULL, at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS workouts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL,
+  minutes INTEGER NOT NULL, kcal REAL NOT NULL, note TEXT, created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS weights (
   user_id INTEGER NOT NULL, day TEXT NOT NULL, kg REAL NOT NULL, PRIMARY KEY (user_id, day)
 );
@@ -406,3 +419,140 @@ def claim_entry(entry_id: str, user_id: int) -> None:
     with closing(_connect()) as conn, conn:
         conn.execute("INSERT OR IGNORE INTO entry_meta (entry_id) VALUES (?)", (str(entry_id),))
         conn.execute("UPDATE entry_meta SET user_id = ? WHERE entry_id = ? AND user_id IS NULL", (user_id, str(entry_id)))
+
+
+# ------------------------------------------------------------------ own foods and local diary entries
+# wger's catalog is read-only through its API, so a food a person makes (or scans) lives here, and the
+# entries that use it too. A custom food has ingredient id -<id> everywhere; its entries are "c<id>".
+
+def create_custom_food(user_id: int, name: str, kcal: float, protein: float, carbs: float, fat: float,
+                       barcode: str | None = None) -> int:
+    with closing(_connect()) as conn, conn:
+        cur = conn.execute(
+            "INSERT INTO custom_foods (user_id, name, kcal, protein, carbs, fat, barcode, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (user_id, name.strip(), kcal, protein, carbs, fat, barcode or None, _now()))
+        return cur.lastrowid
+
+
+def _food(row) -> dict:
+    return {"id": -row[0], "user_id": row[1], "name": row[2], "energy": row[3], "protein": row[4],
+            "carbohydrates": row[5], "fat": row[6], "barcode": row[7], "source": "custom"}
+
+
+_FOOD_COLUMNS = "id, user_id, name, kcal, protein, carbs, fat, barcode"
+
+
+def get_custom_food(ingredient_id: int, user_id: int | None = None) -> dict | None:
+    """By ingredient id (negative). With user_id, only if it is that person's."""
+    with closing(_connect()) as conn:
+        row = conn.execute(f"SELECT {_FOOD_COLUMNS} FROM custom_foods WHERE id = ?", (-int(ingredient_id),)).fetchone()
+    if row is None or (user_id is not None and row[1] != user_id):
+        return None
+    return _food(row)
+
+
+def custom_foods(user_id: int, term: str | None = None) -> list[dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute(f"SELECT {_FOOD_COLUMNS} FROM custom_foods WHERE user_id = ? ORDER BY id DESC", (user_id,)).fetchall()
+    foods = [_food(r) for r in rows]
+    if term:
+        words = term.lower().split()
+        foods = [f for f in foods if any(w in f["name"].lower() for w in words)]
+    return foods
+
+
+def custom_food_by_barcode(user_id: int, code: str) -> dict | None:
+    with closing(_connect()) as conn:
+        row = conn.execute(f"SELECT {_FOOD_COLUMNS} FROM custom_foods WHERE user_id = ? AND barcode = ? ORDER BY id DESC",
+                           (user_id, code)).fetchone()
+    return _food(row) if row else None
+
+
+def _utc_naive(when: datetime) -> str:
+    return when.astimezone(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+
+
+def add_local_entry(user_id: int, ingredient_id: int, grams: float, when: datetime) -> str:
+    with closing(_connect()) as conn, conn:
+        cur = conn.execute("INSERT INTO local_entries (user_id, food_id, grams, at) VALUES (?,?,?,?)",
+                           (user_id, -int(ingredient_id), grams, _utc_naive(when)))
+        return f"c{cur.lastrowid}"
+
+
+def local_entries(user_id: int, start: datetime, end: datetime) -> list[dict]:
+    """The person's local entries in [start, end], shaped like wger's diary entries."""
+    with closing(_connect()) as conn:
+        rows = conn.execute("SELECT id, food_id, grams, at FROM local_entries WHERE user_id = ? AND at >= ? AND at <= ?",
+                            (user_id, _utc_naive(start), _utc_naive(end))).fetchall()
+    return [{"id": f"c{r[0]}", "ingredient": -r[1], "amount": r[2], "datetime": r[3] + "+00:00"} for r in rows]
+
+
+def _local_id(entry_id: str) -> int | None:
+    text = str(entry_id)
+    return int(text[1:]) if text.startswith("c") and text[1:].isdigit() else None
+
+
+def is_local_entry(entry_id: str) -> bool:
+    return _local_id(entry_id) is not None
+
+
+def local_entry(entry_id: str) -> dict | None:
+    lid = _local_id(entry_id)
+    if lid is None:
+        return None
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT id, user_id, food_id, grams, at FROM local_entries WHERE id = ?", (lid,)).fetchone()
+    if row is None:
+        return None
+    return {"id": f"c{row[0]}", "user_id": row[1], "ingredient": -row[2], "amount": row[3], "datetime": row[4] + "+00:00"}
+
+
+def update_local_entry(entry_id: str, grams: float | None = None, when: datetime | None = None) -> None:
+    lid = _local_id(entry_id)
+    with closing(_connect()) as conn, conn:
+        if grams is not None:
+            conn.execute("UPDATE local_entries SET grams = ? WHERE id = ?", (grams, lid))
+        if when is not None:
+            conn.execute("UPDATE local_entries SET at = ? WHERE id = ?", (_utc_naive(when), lid))
+
+
+def delete_local_entry(entry_id: str) -> None:
+    with closing(_connect()) as conn, conn:
+        conn.execute("DELETE FROM local_entries WHERE id = ?", (_local_id(entry_id),))
+
+
+# ------------------------------------------------------------------ workouts (own log, per person)
+
+def add_workout(user_id: int, day: str, kind: str, minutes: int, kcal: float, note: str | None) -> int:
+    with closing(_connect()) as conn, conn:
+        cur = conn.execute("INSERT INTO workouts (user_id, day, kind, minutes, kcal, note, created_at) VALUES (?,?,?,?,?,?,?)",
+                           (user_id, day, kind, minutes, kcal, (note or "").strip() or None, _now()))
+        return cur.lastrowid
+
+
+def workouts_between(user_id: int, start_day: str, end_day: str) -> list[dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute("SELECT id, day, kind, minutes, kcal, note FROM workouts WHERE user_id = ? AND day >= ? AND day <= ? ORDER BY id",
+                            (user_id, start_day, end_day)).fetchall()
+    return [{"id": r[0], "day": r[1], "kind": r[2], "minutes": r[3], "kcal": r[4], "note": r[5]} for r in rows]
+
+
+def delete_workout(user_id: int, workout_id: int) -> bool:
+    with closing(_connect()) as conn, conn:
+        return conn.execute("DELETE FROM workouts WHERE id = ? AND user_id = ?", (workout_id, user_id)).rowcount > 0
+
+
+def weights_since(user_id: int, since_day: str) -> list[dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute("SELECT day, kg FROM weights WHERE user_id = ? AND day >= ? ORDER BY day", (user_id, since_day)).fetchall()
+    return [{"day": r[0], "kg": r[1]} for r in rows]
+
+
+def delete_weight(user_id: int, day: str) -> bool:
+    with closing(_connect()) as conn, conn:
+        return conn.execute("DELETE FROM weights WHERE user_id = ? AND day = ?", (user_id, day)).rowcount > 0
+
+
+def photo_count(user_id: int) -> int:
+    with closing(_connect()) as conn:
+        return conn.execute("SELECT COUNT(*) FROM entry_meta WHERE user_id = ? AND plate_key IS NOT NULL", (user_id,)).fetchone()[0]

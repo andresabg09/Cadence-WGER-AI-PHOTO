@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>cadence · Progreso</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="static/css/pulse.css">
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body class="with-shell" data-page="progreso">
+<div class="app">
+  <div class="page-head" style="padding:22px 20px 12px;display:flex;align-items:center;gap:12px;">
+    <a href="index.html" id="backLink" aria-label="Volver" class="icon-btn" style="width:44px;height:44px;border-radius:13px;flex-shrink:0;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
+    </a>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:10.5px;color:var(--ink-soft);font-weight:700;letter-spacing:.06em;">TU RACHA</div>
+      <h1 class="disp" style="margin:0;font-size:20px;font-weight:700;">Progreso</h1>
+    </div>
+  </div>
+
+  <div class="app-content progress-grid" style="padding-bottom:60px;">
+    <div class="col">
+      <div class="streak-card" id="streakCard"><div class="skeleton" style="height:54px;"></div></div>
+      <div class="card" id="weeksCard">
+        <div class="card-head"><b>Últimas 4 semanas</b><span class="mono" id="weeksCount"></span></div>
+        <div class="week-labels"><span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+        <div class="week-grid" id="weekGrid"></div>
+        <div class="week-legend"><span><i class="wk-sq l0"></i>Sin registro</span><span><i class="wk-sq l2"></i>Registrado</span><span><i class="wk-sq l4"></i>En tu meta</span></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card" id="weightCard">
+        <div class="card-head"><b>Peso</b><span class="mono" id="weightDelta"></span></div>
+        <div id="weightChart"></div>
+        <button class="btn-secondary" id="addWeight" style="margin-top:12px;min-height:44px;">+ Registrar mi peso</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><b>Logros</b><span class="mono" id="medalCount" style="color:var(--accent-to);"></span></div>
+        <div class="medal-grid" id="medals"></div>
+      </div>
+      <a class="menu-row card" href="history.html" style="border:1px solid var(--card-border);border-radius:18px;"><span class="ico">📜</span><span class="label">Historial completo</span><span class="chev">›</span></a>
+    </div>
+  </div>
+</div>
+
+<script src="static/js/api.js"></script>
+<script src="static/js/theme.js"></script>
+<script src="static/js/shell.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let data = null;
+let me = null;
+
+$('backLink').addEventListener('click', (e) => {
+  if (history.length > 1 && document.referrer.startsWith(window.location.origin)) { e.preventDefault(); history.back(); }
+});
+
+function renderStreak() {
+  const n = data.streak_current;
+  const days = (k) => `${k} ${k === 1 ? 'día' : 'días'}`;
+  const note = n === 0
+    ? 'Registra algo hoy para empezar una racha.'
+    : data.logged_today
+      ? (n >= data.streak_best && n > 1 ? '¡Tu racha más larga! Sigue así 💪' : `Tu mejor racha: ${days(data.streak_best)}`)
+      : `Registra algo hoy para llegar a ${n + 1}. Tu mejor racha: ${days(data.streak_best)}`;
+  $('streakCard').innerHTML = `
+    <div class="streak-flame">${flameSvg(Math.max(n, 1), 54)}</div>
+    <div><div class="disp streak-days">${n} ${n === 1 ? 'día' : 'días'}</div><div class="streak-note">${note}</div></div>`;
+}
+
+// Four calendar weeks (Mon-Sun) ending with the current one; the colour is how close the day got to the goal.
+function renderWeeks() {
+  const byDate = Object.fromEntries(data.days.map((d) => [d.date, d]));
+  const today = new Date(`${data.today}T12:00:00`);
+  const mondayOffset = (today.getDay() + 6) % 7;
+  const start = new Date(today); start.setDate(today.getDate() - mondayOffset - 21);
+  let cells = '';
+  let logged = 0;
+  let shown = 0;
+  for (let i = 0; i < 28; i += 1) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const info = byDate[iso];
+    const future = iso > data.today;
+    let level = 0;
+    if (info && info.logged) {
+      const ratio = data.goal_kcal > 0 ? info.kcal / data.goal_kcal : 0;
+      level = ratio >= 0.9 && ratio <= 1.05 ? 4 : ratio >= 0.6 ? 3 : 2;
+      logged += 1;
+    }
+    if (!future && info) shown += 1;
+    const label = `${d.getDate()} ${MONTHS[d.getMonth()]}${info && info.logged ? ` · ${Math.round(info.kcal)} kcal` : ''}`;
+    cells += `<a class="wk-sq l${level}${iso === data.today ? ' today' : ''}${future ? ' future' : ''}" ${future ? '' : `href="index.html?date=${iso}"`} title="${label}" aria-label="${label}"><span>${d.getDate()}</span></a>`;
+  }
+  $('weekGrid').innerHTML = cells;
+  $('weeksCount').textContent = `${logged}/${shown} días`;
+}
+const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+function renderWeight() {
+  const points = data.weights;
+  const box = $('weightChart');
+  if (points.length === 0) {
+    box.innerHTML = '<div class="chart-empty">Anota tu peso y aquí verás tu curva.</div>';
+    $('weightDelta').textContent = '';
+    return;
+  }
+  const last = points[points.length - 1];
+  const ch = data.weight_change_30d;
+  $('weightDelta').textContent = ch == null ? `${last.kg.toFixed(1)} kg` : `${ch < 0 ? '↓' : ch > 0 ? '↑' : '→'} ${Math.abs(ch).toFixed(1)} kg este mes`;
+  $('weightDelta').style.color = ch == null ? 'var(--ink-soft)' : (ch < 0) === (me.profile.goal !== 'gain' && me.profile.goal !== 'muscle') ? 'var(--good)' : 'var(--ink-soft)';
+  const W = 320, H = 130, padX = 10, padY = 18;
+  const days = (iso) => new Date(`${iso}T12:00:00`).getTime() / 86400000;
+  const t0 = days(points[0].day), t1 = Math.max(days(points[points.length - 1].day), t0 + 1);
+  const values = points.map((p) => p.kg).concat(data.target_weight_kg ? [data.target_weight_kg] : []);
+  let lo = Math.min(...values), hi = Math.max(...values);
+  if (hi - lo < 2) { const mid = (hi + lo) / 2; lo = mid - 1; hi = mid + 1; }
+  const x = (iso) => padX + ((days(iso) - t0) / (t1 - t0)) * (W - padX * 2);
+  const y = (kg) => padY + (1 - (kg - lo) / (hi - lo)) * (H - padY * 2);
+  const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(p.day).toFixed(1)} ${y(p.kg).toFixed(1)}`).join(' ');
+  const area = `${line} L${x(last.day).toFixed(1)} ${H - 4} L${x(points[0].day).toFixed(1)} ${H - 4} Z`;
+  const target = data.target_weight_kg ? `<line x1="${padX}" x2="${W - padX}" y1="${y(data.target_weight_kg).toFixed(1)}" y2="${y(data.target_weight_kg).toFixed(1)}" class="w-target"/><text x="${W - padX}" y="${(y(data.target_weight_kg) - 4).toFixed(1)}" class="w-label" text-anchor="end">meta ${data.target_weight_kg} kg</text>` : '';
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="w-chart" role="img" aria-label="Curva de peso">
+      <defs><linearGradient id="wfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent-to)" stop-opacity=".35"/><stop offset="1" stop-color="var(--accent-to)" stop-opacity="0"/></linearGradient></defs>
+      ${target}<path d="${area}" fill="url(#wfill)"/><path d="${line}" class="w-line"/>
+      ${points.length <= 40 ? points.map((p) => `<circle cx="${x(p.day).toFixed(1)}" cy="${y(p.kg).toFixed(1)}" r="2.6" class="w-dot"><title>${p.day} · ${p.kg} kg</title></circle>`).join('') : ''}
+      <circle cx="${x(last.day).toFixed(1)}" cy="${y(last.kg).toFixed(1)}" r="4.5" class="w-last"/>
+      <text x="${padX}" y="12" class="w-label">${hi.toFixed(1)}</text><text x="${padX}" y="${H - 6}" class="w-label">${lo.toFixed(1)}</text>
+    </svg>
+    <div class="w-foot"><span>${points[0].day.slice(5).replace('-', '/')}</span><b>${last.kg.toFixed(1)} kg</b><span>${last.day.slice(5).replace('-', '/')}</span></div>`;
+}
+
+function renderMedals() {
+  $('medalCount').textContent = `${data.unlocked}/${data.achievements.length}`;
+  $('medals').innerHTML = data.achievements.map((a) => `
+    <button type="button" class="medal${a.unlocked ? ' on' : ''}" data-hint="${escapeHtml(a.unlocked ? a.title + ' — ¡logrado!' : a.title + ': ' + a.hint)}">
+      <span class="m-ico">${a.unlocked ? a.icon : '🔒'}</span><span class="m-name">${escapeHtml(a.title)}</span>
+    </button>`).join('');
+  $('medals').querySelectorAll('.medal').forEach((b) => b.addEventListener('click', () => showToast(b.dataset.hint, b.classList.contains('on') ? 'ok' : 'warn')));
+}
+
+function openSheet(html, bind) {
+  const scrim = document.createElement('div');
+  scrim.className = 'sheet-scrim';
+  const sheet = document.createElement('div');
+  sheet.className = 'entry-sheet';
+  sheet.setAttribute('role', 'dialog');
+  sheet.innerHTML = html;
+  document.body.append(scrim, sheet);
+  pushOverlay(() => { scrim.remove(); sheet.remove(); });
+  scrim.addEventListener('click', () => dismissOverlay());
+  bind(sheet, (after) => dismissOverlay(after));
+}
+
+$('addWeight').addEventListener('click', () => openSheet(`
+  <h3 class="disp" style="margin:0 0 4px;font-size:17px;">Registrar mi peso</h3>
+  <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);">Se guarda con la fecha de hoy; si ya anotaste hoy, se reemplaza.</p>
+  <div class="input-unit"><input class="input" id="kg" type="number" inputmode="decimal" min="30" max="300" step="0.1" value="${me.profile.weight_kg || ''}" placeholder="70.0"><i>kg</i></div>
+  <div class="form-error" id="sErr" style="margin-top:10px;"></div>
+  <div class="sheet-actions"><button class="btn-primary" id="sSave">Guardar peso</button></div>`, (sheet, close) => {
+  sheet.querySelector('#kg').focus();
+  sheet.querySelector('#sSave').addEventListener('click', async () => {
+    try {
+      me = await apiPost('api/weight', { kg: Number(sheet.querySelector('#kg').value) });
+      close(load);
+    } catch (err) { const e = sheet.querySelector('#sErr'); e.textContent = err.message; e.classList.add('show'); }
+  });
+}));
+
+async function load() {
+  try {
+    data = await apiGet('api/progress');
+  } catch (err) {
+    $('streakCard').innerHTML = `<div class="chart-empty">No se pudo cargar tu progreso: ${escapeHtml(err.message)} <button class="link-btn" onclick="load()">Reintentar</button></div>`;
+    return;
+  }
+  renderStreak(); renderWeeks(); renderWeight(); renderMedals();
+}
+
+(async function init() {
+  try { me = await ensureSession(); } catch { return; }
+  load();
+})();
+window.addEventListener('pageshow', (e) => { if (e.persisted && me) load(); });
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

@@ -131,7 +131,17 @@ class MealGroup(BaseModel):
     items: list[MealItem]
 
 
+class WorkoutOut(BaseModel):
+    id: int
+    day: str
+    kind: str
+    minutes: int
+    kcal: float  # estimated burn
+    note: str | None = None
+
+
 class TodayResponse(BaseModel):
+    workouts: list[WorkoutOut] = []
     date: str
     today: str | None = None  # the user's real today (date above is the day being shown)
     totals: MacroTotals
@@ -185,3 +195,81 @@ class StreaksResponse(BaseModel):
     logged_today: bool = False
     best: int = 0
     previous: list[StreakRun] = []  # earlier streaks, newest first
+
+
+class FoodIn(BaseModel):
+    """A food the person makes themself, per 100 g (or from a product label)."""
+    name: str
+    kcal: float
+    protein: float = 0
+    carbs: float = 0
+    fat: float = 0
+    barcode: str | None = None
+
+
+class BarcodeResult(BaseModel):
+    found: bool
+    source: str | None = None  # own | wger | off
+    id: int | None = None  # usable ingredient id when it already exists (own/wger)
+    name: str | None = None
+    kcal: float | None = None
+    protein: float | None = None
+    carbs: float | None = None
+    fat: float | None = None
+    barcode: str
+
+
+class WorkoutIn(BaseModel):
+    kind: str
+    minutes: int
+    day: str | None = None  # AAAA-MM-DD, default today
+    note: str | None = None
+
+
+
+class ProgressDay(BaseModel):
+    date: str
+    kcal: float = 0
+    logged: bool = False  # something registered that day
+    counts: bool = False  # and registered that same day (streak)
+
+
+class Achievement(BaseModel):
+    key: str
+    title: str
+    hint: str
+    icon: str
+    unlocked: bool
+
+
+class WeightPoint(BaseModel):
+    day: str
+    kg: float
+
+
+class ProgressResponse(BaseModel):
+    today: str
+    streak_current: int
+    streak_best: int
+    logged_today: bool
+    goal_kcal: float
+    days: list[ProgressDay]  # last 28 days, oldest first
+    weights: list[WeightPoint]
+    weight_change_30d: float | None = None
+    target_weight_kg: float | None = None
+    achievements: list[Achievement]
+    unlocked: int
+
+
+class HistoryDay(BaseModel):
+    date: str
+    kcal: float
+    count: int
+    thumbs: list[str]  # entry ids that have a crop
+    more: int = 0
+
+
+class HistoryResponse(BaseModel):
+    goal_kcal: float
+    days: list[HistoryDay]  # newest first, only days with something
+    next_before: str | None = None  # ask again with this to go further back

@@ -14,6 +14,7 @@ def match_score(wanted: str, candidate: str) -> float:
     return (fuzz.WRatio(a, b) + fuzz.ratio(a, b)) / 2
 
 
+CUSTOM_BONUS = 15
 STAPLE_BONUS = 20  # ready-to-eat staples beat "as sold" supermarket products of a similar name
 
 
@@ -37,7 +38,8 @@ def rank_matches(wanted: str, raw_matches: list[dict], top_n: int, alt: str | li
         if item.get("source") == "cadence":
             twins.setdefault(_macros(item), []).append((main, other, item))
         else:
-            scored.append((max(main, other + 1), item))
+            bonus = CUSTOM_BONUS if item.get("source") == "custom" else 0  # what the person made themself
+            scored.append((max(main, other + 1) + bonus, item))
 
     for group in twins.values():
         best = max(max(main, other + 1) for main, other, _ in group) + STAPLE_BONUS

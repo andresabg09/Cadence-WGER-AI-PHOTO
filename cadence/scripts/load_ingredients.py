@@ -34,8 +34,10 @@ def find_dump() -> str:
     return DUMP_DEST
 
 
-def classify(data: dict, lang_ids: set) -> tuple[int, str] | None:
-    """Return (priority, key) for a usable generic food, else None. 2 = best."""
+def classify(data: dict, lang_ids: set) -> tuple[tuple, str] | None:
+    """Return (score, key) for a usable generic food, else None. Lower score = better:
+    unbranded first, then the SHORTEST name (short names are the generic foods:
+    "Rice", "White rice", "Chicken breast"; long ones are products)."""
     language = data.get("language")
     if isinstance(language, dict):
         language = language.get("id")
@@ -58,12 +60,16 @@ def classify(data: dict, lang_ids: set) -> tuple[int, str] | None:
     if protein + carbs + fat == 0:
         return None
 
-    return (1 if brand else 2), f"{language}:{name.lower()}"
+    score = (1 if brand else 0, len(name), 0 if data.get("fiber") is not None else 1)
+    return score, f"{language}:{name.lower()}"
 
 
 def select(lines, lang_ids: set, per_lang: int, progress=lambda n: None):
-    """Stream the dump once; keep up to per_lang unique foods per language, unbranded first."""
-    buckets = {lid: ({}, {}) for lid in lang_ids}  # lang -> (priority 2, priority 1)
+    """Stream the dump once; keep the per_lang best (most generic) unique foods per language.
+
+    Memory stays bounded: each language's candidate pool is pruned to the best
+    per_lang whenever it grows past 3x that."""
+    pools = {lid: {} for lid in lang_ids}  # lang -> {key: (score, data)}
     seen = 0
     for line in lines:
         seen += 1
@@ -76,16 +82,17 @@ def select(lines, lang_ids: set, per_lang: int, progress=lambda n: None):
         verdict = classify(data, lang_ids)
         if verdict is None:
             continue
-        priority, key = verdict
+        score, key = verdict
         language = data["language"]["id"] if isinstance(data["language"], dict) else data["language"]
-        best, rest = buckets[language]
-        target = best if priority == 2 else rest
-        if key not in best and key not in rest and len(target) < per_lang:
-            target[key] = data
+        pool = pools[language]
+        if key not in pool or score < pool[key][0]:
+            pool[key] = (score, data)
+        if len(pool) > per_lang * 3:
+            best = sorted(pool.items(), key=lambda kv: kv[1][0])[:per_lang]
+            pools[language] = dict(best)
     chosen = []
-    for lid, (best, rest) in buckets.items():
-        picked = list(best.values()) + list(rest.values())
-        chosen.extend(picked[:per_lang])
+    for pool in pools.values():
+        chosen.extend(d for _score, d in sorted(pool.values(), key=lambda sd: sd[0])[:per_lang])
     return chosen, seen
 
 

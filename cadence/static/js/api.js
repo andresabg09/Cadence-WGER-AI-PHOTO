@@ -63,8 +63,49 @@ document.addEventListener('click', (e) => {
   else window.location.replace(link.getAttribute('href'));
 });
 
+// ---- Session: every data call needs the signed-in cookie; a 401 sends you to the login screen ----
+const UID_KEY = 'cadence_uid';
+
+function handleAuth(response) {
+  // On the login screen a 401 is just "wrong password": the caller shows the server's message.
+  if (response.status !== 401 || /\/login\.html$/.test(window.location.pathname)) return;
+  const here = window.location.pathname.split('/').pop() + window.location.search;
+  window.location.replace(`login.html?next=${encodeURIComponent(here)}`);
+  throw new Error('Inicia sesión para continuar');
+}
+
+// What this device keeps per person (crops, notes, offline queue...) must not leak to the next person who signs in.
+function rememberUser(me) {
+  try {
+    const previous = localStorage.getItem(UID_KEY);
+    if (previous && previous !== String(me.id)) {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('cadence_') && !['cadence_theme', 'cadence_visits', 'cadence_install_dismissed', UID_KEY].includes(k))
+        .forEach((k) => localStorage.removeItem(k));
+    }
+    localStorage.setItem(UID_KEY, String(me.id));
+  } catch { /* no storage */ }
+}
+
+// Signed in and set up, or on the way to the screen that fixes that. Returns the profile.
+async function ensureSession({ needOnboarded = true } = {}) {
+  const me = await apiGet('api/auth/me');
+  rememberUser(me);
+  if (needOnboarded && !me.onboarded) {
+    window.location.replace('onboarding.html');
+    throw new Error('Falta completar tu perfil');
+  }
+  return me;
+}
+
+async function signOut() {
+  try { await apiPost('api/auth/logout', {}); } catch { /* the cookie is cleared server-side when reachable */ }
+  window.location.replace('login.html');
+}
+
 async function apiGet(path) {
   const response = await fetch(path);
+  handleAuth(response);
   if (!response.ok) throw new Error(await safeText(response));
   return response.json();
 }
@@ -87,6 +128,7 @@ async function apiPost(path, body, { isFormData = false, timeoutMs = 90000 } = {
   } finally {
     clearTimeout(timer);
   }
+  handleAuth(response);
   if (!response.ok) throw new Error(await safeText(response));
   return response.json();
 }
@@ -97,6 +139,7 @@ async function apiPut(path, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  handleAuth(response);
   if (!response.ok) throw new Error(await safeText(response));
   return response.json();
 }
@@ -107,12 +150,14 @@ async function apiPatch(path, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  handleAuth(response);
   if (!response.ok) throw new Error(await safeText(response));
   return response.json();
 }
 
 async function apiDelete(path) {
   const response = await fetch(path, { method: 'DELETE' });
+  handleAuth(response);
   if (!response.ok) throw new Error(await safeText(response));
   return response.json();
 }

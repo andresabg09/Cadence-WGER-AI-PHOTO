@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>cadence · Entrar</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="static/css/pulse.css">
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+<div class="plain-page">
+  <div class="plain-body">
+    <div style="padding:56px 0 26px;text-align:center;">
+      <div class="brand-mark">
+        <svg width="38" height="38" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8a2 2 0 012-2h1.2l.9-1.5A2 2 0 0110 3.5h4a2 2 0 011.9 1l.9 1.5H18a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="13" r="3.6" stroke="#fff" stroke-width="1.8"/></svg>
+      </div>
+      <h1 class="disp" style="margin:18px 0 6px;font-size:26px;font-weight:700;">cadence</h1>
+      <p id="tagline" style="margin:0;font-size:13.5px;color:var(--ink-soft);line-height:1.5;">Toma una foto de tu plato y conoce tus calorías al instante.</p>
+    </div>
+
+    <div class="meal-pick" id="tabs" role="group" aria-label="Acceso" style="margin-bottom:20px;">
+      <button type="button" id="tabLogin" aria-pressed="true">Entrar</button>
+      <button type="button" id="tabRegister" aria-pressed="false">Crear cuenta</button>
+    </div>
+
+    <form id="form" novalidate>
+      <div class="form-error" id="error" role="alert"></div>
+      <div id="firstNote" style="display:none;margin-bottom:14px;font-size:12.5px;color:var(--ink-soft);line-height:1.5;background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:12px 14px;">
+        Eres la primera persona en usar esta instalación: tu cuenta será la <strong style="color:var(--ink);">administradora</strong> y podrás invitar a otras personas.
+      </div>
+      <label class="field" id="nameField" style="display:none;"><span>NOMBRE</span><input class="input" id="name" autocomplete="name" maxlength="40" placeholder="¿Cómo te llamamos?"></label>
+      <label class="field"><span>CORREO</span><input class="input" id="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" placeholder="tu@correo.com"></label>
+      <label class="field"><span>CONTRASEÑA</span><input class="input" id="password" type="password" autocomplete="current-password" placeholder="Mínimo 8 caracteres"></label>
+      <label class="field" id="inviteField" style="display:none;"><span>CÓDIGO DE INVITACIÓN</span><input class="input code-pill" id="invite" autocomplete="off" autocapitalize="characters" placeholder="ABCD-EFGH"></label>
+      <button class="btn-primary" id="submit" type="submit" style="margin-top:6px;">Entrar</button>
+    </form>
+    <p id="footnote" style="margin:22px 0 0;text-align:center;font-size:11.5px;color:var(--ink-soft);line-height:1.5;"></p>
+  </div>
+</div>
+
+<script src="static/js/api.js"></script>
+<script src="static/js/theme.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const $ = (id) => document.getElementById(id);
+let mode = 'login';
+let status = { first_user: false, invite_required: true };
+
+// Only ever go to one of our own pages after signing in.
+function safeNext() {
+  const next = params.get('next') || '';
+  return /^[a-z]+\.html(\?[\w=&.-]*)?$/.test(next) ? next : 'index.html';
+}
+
+function setMode(next) {
+  mode = next;
+  const register = mode === 'register';
+  $('tabLogin').setAttribute('aria-pressed', String(!register));
+  $('tabRegister').setAttribute('aria-pressed', String(register));
+  $('nameField').style.display = register ? 'block' : 'none';
+  $('inviteField').style.display = register && status.invite_required && !status.first_user ? 'block' : 'none';
+  $('firstNote').style.display = register && status.first_user ? 'block' : 'none';
+  $('password').autocomplete = register ? 'new-password' : 'current-password';
+  $('submit').textContent = register ? 'Crear mi cuenta' : 'Entrar';
+  $('error').classList.remove('show');
+  $('footnote').textContent = register
+    ? 'Al crear tu cuenta aceptas que tus registros y fotos se guarden para que puedas verlos otra vez.'
+    : '';
+}
+
+function showError(message) {
+  $('error').textContent = message;
+  $('error').classList.add('show');
+}
+
+async function init() {
+  try {
+    status = await apiGet('api/auth/status');
+  } catch { /* the form still works; the server answers on submit */ }
+  // Already signed in: skip the form.
+  try {
+    const me = await apiGet('api/auth/me');
+    rememberUser(me);
+    window.location.replace(me.onboarded ? safeNext() : 'onboarding.html');
+    return;
+  } catch { /* not signed in: show the form */ }
+  if (status.first_user) $('tabLogin').style.display = 'none';
+  if (params.get('invite')) $('invite').value = params.get('invite');
+  setMode(status.first_user || params.get('invite') ? 'register' : 'login');
+}
+
+$('tabLogin').addEventListener('click', () => setMode('login'));
+$('tabRegister').addEventListener('click', () => setMode('register'));
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('email').value.trim();
+  const password = $('password').value;
+  if (!email || !password) { showError('Escribe tu correo y tu contraseña.'); return; }
+  if (mode === 'register') {
+    if (!$('name').value.trim()) { showError('Escribe tu nombre.'); return; }
+    if (password.length < 8) { showError('La contraseña necesita al menos 8 caracteres.'); return; }
+  }
+  const button = $('submit');
+  button.disabled = true;
+  $('error').classList.remove('show');
+  try {
+    const me = mode === 'register'
+      ? await apiPost('api/auth/register', { email, password, name: $('name').value.trim(), invite: $('invite').value.trim() || null })
+      : await apiPost('api/auth/login', { email, password });
+    rememberUser(me);
+    window.location.replace(me.onboarded ? safeNext() : 'onboarding.html');
+  } catch (err) {
+    showError(err.message || 'No se pudo entrar. Inténtalo de nuevo.');
+    button.disabled = false;
+  }
+});
+
+init();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

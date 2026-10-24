@@ -348,7 +348,7 @@ function renderItems() {
             <span style="font-size:14px;font-weight:700;">${escapeHtml(item.detected_name)}</span>
             <span class="disp" id="kcal-${idx}" style="font-size:13px;font-weight:700;color:var(--accent-to);white-space:nowrap;">${Math.round(itemKcal(item))} kcal</span>
           </div>
-          <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;">${pills || '<span style="font-size:11px;color:var(--ink-soft);">Sin coincidencias en wger — búscalo manualmente.</span>'}</div>
+          <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;">${pills || '<span style="font-size:11px;color:var(--ink-soft);">Sin coincidencias — búscalo manualmente.</span>'}</div>
         </div>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:11px;padding-top:11px;border-top:1px solid var(--card-border);">
@@ -383,7 +383,7 @@ function renderItems() {
   const note = document.createElement('div');
   note.className = 'span-all';
   note.style.cssText = 'display:flex;gap:7px;align-items:flex-start;padding:2px 4px;';
-  note.innerHTML = '<span style="font-size:12px;">ℹ️</span><span style="font-size:11px;color:var(--ink-soft);line-height:1.4;">La IA identifica los alimentos — las calorías reales siempre vienen de la base de datos de wger.</span>';
+  note.innerHTML = '<span style="font-size:12px;">ℹ️</span><span style="font-size:11px;color:var(--ink-soft);line-height:1.4;">La IA identifica los alimentos — las calorías siempre salen de la base de datos de alimentos, no de la IA.</span>';
   wrap.appendChild(note);
 
   wrap.querySelectorAll('.thumb-wrap').forEach((thumb) => {

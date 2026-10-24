@@ -46,7 +46,7 @@
   <div class="page-head" style="padding:0 20px 14px;">
     <label class="search-box">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="var(--ink-soft)" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="var(--ink-soft)" stroke-width="2" stroke-linecap="round"/></svg>
-      <input id="termInput" type="search" placeholder="Buscar en wger…" autocomplete="off" aria-label="Buscar alimento">
+      <input id="termInput" type="search" placeholder="Buscar un alimento…" autocomplete="off" aria-label="Buscar alimento">
     </label>
   </div>
 
@@ -230,7 +230,7 @@ document.getElementById('termInput').addEventListener('input', (e) => {
       if (seq !== searchSeq) return; // a newer query already took over
       box.innerHTML = '';
       if (!foods.length) {
-        box.innerHTML = '<div class="empty-hint">Sin resultados en wger. Prueba con otro nombre.</div>';
+        box.innerHTML = '<div class="empty-hint">Sin resultados. Prueba con otro nombre.</div>';
         return;
       }
       foods.forEach((food) => box.appendChild(foodRow(food, 'por 100 g')));

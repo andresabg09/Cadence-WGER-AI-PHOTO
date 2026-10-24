@@ -10,12 +10,42 @@ import json
 import re
 import sqlite3
 from contextlib import closing
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .config import settings
 
 _DATA_URL = re.compile(r"^data:image/(?:jpeg|jpg|png|webp);base64,(.+)$", re.DOTALL)
 MAX_IMAGE_BYTES = 6 * 1024 * 1024
+
+
+_ACCOUNT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  is_admin INTEGER NOT NULL DEFAULT 0,
+  plan_id TEXT,
+  sex TEXT, birthdate TEXT, height_cm REAL, activity TEXT, goal TEXT, target_weight_kg REAL,
+  goal_kcal REAL, goal_protein REAL, goal_carbs REAL, goal_fat REAL,
+  onboarded INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS invites (
+  code TEXT PRIMARY KEY, note TEXT, created_by INTEGER, created_at TEXT NOT NULL, used_by INTEGER, used_at TEXT
+);
+CREATE TABLE IF NOT EXISTS weights (
+  user_id INTEGER NOT NULL, day TEXT NOT NULL, kg REAL NOT NULL, PRIMARY KEY (user_id, day)
+);
+CREATE TABLE IF NOT EXISTS usage (
+  user_id INTEGER NOT NULL, day TEXT NOT NULL, analyses INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day)
+);
+"""
 
 
 def _db_path() -> Path:
@@ -31,9 +61,15 @@ def _connect() -> sqlite3.Connection:
         " entry_id TEXT PRIMARY KEY, note TEXT, crop BLOB, plate_key TEXT, box TEXT)"
     )
     conn.execute("CREATE TABLE IF NOT EXISTS plates (key TEXT PRIMARY KEY, data BLOB NOT NULL)")
-    columns = {row[1] for row in conn.execute("PRAGMA table_info(entry_meta)")}
-    if "logged_on" not in columns:  # day the entry was really registered (streaks need it)
-        conn.execute("ALTER TABLE entry_meta ADD COLUMN logged_on TEXT")
+    conn.executescript(_ACCOUNT_SCHEMA)
+    for table, column, kind in (
+        ("entry_meta", "logged_on", "TEXT"),  # day the entry was really registered (streaks need it)
+        ("entry_meta", "user_id", "INTEGER"),  # whose entry it is
+        ("plates", "user_id", "INTEGER"),
+    ):
+        columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
     return conn
 
 
@@ -65,16 +101,19 @@ def get_meta(entry_ids: list[str]) -> dict[str, dict]:
     }
 
 
-def set_note(entry_id: str, note: str | None) -> None:
+def set_note(entry_id: str, note: str | None, user_id: int | None = None) -> None:
     clean = (note or "").strip()[:2000]
     with closing(_connect()) as conn, conn:
         conn.execute("INSERT OR IGNORE INTO entry_meta (entry_id) VALUES (?)", (str(entry_id),))
-        conn.execute("UPDATE entry_meta SET note = ? WHERE entry_id = ?", (clean or None, str(entry_id)))
+        conn.execute("UPDATE entry_meta SET note = ?, user_id = COALESCE(user_id, ?) WHERE entry_id = ?",
+                     (clean or None, user_id, str(entry_id)))
 
 
-def set_media(entry_id: str, crop: bytes | None, plate_key: str | None, box: list[float] | None) -> None:
+def set_media(entry_id: str, crop: bytes | None, plate_key: str | None, box: list[float] | None,
+              user_id: int | None = None) -> None:
     with closing(_connect()) as conn, conn:
         conn.execute("INSERT OR IGNORE INTO entry_meta (entry_id) VALUES (?)", (str(entry_id),))
+        conn.execute("UPDATE entry_meta SET user_id = COALESCE(user_id, ?) WHERE entry_id = ?", (user_id, str(entry_id)))
         if crop:
             conn.execute("UPDATE entry_meta SET crop = ? WHERE entry_id = ?", (crop, str(entry_id)))
         if plate_key:
@@ -84,9 +123,9 @@ def set_media(entry_id: str, crop: bytes | None, plate_key: str | None, box: lis
             )
 
 
-def put_plate(key: str, data: bytes) -> None:
+def put_plate(key: str, data: bytes, user_id: int | None = None) -> None:
     with closing(_connect()) as conn, conn:
-        conn.execute("INSERT OR REPLACE INTO plates (key, data) VALUES (?, ?)", (key, data))
+        conn.execute("INSERT OR REPLACE INTO plates (key, data, user_id) VALUES (?, ?, ?)", (key, data, user_id))
 
 
 def get_crop(entry_id: str) -> bytes | None:
@@ -108,12 +147,13 @@ def delete_entry(entry_id: str) -> None:
         conn.execute("DELETE FROM plates WHERE key NOT IN (SELECT plate_key FROM entry_meta WHERE plate_key IS NOT NULL)")
 
 
-def set_logged_on(entry_ids: list[str], day: str) -> None:
-    """Remember the real day each entry was registered (not the day the food was eaten)."""
+def set_logged_on(entry_ids: list[str], day: str, user_id: int | None = None) -> None:
+    """Remember the real day each entry was registered (not the day the food was eaten) and whose it is."""
     with closing(_connect()) as conn, conn:
         for entry_id in entry_ids:
             conn.execute("INSERT OR IGNORE INTO entry_meta (entry_id) VALUES (?)", (str(entry_id),))
-            conn.execute("UPDATE entry_meta SET logged_on = ? WHERE entry_id = ?", (day, str(entry_id)))
+            conn.execute("UPDATE entry_meta SET logged_on = ?, user_id = COALESCE(user_id, ?) WHERE entry_id = ?",
+                         (day, user_id, str(entry_id)))
 
 
 def get_logged_on(entry_ids: list[str]) -> dict[str, str]:
@@ -129,3 +169,220 @@ def get_logged_on(entry_ids: list[str]) -> dict[str, str]:
             ):
                 found[entry_id] = day
     return found
+
+
+# ---------------------------------------------------------------- accounts
+
+SESSION_DAYS = 60
+
+
+@dataclass
+class User:
+    id: int
+    email: str
+    name: str
+    is_admin: bool
+    plan_id: str | None
+    sex: str | None = None
+    birthdate: str | None = None
+    height_cm: float | None = None
+    activity: str | None = None
+    goal: str | None = None
+    target_weight_kg: float | None = None
+    goal_kcal: float | None = None
+    goal_protein: float | None = None
+    goal_carbs: float | None = None
+    goal_fat: float | None = None
+    onboarded: bool = False
+    created_at: str = field(default="")
+
+
+_USER_COLUMNS = ("id, email, name, is_admin, plan_id, sex, birthdate, height_cm, activity, goal, target_weight_kg, "
+                 "goal_kcal, goal_protein, goal_carbs, goal_fat, onboarded, created_at")
+_PROFILE_FIELDS = {"name", "sex", "birthdate", "height_cm", "activity", "goal", "target_weight_kg", "goal_kcal",
+                   "goal_protein", "goal_carbs", "goal_fat", "onboarded", "plan_id", "password_hash"}
+
+
+def _user(row) -> User | None:
+    if row is None:
+        return None
+    values = list(row)
+    values[3] = bool(values[3])
+    values[15] = bool(values[15])
+    return User(*values)
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def count_users() -> int:
+    with closing(_connect()) as conn:
+        return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+
+def create_user(email: str, name: str, password_hash: str, invite: str | None, allow_open: bool,
+                first_user_email: str | None = None) -> tuple[User | None, str | None]:
+    """Create an account. Returns (user, None) or (None, reason).
+
+    The very first account is the administrator (it needs no invite, and, when `first_user_email`
+    is set, must be that address). Everyone else needs an unused invite code, unless registration
+    is open. The checks and the insert are one transaction, so two people cannot race for a code.
+    """
+    with closing(_connect()) as conn:
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
+                conn.execute("ROLLBACK")
+                return None, "exists"
+            first = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+            if first and first_user_email and email != first_user_email.strip().lower():
+                conn.execute("ROLLBACK")
+                return None, "not_admin_email"
+            invite_row = None
+            if not first and not allow_open:
+                invite_row = conn.execute(
+                    "SELECT code FROM invites WHERE code = ? AND used_by IS NULL", ((invite or "").strip().upper(),)
+                ).fetchone()
+                if invite_row is None:
+                    conn.execute("ROLLBACK")
+                    return None, "bad_invite"
+            cursor = conn.execute(
+                "INSERT INTO users (email, name, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?, ?)",
+                (email, name, password_hash, 1 if first else 0, _now()),
+            )
+            user_id = cursor.lastrowid
+            if invite_row is not None:
+                conn.execute("UPDATE invites SET used_by = ?, used_at = ? WHERE code = ?", (user_id, _now(), invite_row[0]))
+            if first:  # what was saved before accounts existed belongs to the administrator
+                conn.execute("UPDATE entry_meta SET user_id = ? WHERE user_id IS NULL", (user_id,))
+                conn.execute("UPDATE plates SET user_id = ? WHERE user_id IS NULL", (user_id,))
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        return get_user(user_id), None
+
+
+def get_user(user_id: int) -> User | None:
+    with closing(_connect()) as conn:
+        return _user(conn.execute(f"SELECT {_USER_COLUMNS} FROM users WHERE id = ?", (user_id,)).fetchone())
+
+
+def get_user_by_email(email: str) -> tuple[User | None, str | None]:
+    with closing(_connect()) as conn:
+        row = conn.execute(f"SELECT {_USER_COLUMNS}, password_hash FROM users WHERE email = ?", (email,)).fetchone()
+    if row is None:
+        return None, None
+    return _user(row[:-1]), row[-1]
+
+
+def update_user(user_id: int, **fields) -> None:
+    bad = set(fields) - _PROFILE_FIELDS
+    if bad:
+        raise ValueError(f"campos no permitidos: {sorted(bad)}")
+    if not fields:
+        return
+    assignments = ", ".join(f"{name} = ?" for name in fields)
+    values = [int(v) if isinstance(v, bool) else v for v in fields.values()]
+    with closing(_connect()) as conn, conn:
+        conn.execute(f"UPDATE users SET {assignments} WHERE id = ?", [*values, user_id])
+
+
+def list_users() -> list[User]:
+    with closing(_connect()) as conn:
+        return [_user(r) for r in conn.execute(f"SELECT {_USER_COLUMNS} FROM users ORDER BY id").fetchall()]
+
+
+def create_session(user_id: int, token_digest: str) -> None:
+    expires = (datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)).isoformat()
+    with closing(_connect()) as conn, conn:
+        conn.execute("DELETE FROM sessions WHERE expires_at < ?", (_now(),))
+        conn.execute("INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                     (token_digest, user_id, _now(), expires))
+
+
+def user_for_session(token_digest: str) -> User | None:
+    with closing(_connect()) as conn:
+        row = conn.execute(
+            f"SELECT {', '.join('u.' + c.strip() for c in _USER_COLUMNS.split(','))} FROM sessions s "
+            "JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?",
+            (token_digest, _now()),
+        ).fetchone()
+    return _user(row)
+
+
+def delete_session(token_digest: str) -> None:
+    with closing(_connect()) as conn, conn:
+        conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_digest,))
+
+
+def delete_user_sessions(user_id: int) -> None:
+    with closing(_connect()) as conn, conn:
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+
+
+def create_invite(code: str, note: str | None, created_by: int) -> None:
+    with closing(_connect()) as conn, conn:
+        conn.execute("INSERT INTO invites (code, note, created_by, created_at) VALUES (?, ?, ?, ?)",
+                     (code, (note or "").strip()[:80] or None, created_by, _now()))
+
+
+def list_invites() -> list[dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute(
+            "SELECT i.code, i.note, i.created_at, i.used_at, u.name, u.email FROM invites i "
+            "LEFT JOIN users u ON u.id = i.used_by ORDER BY i.created_at DESC LIMIT 100"
+        ).fetchall()
+    return [{"code": r[0], "note": r[1], "created_at": r[2], "used_at": r[3], "used_by": r[4] or r[5]} for r in rows]
+
+
+def delete_invite(code: str) -> bool:
+    with closing(_connect()) as conn, conn:
+        return conn.execute("DELETE FROM invites WHERE code = ? AND used_by IS NULL", (code.upper(),)).rowcount > 0
+
+
+def set_weight(user_id: int, day: str, kg: float) -> None:
+    with closing(_connect()) as conn, conn:
+        conn.execute("INSERT OR REPLACE INTO weights (user_id, day, kg) VALUES (?, ?, ?)", (user_id, day, kg))
+
+
+def latest_weight(user_id: int) -> float | None:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT kg FROM weights WHERE user_id = ? ORDER BY day DESC LIMIT 1", (user_id,)).fetchone()
+    return row[0] if row else None
+
+
+def bump_usage(user_id: int, day: str, limit: int) -> bool:
+    """Count one photo analysis for the day; False (and no count) when the daily limit is used up."""
+    with closing(_connect()) as conn:
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("INSERT OR IGNORE INTO usage (user_id, day, analyses) VALUES (?, ?, 0)", (user_id, day))
+        used = conn.execute("SELECT analyses FROM usage WHERE user_id = ? AND day = ?", (user_id, day)).fetchone()[0]
+        if limit and used >= limit:
+            conn.execute("ROLLBACK")
+            return False
+        conn.execute("UPDATE usage SET analyses = analyses + 1 WHERE user_id = ? AND day = ?", (user_id, day))
+        conn.execute("COMMIT")
+        return True
+
+
+def entry_owner(entry_id: str) -> int | None:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT user_id FROM entry_meta WHERE entry_id = ?", (str(entry_id),)).fetchone()
+    return row[0] if row else None
+
+
+def plate_owner(key: str) -> int | None:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT user_id FROM plates WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def claim_entry(entry_id: str, user_id: int) -> None:
+    """Record that an entry (already known to belong to this user's wger plan) is theirs."""
+    with closing(_connect()) as conn, conn:
+        conn.execute("INSERT OR IGNORE INTO entry_meta (entry_id) VALUES (?)", (str(entry_id),))
+        conn.execute("UPDATE entry_meta SET user_id = ? WHERE entry_id = ? AND user_id IS NULL", (user_id, str(entry_id)))

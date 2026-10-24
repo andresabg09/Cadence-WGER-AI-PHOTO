@@ -149,7 +149,7 @@ const MEAL_ICON_BG = {
 const ALWAYS_SHOWN = ['desayuno', 'almuerzo', 'cena'];
 const ADD_MORE_LABEL = { desayuno: 'al desayuno', almuerzo: 'al almuerzo', merienda: 'a la merienda', cena: 'a la cena' };
 
-document.getElementById('profileBtn').addEventListener('click', () => showToast('Perfil: próximamente', 'warn'));
+document.getElementById('profileBtn').addEventListener('click', () => { window.location.href = 'profile.html'; });
 document.getElementById('progressBtn').addEventListener('click', () => showToast('Progreso: próximamente', 'warn'));
 
 function waterStorageKey(dateIso) {
@@ -788,8 +788,12 @@ async function loadToday() {
   }
 }
 
-applyReturnHints();
-loadToday();
+(async function start() {
+  // Signed in and set up, or on the way to the screen that fixes that.
+  try { await ensureSession(); } catch { return; }
+  applyReturnHints();
+  loadToday();
+})();
 // Back from a flow can restore this page from the browser's memory: refresh what it shows.
 window.addEventListener('pageshow', (e) => { if (e.persisted) { applyReturnHints(); loadToday(); } });
 

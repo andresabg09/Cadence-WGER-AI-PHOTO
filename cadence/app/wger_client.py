@@ -110,12 +110,25 @@ class WgerClient:
             return None
         return max(results, key=lambda p: (p.get("creation_date") or "", str(p["id"])))["id"]
 
-    def create_nutrition_plan(self) -> int | str:
-        """wger needs every diary entry to belong to a plan; cadence creates its own
-        so the user never has to open wger just to make one."""
+    def find_legacy_plan_id(self) -> int | str | None:
+        """The plan used before cadence had accounts (description "cadence", not "cadence:<user id>").
+
+        It holds the administrator's earlier diary, so the first account adopts it.
+        """
+        response = self._client.get("/api/v2/nutritionplan/", params={"format": "json", "limit": 100})
+        response.raise_for_status()
+        legacy = [p for p in response.json().get("results", [])
+                  if not str(p.get("description", "")).startswith("cadence:")]
+        if not legacy:
+            return None
+        return max(legacy, key=lambda p: (p.get("creation_date") or "", str(p["id"])))["id"]
+
+    def create_nutrition_plan(self, description: str = "cadence") -> int | str:
+        """wger needs every diary entry to belong to a plan; cadence creates one per person
+        so nobody ever has to open wger just to make one."""
         response = self._client.post(
             "/api/v2/nutritionplan/",
-            json={"description": "cadence", "only_logging": True},
+            json={"description": description, "only_logging": True},
         )
         if response.status_code >= 400:
             raise WgerError(f"wger rechazo crear el plan de nutricion: {response.status_code} {response.text}")

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>cadence · Objetivos</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="static/css/pulse.css">
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<style>
+  .weight-cards { display: flex; gap: 10px; }
+  .weight-card { flex: 1; background: var(--card); border: 1px solid var(--card-border); border-radius: 18px; padding: 14px; }
+  .weight-card.goal { border-color: rgba(45,212,255,0.3); }
+  .weight-card .t { font-size: 10.5px; color: var(--ink-soft); font-weight: 700; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .weight-card.goal .t { color: var(--accent-to); }
+  .weight-card input { width: 100%; box-sizing: border-box; border: none; background: transparent; color: inherit; font-family: 'Space Mono', monospace; font-size: 21px; font-weight: 700; padding: 0; }
+  .weight-card input:focus { outline: none; }
+  .weight-card.goal input { color: var(--accent-to); }
+  .target-card { background: linear-gradient(165deg, var(--card), var(--bg)); border: 1px solid var(--card-border); border-radius: 22px; padding: 20px; text-align: center; }
+  .target-kcal { font-family: 'Space Mono', monospace; font-size: 38px; font-weight: 700; line-height: 1; }
+  .macro-chips { display: flex; gap: 8px; margin-top: 16px; }
+  .macro-chips div { flex: 1; background: rgba(127,127,140,0.1); border-radius: 12px; padding: 9px 4px; }
+  .macro-chips b { display: block; font-family: 'Space Mono', monospace; font-size: 14px; }
+  .macro-chips span { font-size: 9.5px; color: var(--ink-soft); font-weight: 700; }
+  .nudge { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; }
+  .nudge button { width: 44px; height: 44px; border-radius: 14px; border: 1px solid var(--card-border); background: var(--card); color: var(--ink); font-size: 20px; font-weight: 700; cursor: pointer; }
+  .macro-edit { display: none; gap: 10px; }
+  .macro-edit.open { display: flex; }
+  .macro-edit label { flex: 1; }
+</style>
+</head>
+<body class="with-shell" data-page="perfil">
+<div class="app">
+  <div class="page-head" style="padding:22px 20px 14px;display:flex;align-items:center;gap:12px;">
+    <a href="profile.html" id="backLink" aria-label="Volver" class="icon-btn" style="width:36px;height:36px;border-radius:11px;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
+    </a>
+    <h1 class="disp" style="margin:0;font-size:17px;font-weight:700;">Tus objetivos</h1>
+  </div>
+
+  <div class="app-content" style="display:flex;flex-direction:column;gap:16px;padding-bottom:60px;">
+    <div class="meal-pick" id="goalPick" role="group" aria-label="Objetivo"></div>
+
+    <div class="weight-cards">
+      <div class="weight-card"><div class="t">PESO ACTUAL</div><div class="mono" style="font-size:21px;font-weight:700;"><span id="curWeight">–</span><span style="font-size:12px;color:var(--ink-soft);"> kg</span></div></div>
+      <label class="weight-card goal"><div class="t">META</div><div style="display:flex;align-items:baseline;gap:4px;"><input id="targetWeight" type="number" inputmode="decimal" min="30" max="300" step="0.1" placeholder="—"><span style="font-size:12px;color:var(--ink-soft);">kg</span></div></label>
+    </div>
+
+    <div class="target-card">
+      <div style="font-size:10.5px;color:var(--ink-soft);font-weight:700;letter-spacing:0.05em;margin-bottom:8px;">META DIARIA</div>
+      <div class="target-kcal" id="kcal">–</div>
+      <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;" id="kcalHint">kcal / día</div>
+      <div class="macro-chips">
+        <div><b id="mP" style="color:#7C5CFF;">–</b><span>PROTEÍNA</span></div>
+        <div><b id="mC" style="color:#2DD4FF;">–</b><span>CARBOS</span></div>
+        <div><b id="mF" style="color:#FF8A5B;">–</b><span>GRASA</span></div>
+      </div>
+      <div class="nudge"><button type="button" id="less" aria-label="Menos calorías">−</button><span style="font-size:11.5px;color:var(--ink-soft);">Ajustar de 50 en 50</span><button type="button" id="more" aria-label="Más calorías">+</button></div>
+      <div style="font-size:10.5px;color:var(--ink-soft);margin-top:14px;">Calculado con tu gasto diario (Mifflin-St Jeor)</div>
+    </div>
+
+    <button class="menu-row menu-card" id="macroToggle" style="border-radius:18px;"><span class="label">Ajustar macros manualmente</span><span class="chev" id="macroChev">›</span></button>
+    <div class="macro-edit" id="macroEdit">
+      <label class="field"><span>PROTEÍNA g</span><input class="input" id="eP" type="number" inputmode="numeric" min="0" max="500"></label>
+      <label class="field"><span>CARBOS g</span><input class="input" id="eC" type="number" inputmode="numeric" min="0" max="1000"></label>
+      <label class="field"><span>GRASA g</span><input class="input" id="eF" type="number" inputmode="numeric" min="0" max="500"></label>
+    </div>
+
+    <div class="form-error" id="error" role="alert"></div>
+    <button class="btn-primary" id="save">Guardar objetivos</button>
+  </div>
+</div>
+
+<script src="static/js/api.js"></script>
+<script src="static/js/theme.js"></script>
+<script src="static/js/shell.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const GOALS = [['lose', 'Bajar'], ['maintain', 'Mantener'], ['gain', 'Subir'], ['muscle', 'Músculo']];
+let me = null;
+let goal = null;
+let kcal = 0;           // current calories shown (calculated or nudged)
+let macrosDirty = false; // the user typed macros by hand
+
+function fill(targets) {
+  kcal = targets.kcal;
+  $('kcal').textContent = targets.kcal;
+  $('mP').textContent = `${targets.protein_g}g`;
+  $('mC').textContent = `${targets.carbs_g}g`;
+  $('mF').textContent = `${targets.fat_g}g`;
+  $('eP').value = targets.protein_g; $('eC').value = targets.carbs_g; $('eF').value = targets.fat_g;
+}
+
+function renderGoals() {
+  $('goalPick').innerHTML = GOALS.map(([key, label]) => `<button type="button" data-goal="${key}" aria-pressed="${key === goal}">${label}</button>`).join('');
+  $('goalPick').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => changeGoal(b.dataset.goal)));
+}
+
+// A different goal means a new calculation; show it before saving.
+async function recalc(extra = {}) {
+  const p = me.profile;
+  try {
+    const t = await apiPost('api/plan/preview', {
+      sex: p.sex, birthdate: p.birthdate, height_cm: p.height_cm, weight_kg: p.weight_kg || 70,
+      activity: p.activity, goal, ...extra,
+    });
+    fill(t);
+    $('kcalHint').textContent = t.note || 'kcal / día';
+    macrosDirty = false;
+  } catch (err) { showError(err.message); }
+}
+
+function changeGoal(next) {
+  goal = next;
+  renderGoals();
+  recalc();
+}
+
+function showError(message) {
+  $('error').textContent = message || '';
+  $('error').classList.toggle('show', Boolean(message));
+}
+
+const nudge = (delta) => () => recalc({ kcal: Math.max(800, Math.round((kcal + delta) / 10) * 10) });
+$('less').addEventListener('click', nudge(-50));
+$('more').addEventListener('click', nudge(50));
+$('macroToggle').addEventListener('click', () => {
+  const open = $('macroEdit').classList.toggle('open');
+  $('macroChev').textContent = open ? '⌄' : '›';
+});
+['eP', 'eC', 'eF'].forEach((id) => $(id).addEventListener('input', () => { macrosDirty = true; }));
+$('backLink').addEventListener('click', (e) => {
+  if (history.length > 1 && document.referrer.startsWith(window.location.origin)) { e.preventDefault(); history.back(); }
+});
+
+$('save').addEventListener('click', async () => {
+  showError('');
+  $('save').disabled = true;
+  const body = { goal, kcal };
+  const target = $('targetWeight').value;
+  if (target) body.target_weight_kg = Number(target);
+  if (macrosDirty) { body.protein_g = Number($('eP').value); body.carbs_g = Number($('eC').value); body.fat_g = Number($('eF').value); }
+  try {
+    // The goal screen already calculated the numbers it shows: send them as the user's final say.
+    me = await apiPut('api/goals', macrosDirty ? body : { ...body, protein_g: Number($('eP').value), carbs_g: Number($('eC').value), fat_g: Number($('eF').value) });
+    rememberUser(me);
+    showToast('Objetivos guardados', 'ok');
+    setTimeout(() => (history.length > 1 ? history.back() : window.location.replace('profile.html')), 600);
+  } catch (err) {
+    showError(err.message);
+    $('save').disabled = false;
+  }
+});
+
+(async function init() {
+  try { me = await ensureSession(); } catch { return; }
+  const p = me.profile;
+  goal = p.goal;
+  $('curWeight').textContent = p.weight_kg != null ? Number(p.weight_kg).toFixed(1) : '–';
+  $('targetWeight').value = p.target_weight_kg || '';
+  renderGoals();
+  if (me.targets) fill(me.targets); else recalc();
+})();
+</script>
+</body>
+</html>

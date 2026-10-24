@@ -59,7 +59,7 @@
     </div>
     <div class="db-strip" id="dbStrip" role="group" aria-label="Días de la semana">
       <button type="button" class="db-nav" id="dbPrevW" aria-label="Semana anterior">‹</button>
-      <div class="db-days" id="dbDays"></div>
+      <div class="db-pager" id="dbPager"></div>
       <button type="button" class="db-nav" id="dbNextW" aria-label="Semana siguiente">›</button>
     </div>
     <div class="db-away" id="dbAway" hidden>
@@ -705,9 +705,9 @@ function closeCalendar() {
   document.querySelectorAll('.cal-scrim, .cal-sheet').forEach((el) => el.remove());
 }
 
-async function openCalendar(selected, today) {
+async function openCalendar(selected, today, startMonth) {
   closeCalendar();
-  let month = monthKey(selected);
+  let month = startMonth || monthKey(selected);
   const scrim = document.createElement('div');
   scrim.className = 'sheet-scrim cal-scrim';
   const sheet = document.createElement('div');
@@ -1093,47 +1093,101 @@ function goToDate(iso) {
   loadToday();
 }
 
-// ---- The day bar: what day you are looking at (big), the week with its flames, and the way back to today ----
+// ---- The day bar: what day you are looking at (big), the weeks (a smooth swipeable strip) and the way back to today ----
 const DOW_LETTER = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-const stripInfo = {}; // iso day -> calendar info ({streak}); kept between days so the flames do not blink
-let stripWeek = null; // Monday (iso) of the week on screen
-let stripFor = null; // the day that week was chosen for
+const STRIP_WEEKS_BACK = 104; // two years of weeks are ready to swipe through
+const stripInfo = {}; // iso day -> calendar info ({streak}); kept between days so the marks do not blink
+const monthFetched = {}; // 'YYYY-MM' -> when its marks were last read
+let stripBuiltFor = null; // 'today' the pager was built for
+let stripFirst = null; // Monday (iso) of the first page
+let stripCount = 0;
+let stripIdx = -1; // page showing now
+let stripFor = null; // the day the pager was last pointed at
+let stripMonthKey = null; // month of the week on screen (opens the calendar there)
 let stripSig = '';
+let lastSelected = null;
 const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const longDay = (iso, withYear) => new Date(`${iso}T12:00:00`).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', ...(withYear ? { year: 'numeric' } : {}) }).replace(',', '');
+const monthName = (iso, style) => cap(new Date(`${iso}T12:00:00`).toLocaleDateString('es', { month: style }).replace('.', ''));
 
 function weekStartOf(iso) {
   const lead = (new Date(`${iso}T12:00:00`).getDay() + 6) % 7; // weeks start on Monday
   return shiftDate(iso, -lead);
 }
+const weekAt = (idx) => shiftDate(stripFirst, idx * 7);
+const weekIdx = (iso) => Math.round((new Date(`${weekStartOf(iso)}T12:00:00`) - new Date(`${stripFirst}T12:00:00`)) / (7 * 864e5));
 
-function paintStrip(data) {
-  const week = Array.from({ length: 7 }, (_, i) => shiftDate(stripWeek, i));
-  document.getElementById('dbDays').innerHTML = week.map((iso, i) => {
-    const info = stripInfo[iso];
-    const future = iso > data.today;
-    const selected = iso === data.date;
-    const flame = info && info.streak > 0;
-    const mark = future ? '' : flame ? flameSvg(info.streak, 13) : info ? '<i class="cal-late" title="Registrado después: no suma a la racha"></i>' : '<i class="db-dot"></i>';
-    const aria = `${cap(longDay(iso))}${flame ? `, racha de ${info.streak} ${info.streak === 1 ? 'día' : 'días'}` : info ? ', registrado después, sin racha' : future ? '' : ', sin registro'}`;
-    return `<button type="button" class="db-day${selected ? ' sel' : ''}${iso === data.today ? ' today' : ''}" data-date="${iso}" ${future ? 'disabled' : ''} aria-pressed="${selected}" aria-label="${aria}">
-      <span class="db-dow">${DOW_LETTER[i]}</span><span class="db-num mono">${Number(iso.slice(8))}</span><span class="db-mark">${mark}</span></button>`;
-  }).join('');
-  document.getElementById('dbNextW').disabled = shiftDate(stripWeek, 7) > data.today;
+// A day is one of: future | empty (nothing logged) | late (logged, but after its day: no streak) | flame (counts for the streak).
+function dayState(iso, today) {
+  if (iso > today) return 'future';
+  const info = stripInfo[iso];
+  return !info ? 'empty' : info.streak > 0 ? 'flame' : 'late';
 }
 
-async function refreshStrip(data) {
-  const months = [...new Set([stripWeek, shiftDate(stripWeek, 6)].map(monthKey))];
-  const results = await Promise.all(months.map((m) => apiGet(`api/calendar?month=${m}`).catch(() => null)));
+function updateCell(btn, today, selected) {
+  const iso = btn.dataset.date;
+  const state = dayState(iso, today);
+  btn.dataset.state = state;
+  btn.disabled = state === 'future';
+  btn.classList.toggle('today', iso === today);
+  btn.classList.toggle('sel', iso === selected);
+  btn.setAttribute('aria-pressed', String(iso === selected));
+  const info = stripInfo[iso];
+  btn.querySelector('.db-mark').innerHTML = state === 'flame' ? flameSvg(info.streak, 14) : state === 'late' ? '<i class="db-late"></i>' : '';
+  btn.setAttribute('aria-label', `${cap(longDay(iso))}${state === 'flame' ? `, racha de ${info.streak} ${info.streak === 1 ? 'día' : 'días'}` : state === 'late' ? ', registrado después, sin racha' : state === 'empty' ? ', sin registro' : ''}`);
+}
+
+function paintStrip(data, wide) {
+  const pager = document.getElementById('dbPager');
+  const span = wide ? 3 : 1;
+  for (let i = Math.max(0, stripIdx - span); i <= Math.min(stripCount - 1, stripIdx + span); i += 1) {
+    pager.children[i].querySelectorAll('.db-day').forEach((btn) => updateCell(btn, data.today, data.date));
+  }
+}
+
+function buildPager(today, selected) {
+  const pager = document.getElementById('dbPager');
+  stripFirst = shiftDate(weekStartOf(today), -7 * Math.max(STRIP_WEEKS_BACK, Math.ceil((new Date(`${today}T12:00:00`) - new Date(`${selected}T12:00:00`)) / (7 * 864e5)) + 2));
+  stripCount = weekIdxOfToday(today) + 1;
+  pager.innerHTML = Array.from({ length: stripCount }, (_, w) => `<div class="db-week">${Array.from({ length: 7 }, (_, d) => {
+    const iso = shiftDate(weekAt(w), d);
+    const first = iso.endsWith('-01');
+    return `<button type="button" class="db-day" data-date="${iso}"><span class="db-dow${first ? ' month' : ''}">${first ? monthName(iso, 'short').toUpperCase() : DOW_LETTER[d]}</span><span class="db-num mono">${Number(iso.slice(8))}</span><span class="db-mark"></span></button>`;
+  }).join('')}</div>`).join('');
+  stripBuiltFor = today;
+  stripIdx = -1;
+  lastSelected = null;
+}
+const weekIdxOfToday = (today) => Math.round((new Date(`${weekStartOf(today)}T12:00:00`) - new Date(`${stripFirst}T12:00:00`)) / (7 * 864e5));
+
+function updateStripLabel(today) {
+  const mon = weekAt(stripIdx);
+  const sun = shiftDate(mon, 6);
+  stripMonthKey = shiftDate(mon, 3).slice(0, 7); // the month most of the week belongs to
+  const yearOf = (iso) => iso.slice(0, 4);
+  const label = mon.slice(0, 7) === sun.slice(0, 7)
+    ? `${monthName(mon, 'long')}${yearOf(mon) !== yearOf(today) ? ` ${yearOf(mon)}` : ''}`
+    : `${monthName(mon, 'short')} – ${monthName(sun, 'short')}${yearOf(sun) !== yearOf(today) ? ` ${yearOf(sun)}` : ''}`;
+  document.getElementById('dbMonth').textContent = label;
+  document.getElementById('dbPrevW').disabled = stripIdx <= 0;
+  document.getElementById('dbNextW').disabled = stripIdx >= stripCount - 1;
+}
+
+async function refreshStrip(data, force) {
+  const weeks = [stripIdx - 1, stripIdx, stripIdx + 1].filter((i) => i >= 0 && i < stripCount);
+  const months = [...new Set(weeks.flatMap((i) => [weekAt(i), shiftDate(weekAt(i), 6)]).map(monthKey))]
+    .filter((m) => force || !monthFetched[m] || Date.now() - monthFetched[m] > 60000);
+  if (!months.length) return;
+  months.forEach((m) => { monthFetched[m] = Date.now(); });
+  const results = await Promise.all(months.map((m) => apiGet(`api/calendar?month=${m}`).catch(() => { delete monthFetched[m]; return null; })));
   if (latestToday !== data) return;
-  let changed = false;
   results.forEach((res, i) => {
     if (!res) return;
-    (res.days || []).forEach((d) => { if (JSON.stringify(stripInfo[d.date]) !== JSON.stringify(d)) { stripInfo[d.date] = d; changed = true; } });
-    // days of that month that no longer have anything (a plate deleted) lose their mark
-    Object.keys(stripInfo).filter((iso) => monthKey(iso) === months[i] && !(res.days || []).some((d) => d.date === iso)).forEach((iso) => { delete stripInfo[iso]; changed = true; });
+    const fresh = new Set((res.days || []).map((d) => d.date));
+    (res.days || []).forEach((d) => { stripInfo[d.date] = d; });
+    Object.keys(stripInfo).filter((iso) => monthKey(iso) === months[i] && !fresh.has(iso)).forEach((iso) => { delete stripInfo[iso]; });
   });
-  if (changed) paintStrip(data);
+  paintStrip(data, true);
 }
 
 function renderDayBar(data) {
@@ -1142,27 +1196,46 @@ function renderDayBar(data) {
   const year = data.date.slice(0, 4) !== data.today.slice(0, 4);
   document.getElementById('dbLabel').textContent = isToday ? 'Hoy' : data.date === yesterday ? 'Ayer' : cap(longDay(data.date, year));
   document.getElementById('dbDate').textContent = isToday || data.date === yesterday ? `· ${longDay(data.date)}` : '';
-  document.getElementById('dbMonth').textContent = cap(new Date(`${data.date}T12:00:00`).toLocaleDateString('es', { month: 'long' }));
-  if (stripWeek === null || stripFor !== data.date) { stripWeek = weekStartOf(data.date); stripFor = data.date; }
-  document.getElementById('dbCal').onclick = () => { if (window.sfx) sfx.play('open'); openCalendar(data.date, data.today); };
-  document.getElementById('dbDays').onclick = (e) => {
+  const pager = document.getElementById('dbPager');
+  if (stripBuiltFor !== data.today) buildPager(data.today, data.date);
+  // Point the strip at the week of the day being shown (smoothly when it is close, at once when it is far).
+  if (stripFor !== data.date) {
+    const idx = weekIdx(data.date);
+    if (idx !== stripIdx) {
+      const near = stripIdx >= 0 && Math.abs(idx - stripIdx) <= 4;
+      pager.scrollTo({ left: idx * pager.clientWidth, behavior: near ? 'smooth' : 'auto' });
+      if (!near) stripIdx = idx;
+    }
+    stripFor = data.date;
+  }
+  if (stripIdx < 0) stripIdx = Math.max(0, Math.min(stripCount - 1, Math.round(pager.scrollLeft / Math.max(1, pager.clientWidth))));
+  if (lastSelected && lastSelected !== data.date) { const old = pager.querySelector(`.db-day[data-date="${lastSelected}"]`); if (old) { old.classList.remove('sel'); old.setAttribute('aria-pressed', 'false'); } }
+  lastSelected = data.date;
+  updateStripLabel(data.today);
+
+  document.getElementById('dbCal').onclick = () => { if (window.sfx) sfx.play('open'); openCalendar(data.date, data.today, stripMonthKey); };
+  pager.onclick = (e) => {
     const btn = e.target.closest('.db-day');
     if (!btn || btn.disabled || btn.dataset.date === data.date) return;
     if (window.sfx) sfx.play('tick');
     goToDate(btn.dataset.date);
   };
-  const flip = (weeks) => { stripWeek = shiftDate(stripWeek, 7 * weeks); paintStrip(data); refreshStrip(data); if (window.sfx) sfx.play('tick'); };
-  document.getElementById('dbPrevW').onclick = () => flip(-1);
-  document.getElementById('dbNextW').onclick = () => { if (shiftDate(stripWeek, 7) <= data.today) flip(1); };
-  const strip = document.getElementById('dbStrip');
-  let x0 = null;
-  strip.ontouchstart = (e) => { x0 = e.touches[0].clientX; };
-  strip.ontouchend = (e) => {
-    if (x0 === null) return;
-    const dx = e.changedTouches[0].clientX - x0;
-    x0 = null;
-    if (dx > 60) flip(-1); else if (dx < -60 && shiftDate(stripWeek, 7) <= data.today) flip(1);
+  document.getElementById('dbPrevW').onclick = () => pager.scrollBy({ left: -pager.clientWidth, behavior: 'smooth' });
+  document.getElementById('dbNextW').onclick = () => pager.scrollBy({ left: pager.clientWidth, behavior: 'smooth' });
+  let frame = 0;
+  let settle = 0;
+  pager.onscroll = () => {
+    if (!frame) {
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const idx = Math.max(0, Math.min(stripCount - 1, Math.round(pager.scrollLeft / Math.max(1, pager.clientWidth))));
+        if (idx !== stripIdx) { stripIdx = idx; updateStripLabel(latestToday.today); paintStrip(latestToday, false); }
+      });
+    }
+    clearTimeout(settle);
+    settle = setTimeout(() => { if (latestToday) { paintStrip(latestToday, true); refreshStrip(latestToday, false); } }, 140); // once it stops
   };
+
   const away = document.getElementById('dbAway');
   away.hidden = isToday;
   if (!isToday) {
@@ -1171,11 +1244,13 @@ function renderDayBar(data) {
     document.getElementById('dbAwayText').innerHTML = `Estás viendo <b>el ${escapeHtml(named)}</b>, no hoy`;
     document.getElementById('dbBack').onclick = () => { if (window.sfx) sfx.play('pick'); goToDate(data.today); };
   }
-  // Today's own flame comes straight from the diary being shown; the rest from the calendar, refreshed behind it.
+  // Today's own flame comes straight from the diary being shown; the rest from the calendar, read behind it.
   if (isToday && data.totals && data.totals.kcal > 0 && data.streak_days > 0) stripInfo[data.date] = { date: data.date, streak: data.streak_days };
-  paintStrip(data);
+  paintStrip(data, true);
   const sig = `${data.date}|${Math.round(data.totals ? data.totals.kcal : 0)}|${data.streak_days}`;
-  if (sig !== stripSig) { stripSig = sig; refreshStrip(data); }
+  const changed = sig !== stripSig;
+  stripSig = sig;
+  refreshStrip(data, changed);
 }
 
 // ---- Workouts: search an activity, pick a duration (js/workouts.js). The burn is an estimate and does not change the goal. ----

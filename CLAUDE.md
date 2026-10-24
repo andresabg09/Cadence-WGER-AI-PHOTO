@@ -301,15 +301,27 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   Panel de rachas (25 oct): la pastilla del fueguito de la cabecera es un boton (`openStreaks`,
   `GET /api/streaks`): racha actual con sus dias (cada llama crece segun el dia de la racha),
   mejor racha y rachas anteriores (ultimos 12 meses); tocar un dia/racha abre ese dia.
-- **Bloque 3 - Cuentas y primer uso (HECHO 25 oct).** Ver "Cuentas multiusuario": registro propio,
-  bienvenida/cuestionario, Perfil (con Instalar app), Objetivos, peso.
-- **Bloque 3b - Progreso e Historial.** Grafica de peso, logros, Historial completo (usa `weights`).
-- **Bloque 4 - Ajustes y habitos.** Ajustes (hub), Apariencia (toggle ya hecho),
-  Bienvenida, Recordatorios, registro por voz.
-- **Bloque 5 - Integraciones wger.** Puente de entrenamiento (workoutsession/workoutlog),
-  codigo de barras, alimento personalizado.
-- **Bloque 6 - Marca y deploy.** Rebranding wger -> cadence; decidir deploy automatico
-  (ver `deploy/README.md`).
+- **Bloque 3 - Datos personales.** HECHO: Perfil, Objetivos (Mifflin-St Jeor; las metas viven en
+  cadence, no en wger), registrar peso, cuentas y bienvenida/cuestionario (ver "Cuentas
+  multiusuario"), racha + calendario + panel de rachas, navegar por dias. FALTA: grafica de peso
+  (la tabla `weights` ya existe), logros, pantalla "Historial completo".
+- **Bloque 4 - Ajustes y habitos.** HECHO: hub de Ajustes (esta dentro de `profile.html`), Apariencia,
+  Instalar app, Bienvenida (1 intro + 5 preguntas; reemplaza las 3 diapositivas del mockup).
+  FALTA: Recordatorios (notificaciones push: claves VAPID + service worker + programador en el
+  servidor; en iPhone solo con la app instalada) y registro por voz (audio -> Gemini, no el dictado
+  del navegador).
+- **Bloque 5 - Integraciones wger.** FALTA TODO: codigo de barras (el catalogo de wger trae `code`;
+  en iPhone no hay BarcodeDetector: usar libreria), alimento personalizado (crear ingrediente
+  propio por persona), puente de entrenamiento (workoutsession/workoutlog). El interruptor "Codigo"
+  del escaner ya existe pero solo dice "proximamente".
+- **Bloque 6 - Marca y deploy.** FALTA TODO: rebranding wger -> cadence (ademas, algunos mensajes de
+  error del servidor aun nombran a wger), decidir deploy automatico (ver `deploy/README.md`).
+- **Bloque 7 - Listo para otras personas (propuesto, antes de abrir a desconocidos).** FALTA TODO:
+  terminos y privacidad reales, recuperacion de contrasena por correo (requiere SMTP: lo aporta
+  Andres), respaldo del volumen `cadence-data`, Ayuda y soporte, revisar AGPL de wger antes de vender.
+- REGLA ANTI-REPETICION: antes de empezar un bloque, comparar este listado con el codigo real
+  (grep de endpoints/paginas) y trabajar SOLO lo que dice FALTA; al terminar, mover lo hecho a
+  HECHO en este mismo listado y subirlo en el mismo commit.
 
 ## Navegacion y boton Atras (regla de Andres, 25 oct 2026; aplica a TODA pantalla nueva)
 

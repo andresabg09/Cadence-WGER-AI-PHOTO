@@ -131,6 +131,16 @@ services:
       # seguir arrancando igual, en vez de fallar por completo.
       - path: ./cadence/.env
         required: false
+    environment:
+      # En EasyPanel el archivo cadence/.env no existe (esta en .gitignore);
+      # las claves se ponen en la pestana "Entorno" del servicio, que Compose
+      # interpola aqui. Nunca se escriben en el repo.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-lite-latest}
+      WGER_API_TOKEN: ${WGER_API_TOKEN:-}
+      WGER_BASE_URL: ${WGER_BASE_URL:-https://crm-cadence-wger-ai-photo.cjauws.easypanel.host}
+      TIMEZONE: ${TIMEZONE:-America/Panama}
+      USER_NAME: ${USER_NAME:-Andrés}
     depends_on:
       web:
         condition: service_healthy

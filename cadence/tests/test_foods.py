@@ -281,3 +281,25 @@ def test_calories_to_burn_subtract_workouts(wger):
     admin.post("/api/workouts", json={"kind": "caminar", "minutes": 60})  # 3.5 MET x 70 kg = 245 kcal
     burn = admin.get("/api/today").json()["burn"]
     assert (burn["worked_kcal"], burn["kcal"]) == (245, 155)
+
+
+def test_activities_list_scales_with_weight_and_workouts_can_be_edited(wger):
+    admin, ana = two_people()
+    base = admin.get("/api/activities").json()
+    assert (base["weight_kg"], base["weight_known"]) == (70.0, False)
+    run = next(a for a in base["activities"] if a["key"] == "correr")
+    assert (run["label"], run["met"], run["kcal_per_min"]) == ("Carrera a ritmo moderado", 9.8, 11.43)
+    admin.post("/api/weight", json={"kg": 64})
+    run = next(a for a in admin.get("/api/activities").json()["activities"] if a["key"] == "correr")
+    assert run["kcal_per_min"] == 10.45 and len({a["key"] for a in admin.get("/api/activities").json()["activities"]}) >= 30
+    made = admin.post("/api/workouts", json={"kind": "trote", "minutes": 30, "at": "06:15", "note": "parque"}).json()
+    assert (made["kcal"], made["at"]) == (224, "06:15")  # 7 MET x 64 kg x 0.5 h
+    assert admin.post("/api/workouts", json={"kind": "trote", "minutes": 30, "at": "6:5"}).status_code == 422
+    for old in ("pesas", "cardio", "caminar", "correr", "ciclismo", "natacion", "yoga", "otro"):
+        assert admin.post("/api/workouts", json={"kind": old, "minutes": 20}).status_code == 200  # kinds logged before still work
+    edited = admin.patch(f"/api/workouts/{made['id']}", json={"kind": "correr", "minutes": 45, "at": "07:00"}).json()
+    assert (edited["kind"], edited["minutes"], edited["kcal"], edited["at"], edited["note"]) == ("correr", 45, 470, "07:00", "parque")
+    assert admin.patch(f"/api/workouts/{made['id']}", json={"minutes": 2}).status_code == 422
+    assert ana.patch(f"/api/workouts/{made['id']}", json={"minutes": 30}).status_code == 404  # not hers
+    assert any(w["id"] == made["id"] and w["minutes"] == 45 for w in admin.get("/api/today").json()["workouts"])
+    assert new_client().get("/api/activities").status_code == 401

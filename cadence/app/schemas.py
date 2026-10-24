@@ -174,6 +174,7 @@ class WorkoutOut(BaseModel):
     minutes: int
     kcal: float  # estimated burn
     note: str | None = None
+    at: str | None = None
 
 
 class BurnOut(BaseModel):
@@ -296,6 +297,30 @@ class WorkoutIn(BaseModel):
     minutes: int
     day: str | None = None  # AAAA-MM-DD, default today
     note: str | None = None
+    at: str | None = None  # HH:MM, local time of the workout (default now)
+
+
+class WorkoutUpdate(BaseModel):
+    kind: str | None = None
+    minutes: int | None = None
+    note: str | None = None
+    at: str | None = None
+
+
+class ActivityOut(BaseModel):
+    key: str
+    label: str
+    group: str
+    icon: str
+    met: float
+    kcal_per_min: float  # for this person's weight
+    words: str = ""
+
+
+class ActivitiesOut(BaseModel):
+    weight_kg: float
+    weight_known: bool
+    activities: list[ActivityOut]
 
 
 

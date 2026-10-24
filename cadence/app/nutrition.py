@@ -77,8 +77,46 @@ def macros_for_kcal(kcal: float, weight_kg: float, goal: str) -> tuple[int, int,
     return int(protein), int(carbs), int(fat)
 
 
-# Metabolic equivalents (kcal per kg per hour) of the activities cadence offers: an ESTIMATE, shown as such.
-WORKOUT_MET = {"pesas": 5.0, "cardio": 7.0, "caminar": 3.5, "correr": 9.8, "ciclismo": 7.5, "natacion": 6.0, "yoga": 2.5, "otro": 4.5}
+# Activities cadence offers, with their metabolic equivalent (kcal per kg per hour; values of the Compendium of Physical
+# Activities, rounded): an ESTIMATE, shown as such. (key, label, group, icon, MET, search words). The first block of keys
+# existed before the search list: they must keep working for workouts already logged.
+ACTIVITIES = [
+    ("caminar_lento", "Caminata lenta", "caminar", "shoe", 2.5, "pasear paseo"),
+    ("caminar", "Caminata a paso normal", "caminar", "shoe", 3.5, "andar"),
+    ("caminar_rapido", "Caminata rápida", "caminar", "shoe", 4.8, "power walking"),
+    ("caminar_carga", "Caminata con carga / cochecito", "caminar", "shoe", 4.5, "mochila bebé coche"),
+    ("senderismo", "Senderismo", "caminar", "sun", 6.0, "hiking montaña cerro"),
+    ("escaleras", "Subir escaleras", "caminar", "shoe", 8.8, "gradas"),
+    ("trote", "Trote ligero", "correr", "shoe", 7.0, "jogging trotar"),
+    ("correr", "Carrera a ritmo moderado", "correr", "shoe", 9.8, "correr running"),
+    ("correr_rapido", "Carrera a ritmo rápido", "correr", "shoe", 11.8, "sprint velocidad"),
+    ("saltar_cuerda", "Saltar la cuerda", "correr", "bolt", 11.0, "comba"),
+    ("ciclismo_suave", "Bicicleta suave", "bici", "bike", 4.0, "pedalear paseo"),
+    ("ciclismo", "Bicicleta, ritmo moderado", "bici", "bike", 7.5, "ciclismo"),
+    ("spinning", "Spinning / bici estática", "bici", "bike", 8.5, "estatica indoor"),
+    ("natacion", "Natación, ritmo suave", "agua", "swim", 6.0, "nadar piscina"),
+    ("natacion_fuerte", "Natación intensa", "agua", "swim", 9.8, "nadar piscina"),
+    ("pesas", "Pesas, esfuerzo moderado", "fuerza", "dumbbell", 5.0, "gimnasio mancuernas"),
+    ("pesas_fuertes", "Pesas, esfuerzo intenso", "fuerza", "dumbbell", 6.0, "gimnasio"),
+    ("calistenia", "Ejercicios con tu peso", "fuerza", "dumbbell", 3.8, "calistenia flexiones abdominales"),
+    ("hiit", "HIIT / circuito", "fuerza", "flame", 8.0, "intervalos crossfit funcional"),
+    ("cardio", "Cardio general", "fuerza", "flame", 7.0, "eliptica"),
+    ("yoga", "Yoga", "flexibilidad", "yoga", 2.5, ""),
+    ("pilates", "Pilates", "flexibilidad", "yoga", 3.0, ""),
+    ("estiramiento", "Estiramientos", "flexibilidad", "yoga", 2.3, "stretching"),
+    ("baile", "Baile", "deporte", "bolt", 5.5, "bailar"),
+    ("zumba", "Zumba / aeróbicos", "deporte", "bolt", 6.5, "aerobicos"),
+    ("futbol", "Fútbol", "deporte", "bolt", 7.0, "futbolito"),
+    ("baloncesto", "Baloncesto", "deporte", "bolt", 6.5, "basquetbol"),
+    ("tenis", "Tenis / pádel", "deporte", "bolt", 7.3, "padel raqueta"),
+    ("voleibol", "Voleibol", "deporte", "bolt", 4.0, "voley"),
+    ("boxeo", "Boxeo / artes marciales", "deporte", "bolt", 7.8, "karate taekwondo"),
+    ("remo", "Remo", "agua", "swim", 7.0, "kayak"),
+    ("limpieza", "Limpiar la casa", "otros", "sun", 3.3, "quehaceres aseo"),
+    ("jardineria", "Jardinería", "otros", "leaf", 4.0, "huerto plantas"),
+    ("otro", "Otro", "otros", "bolt", 4.5, ""),
+]
+WORKOUT_MET = {key: met for key, _l, _g, _i, met, _w in ACTIVITIES}
 
 
 def workout_kcal(kind: str, minutes: int, weight_kg: float) -> float:

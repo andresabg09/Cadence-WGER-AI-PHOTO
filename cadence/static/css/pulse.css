@@ -929,3 +929,17 @@ html { -webkit-text-size-adjust: 100%; }
 .seg-toggle { position: relative; display: flex; background: rgba(127, 127, 140, 0.14); border-radius: 100px; padding: 3px; margin-bottom: 14px; }
 .seg-toggle button { flex: 1; min-height: 34px; border: none; border-radius: 100px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .seg-toggle button[aria-selected="true"] { background: var(--ink); color: var(--bg); }
+
+/* ---- Block 11: workouts ---- */
+.wo-art { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; flex-shrink: 0; }
+.wo-row { cursor: pointer; }
+.wo-sheet { max-width: 520px; }
+.wo-search { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px; border-radius: 15px; background: var(--bg); border: 1px solid var(--card-border); color: var(--ink-soft); }
+.wo-search input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: var(--ink); font: inherit; font-size: 16px; }
+.wo-list { display: flex; flex-direction: column; gap: 4px; margin-top: 14px; max-height: 56vh; overflow-y: auto; }
+.wo-item { display: flex; align-items: center; gap: 14px; padding: 8px 4px; background: none; border: none; color: var(--ink); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; border-radius: 14px; min-height: 58px; }
+.wo-item:hover { background: rgba(127, 127, 140, 0.1); }
+.wo-chips { display: flex; gap: 10px; margin: 16px 0 4px; overflow-x: auto; }
+.wo-chips button { flex-shrink: 0; min-height: 46px; padding: 0 20px; border-radius: 100px; background: transparent; border: 1px solid var(--card-border); color: var(--ink-soft); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.wo-chips button[aria-pressed="true"] { border: 2px solid var(--ink); color: var(--ink); }
+.wo-time { background: rgba(127, 127, 140, 0.14); border: none; border-radius: 100px; padding: 9px 14px; color: var(--ink); font-size: 14px; font-weight: 700; }

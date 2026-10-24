@@ -179,6 +179,7 @@
 <script src="static/js/api.js"></script>
 <script src="static/js/bits.js"></script>
 <script src="static/js/meal-detail.js"></script>
+<script src="static/js/workouts.js"></script>
 <script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/shell.js"></script>
@@ -956,67 +957,34 @@ function renderDayNav(data) {
   label.onclick = () => openCalendar(data.date, data.today);
 }
 
-// ---- Workouts: a quick log per day (own kcal estimate from the activity, minutes and your weight) ----
-const WORKOUT_KINDS = [['pesas', '🏋️', 'Pesas'], ['cardio', '🏃', 'Cardio'], ['caminar', '🚶', 'Caminar'], ['correr', '👟', 'Correr'],
-  ['ciclismo', '🚴', 'Ciclismo'], ['natacion', '🏊', 'Natación'], ['yoga', '🧘', 'Yoga'], ['otro', '⚡', 'Otro']];
-const kindInfo = (k) => WORKOUT_KINDS.find((x) => x[0] === k) || WORKOUT_KINDS[7];
-
+// ---- Workouts: search an activity, pick a duration (js/workouts.js). The burn is an estimate and does not change the goal. ----
 function renderWorkouts(data) {
   const box = document.getElementById('workoutCard');
   const list = data.workouts || [];
   const burned = list.reduce((sum, w) => sum + w.kcal, 0);
+  const label = (w) => (cadenceWorkouts.info(w.kind) ? cadenceWorkouts.info(w.kind).label : w.kind);
   box.innerHTML = `
     ${list.map((w) => `
-      <div class="wo-row">
-        <span class="wo-ico">${kindInfo(w.kind)[1]}</span>
+      <div class="wo-row" data-open="${w.id}" role="button" tabindex="0" aria-label="Editar ${escapeHtml(label(w))}">
+        ${cadenceWorkouts.art(cadenceWorkouts.info(w.kind), 38)}
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;">${kindInfo(w.kind)[2]} · ${w.minutes} min</div>
-          <div style="font-size:11px;color:var(--ink-soft);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(w.note || 'Quemadas estimadas')}</div>
+          <div style="font-size:13px;font-weight:700;">${escapeHtml(label(w))} · ${w.minutes} min</div>
+          <div style="font-size:11px;color:var(--ink-soft);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml([w.at, w.note].filter(Boolean).join(' · ') || 'Quemadas estimadas')}</div>
         </div>
         <span class="mono" style="font-size:12.5px;font-weight:700;color:var(--good);">−${Math.round(w.kcal)}</span>
         <button class="row-del" data-wo="${w.id}" aria-label="Borrar entrenamiento"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2m-9 0l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
       </div>`).join('')}
     <button type="button" class="wo-add" id="woAdd">${list.length ? '+ Otro entrenamiento' : '🏋️ Registrar entrenamiento'}</button>
     ${list.length ? `<div class="wo-note">Estimado por actividad y peso (${Math.round(burned)} kcal en total). No cambia tu meta del día.</div>` : ''}`;
-  document.getElementById('woAdd').addEventListener('click', () => openWorkoutSheet(data.date));
+  document.getElementById('woAdd').addEventListener('click', () => cadenceWorkouts.openSearch(data.date, loadToday));
+  box.querySelectorAll('[data-open]').forEach((row) => {
+    const open = () => { const w = list.find((x) => String(x.id) === row.dataset.open); if (w) cadenceWorkouts.openEdit(w, loadToday); };
+    row.addEventListener('click', (e) => { if (!e.target.closest('[data-wo]')) open(); });
+    row.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
+  });
   box.querySelectorAll('[data-wo]').forEach((b) => b.addEventListener('click', async () => {
     try { await apiDelete(`api/workouts/${b.dataset.wo}`); if (window.sfx) sfx.play('remove'); loadToday(); } catch (err) { showToast(err.message); }
   }));
-}
-
-function openWorkoutSheet(day) {
-  let kind = 'pesas';
-  const scrim = document.createElement('div');
-  scrim.className = 'sheet-scrim';
-  const sheet = document.createElement('div');
-  sheet.className = 'entry-sheet';
-  sheet.setAttribute('role', 'dialog');
-  sheet.setAttribute('aria-label', 'Registrar entrenamiento');
-  sheet.innerHTML = `
-    <h3 class="disp" style="margin:0 0 12px;font-size:17px;">Registrar entrenamiento</h3>
-    <div class="wo-kinds" id="woKinds"></div>
-    <label class="field"><span>DURACIÓN</span><div class="input-unit"><input class="input" id="woMin" type="number" inputmode="numeric" min="5" max="600" step="5" value="45"><i>min</i></div></label>
-    <label class="field"><span>NOTA (OPCIONAL)</span><input class="input" id="woNote" maxlength="80" placeholder="Ej.: pecho y tríceps" autocomplete="off"></label>
-    <div class="form-error" id="woErr" style="margin-top:10px;"></div>
-    <div class="sheet-actions"><button class="btn-primary" id="woSave">Guardar</button></div>`;
-  document.body.append(scrim, sheet);
-  pushOverlay(() => { scrim.remove(); sheet.remove(); });
-  scrim.addEventListener('click', () => dismissOverlay());
-  const paint = () => {
-    sheet.querySelector('#woKinds').innerHTML = WORKOUT_KINDS.map(([k, ico, label]) =>
-      `<button type="button" data-k="${k}" aria-pressed="${k === kind}"><span>${ico}</span>${label}</button>`).join('');
-    sheet.querySelectorAll('#woKinds button').forEach((b) => b.addEventListener('click', () => { kind = b.dataset.k; paint(); }));
-  };
-  paint();
-  sheet.querySelector('#woSave').addEventListener('click', async () => {
-    const err = sheet.querySelector('#woErr');
-    err.classList.remove('show');
-    try {
-      await apiPost('api/workouts', { kind, minutes: Number(sheet.querySelector('#woMin').value), day, note: sheet.querySelector('#woNote').value.trim() || null });
-      if (window.sfx) sfx.play('save');
-      dismissOverlay(loadToday);
-    } catch (e) { err.textContent = e.message || 'No se pudo guardar'; err.classList.add('show'); }
-  });
 }
 
 // ---- Central button: the cadence mark opens Foto · Código · Voz (it never opens the camera by itself) ----
@@ -1115,6 +1083,7 @@ function paintToday(data, stale) {
   renderWater(data);
   renderScoreCards(data);
   renderWorkouts(data);
+  cadenceWorkouts.load().then(() => { if (latestToday === data) renderWorkouts(data); }).catch(() => {}); // activity names and icons
 
   if (!stale) { celebrate(data); noteStreak(data); syncExtrasOnce(data); }
   document.getElementById('waterGoalBtn').onclick = () => openWaterGoal(data);

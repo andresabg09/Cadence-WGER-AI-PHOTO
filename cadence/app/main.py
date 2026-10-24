@@ -1,5 +1,6 @@
 from time import monotonic
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date as date_type, datetime, time, timedelta
 
@@ -40,6 +41,9 @@ from .schemas import (
     ScoreOut,
     ScorePart,
     WaterAdd,
+    ActivitiesOut,
+    ActivityOut,
+    WorkoutUpdate,
     WaterGoalIn,
     BurnOut,
     WaterImport,
@@ -1075,8 +1079,47 @@ def add_workout(body: WorkoutIn, user: store.User = Depends(current_user)):
     if day > today_:
         raise HTTPException(422, "No se puede registrar un entrenamiento futuro")
     kcal = nutrition.workout_kcal(body.kind, body.minutes, store.latest_weight(user.id) or 70)
-    wid = store.add_workout(user.id, day.isoformat(), body.kind, body.minutes, kcal, body.note)
-    return WorkoutOut(id=wid, day=day.isoformat(), kind=body.kind, minutes=body.minutes, kcal=kcal, note=(body.note or "").strip() or None)
+    at = _clock(body.at) or local_now().strftime("%H:%M")
+    wid = store.add_workout(user.id, day.isoformat(), body.kind, body.minutes, kcal, body.note, at)
+    return WorkoutOut(id=wid, day=day.isoformat(), kind=body.kind, minutes=body.minutes, kcal=kcal, note=(body.note or "").strip() or None, at=at)
+
+
+def _clock(text: str | None) -> str | None:
+    """HH:MM or None; anything else is a 422."""
+    if not text:
+        return None
+    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", text):
+        raise HTTPException(422, "La hora debe ser HH:MM")
+    return text
+
+
+@app.get("/api/activities", response_model=ActivitiesOut)
+def activities(user: store.User = Depends(current_user)):
+    """Every activity with its kcal per minute for THIS person's weight (70 kg when they have not logged one)."""
+    kg = store.latest_weight(user.id)
+    weight = kg or 70.0
+    return ActivitiesOut(weight_kg=weight, weight_known=bool(kg), activities=[
+        ActivityOut(key=k, label=label, group=g, icon=ic, met=met, kcal_per_min=round(met * weight / 60, 2), words=words)
+        for k, label, g, ic, met, words in nutrition.ACTIVITIES])
+
+
+@app.patch("/api/workouts/{workout_id}", response_model=WorkoutOut)
+def update_workout(workout_id: int, body: WorkoutUpdate, user: store.User = Depends(current_user)):
+    """Edit a logged workout (activity, minutes, note, time): the burn is estimated again."""
+    current = next((w for w in store.workouts_between(user.id, "0000-01-01", "9999-12-31") if w["id"] == workout_id), None)
+    if current is None:
+        raise HTTPException(404, "Entrenamiento no encontrado")
+    kind = body.kind or current["kind"]
+    minutes = body.minutes if body.minutes is not None else current["minutes"]
+    if kind not in nutrition.WORKOUT_MET:
+        raise HTTPException(422, "Elige el tipo de entrenamiento")
+    if not 5 <= minutes <= 600:
+        raise HTTPException(422, "La duración debe estar entre 5 y 600 minutos")
+    note = current["note"] if body.note is None else body.note
+    at = _clock(body.at) or current.get("at")
+    kcal = nutrition.workout_kcal(kind, minutes, store.latest_weight(user.id) or 70)
+    store.update_workout(user.id, workout_id, kind, minutes, kcal, note, at)
+    return WorkoutOut(id=workout_id, day=current["day"], kind=kind, minutes=minutes, kcal=kcal, note=(note or "").strip() or None, at=at)
 
 
 @app.delete("/api/workouts/{workout_id}")

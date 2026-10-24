@@ -56,7 +56,8 @@ class WgerStatus(BaseModel):
 class ConfirmedEntry(BaseModel):
     ingredient_id: int
     amount_grams: float
-    diary_entry_id: int
+    # wger's diary ids are UUIDs (text) in current versions, ints in older ones.
+    diary_entry_id: str
 
 
 class ConfirmResponse(BaseModel):
@@ -89,7 +90,8 @@ class MacroTotals(BaseModel):
 
 
 class MealItem(BaseModel):
-    diary_entry_id: int
+    # wger's diary ids are UUIDs (text) in current versions, ints in older ones.
+    diary_entry_id: str
     ingredient_id: int
     name: str
     amount_grams: float

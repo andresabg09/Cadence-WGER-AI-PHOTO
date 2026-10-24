@@ -181,3 +181,38 @@ def test_today_survives_an_unreadable_plan_and_missing_ingredient(monkeypatch):
     assert body["goal"]["kcal"] > 0
     items = [i for m in body["meals"] for i in m["items"]]
     assert items and items[0]["name"] == "(alimento no disponible)"
+
+
+def test_diary_ids_may_be_uuids(monkeypatch):
+    """Field test: this wger returns UUID ids for diary entries; they must pass through as text."""
+    entry_id = "01a16c5a-ce16-7cdc-a3f0-b506bc3690f9"
+    deleted = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        from app.meals import local_now
+
+        path = request.url.path
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": entry_id})
+        if request.method == "DELETE":
+            deleted.append(path)
+            return httpx.Response(204)
+        if path == "/api/v2/nutritionplan/":
+            return httpx.Response(200, json={"results": [{"id": "p-1", "creation_date": "2026-10-01"}, {"id": "p-2", "creation_date": "2026-10-20"}]})
+        if path == "/api/v2/nutritionplan/p-2/":
+            return httpx.Response(200, json={"id": "p-2", "goal_energy": None})
+        if path == "/api/v2/nutritiondiary/":
+            return httpx.Response(200, json={"results": [{"id": entry_id, "plan": "p-2", "ingredient": 9, "amount": "50.00", "datetime": local_now().isoformat()}]})
+        return httpx.Response(200, json={"id": 9, "name": "Vanilla ice cream", "energy": 200})
+
+    _stub_wger(monkeypatch, handler)
+    client = TestClient(main.app)
+
+    saved = client.post("/api/confirm", json={"items": [{"ingredient_id": 9, "amount_grams": 50}]})
+    assert saved.status_code == 200 and saved.json()["created"][0]["diary_entry_id"] == entry_id
+
+    today = client.get("/api/today").json()
+    assert [i["diary_entry_id"] for m in today["meals"] for i in m["items"]] == [entry_id]
+
+    assert client.delete(f"/api/diary/{entry_id}").status_code == 200
+    assert deleted == [f"/api/v2/nutritiondiary/{entry_id}/"]

@@ -232,7 +232,7 @@ def today():
             key = meal_key_for_entry(entry)
             groups[key].append(
                 MealItem(
-                    diary_entry_id=entry["id"],
+                    diary_entry_id=str(entry["id"]),  # UUID text on current wger, int on older ones
                     ingredient_id=ingredient_id,
                     name=ingredient.get("name", "?"),
                     amount_grams=amount,
@@ -376,7 +376,8 @@ def recent_foods():
             return []
         now = local_now()
         start = datetime.combine(now.date() - timedelta(days=30), time.min, tzinfo=now.tzinfo)
-        entries = wger.get_diary_entries(plan_id, start, now)
+        # Until the end of today: logging "desayuno" at night stamps it at 8:00, i.e. later than now.
+        entries = wger.get_diary_entries(plan_id, start, datetime.combine(now.date(), time.max, tzinfo=now.tzinfo))
         entries.sort(key=lambda e: e.get("datetime", ""), reverse=True)
 
         seen: dict[int, dict] = {}
@@ -406,7 +407,7 @@ def recent_foods():
 
 
 @app.delete("/api/diary/{entry_id}")
-def delete_diary_entry(entry_id: int):
+def delete_diary_entry(entry_id: str):
     wger = get_wger_client()
     try:
         wger.delete_diary_entry(entry_id)

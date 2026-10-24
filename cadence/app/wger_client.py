@@ -76,15 +76,17 @@ class WgerClient:
             )
         return [r for r in results if r["id"] is not None]
 
-    def find_default_nutrition_plan_id(self) -> int | None:
+    def find_default_nutrition_plan_id(self) -> int | str | None:
         response = self._client.get("/api/v2/nutritionplan/", params={"format": "json", "limit": 5})
         response.raise_for_status()
         results = response.json().get("results", [])
-        # wger doesn't expose an "active plan" flag by default; the most
-        # recently created plan (highest id) is used as the logging target.
-        return max(p["id"] for p in results) if results else None
+        # wger doesn't expose an "active plan" flag by default; the most recently
+        # created plan is the logging target. Ids may be UUIDs, so order by date.
+        if not results:
+            return None
+        return max(results, key=lambda p: (p.get("creation_date") or "", str(p["id"])))["id"]
 
-    def create_nutrition_plan(self) -> int:
+    def create_nutrition_plan(self) -> int | str:
         """wger needs every diary entry to belong to a plan; cadence creates its own
         so the user never has to open wger just to make one."""
         response = self._client.post(
@@ -95,7 +97,7 @@ class WgerClient:
             raise WgerError(f"wger rechazo crear el plan de nutricion: {response.status_code} {response.text}")
         return response.json()["id"]
 
-    def get_default_nutrition_plan_id(self) -> int:
+    def get_default_nutrition_plan_id(self) -> int | str:
         return self.find_default_nutrition_plan_id() or self.create_nutrition_plan()
 
     def get_nutrition_plan(self, plan_id: int) -> dict:
@@ -135,7 +137,7 @@ class WgerClient:
         ingredient_id: int,
         amount_grams: float,
         when: datetime | None = None,
-    ) -> int:
+    ) -> str:
         payload = {
             "plan": plan_id,
             "ingredient": ingredient_id,
@@ -145,9 +147,9 @@ class WgerClient:
         response = self._client.post("/api/v2/nutritiondiary/", json=payload)
         if response.status_code >= 400:
             raise WgerError(f"wger rechazo el registro de comida: {response.status_code} {response.text}")
-        return response.json()["id"]
+        return str(response.json()["id"])
 
-    def delete_diary_entry(self, entry_id: int) -> None:
+    def delete_diary_entry(self, entry_id: int | str) -> None:
         response = self._client.delete(f"/api/v2/nutritiondiary/{entry_id}/")
         if response.status_code not in (200, 202, 204):
             raise WgerError(f"wger rechazo el borrado del registro: {response.status_code} {response.text}")

@@ -2,7 +2,7 @@
 
 import re
 import secrets
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
@@ -317,10 +317,42 @@ def delete_invite(code: str, _: store.User = Depends(auth.require_admin)):
 
 @router.post("/api/admin/users/{user_id}/reset-password")
 def reset_password(user_id: int, _: store.User = Depends(auth.require_admin)):
+    """A single-use code (valid 24 h) the person types on the sign-in screen to choose a new
+    password. Their current password keeps working until they do."""
     target = store.get_user(user_id)
     if target is None:
         raise HTTPException(404, "Usuario no encontrado")
-    temporary = secrets.token_urlsafe(9)
-    store.update_user(user_id, password_hash=security.hash_password(temporary))
-    store.delete_user_sessions(user_id)
-    return {"password": temporary}
+    code = security.new_invite_code()
+    expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+    store.create_reset(user_id, security.token_hash(_norm_code(code)), expires)
+    return {"code": code, "email": target.email}
+
+
+def _norm_code(code: str) -> str:
+    return "".join(ch for ch in (code or "").upper() if ch.isalnum())
+
+
+class ResetIn(BaseModel):
+    email: str
+    code: str
+    password: str = Field(min_length=8, max_length=128)
+
+
+@router.post("/api/auth/reset", response_model=MeOut)
+def use_reset_code(body: ResetIn, request: Request, response: Response):
+    email = body.email.strip().lower()
+    keys = (f"ip:{auth.client_ip(request)}", f"mail:{email}")
+    if any(_login_throttle.blocked(k) for k in keys):
+        raise HTTPException(429, "Demasiados intentos fallidos. Espera unos minutos.")
+    user, _ = store.get_user_by_email(email)
+    ok = user is not None and store.consume_reset(user.id, security.token_hash(_norm_code(body.code)))
+    if not ok:
+        for k in keys:
+            _login_throttle.fail(k)
+        raise HTTPException(403, "Ese código no es válido, ya se usó o venció. Pide uno nuevo al administrador.")
+    for k in keys:
+        _login_throttle.reset(k)
+    store.update_user(user.id, password_hash=security.hash_password(body.password))
+    store.delete_user_sessions(user.id)
+    auth.set_session(response, request, user.id)
+    return me_out(user)

@@ -212,6 +212,14 @@ def test_password_change_and_admin_reset(wger):
     assert ana.post("/api/auth/password", json={"current": "clave-segura-1", "new": "nueva-clave-9"}).status_code == 200
     assert ana.get("/api/auth/me").status_code == 200
     ana_id = [u for u in admin.get("/api/admin/overview").json()["users"] if u["email"] == "ana@example.com"][0]["id"]
-    temp = admin.post(f"/api/admin/users/{ana_id}/reset-password").json()["password"]
-    assert ana.get("/api/auth/me").status_code == 401  # signed out everywhere
-    assert new_client().post("/api/auth/login", json={"email": "ana@example.com", "password": temp}).status_code == 200
+    reset = admin.post(f"/api/admin/users/{ana_id}/reset-password").json()
+    assert ana.get("/api/auth/me").status_code == 200  # nothing changes until the code is used
+    other = new_client()
+    assert other.post("/api/auth/reset", json={"email": "ana@example.com", "code": "AAAA-BBBB", "password": "otra-clave-12"}).status_code == 403
+    assert other.post("/api/auth/reset", json={"email": "ana@example.com", "code": reset["code"].lower().replace("-", " "), "password": "otra-clave-12"}).status_code == 200
+    assert ana.get("/api/auth/me").status_code == 401  # signed out everywhere else
+    assert other.get("/api/auth/me").status_code == 200  # the new session works
+    assert new_client().post("/api/auth/login", json={"email": "ana@example.com", "password": "nueva-clave-9"}).status_code == 401
+    assert new_client().post("/api/auth/login", json={"email": "ana@example.com", "password": "otra-clave-12"}).status_code == 200
+    # a code works once, and only for its owner
+    assert new_client().post("/api/auth/reset", json={"email": "ana@example.com", "code": reset["code"], "password": "tercera-clave-1"}).status_code == 403

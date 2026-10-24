@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS invites (
   code TEXT PRIMARY KEY, note TEXT, created_by INTEGER, created_at TEXT NOT NULL, used_by INTEGER, used_at TEXT
 );
+CREATE TABLE IF NOT EXISTS resets (
+  code_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS weights (
   user_id INTEGER NOT NULL, day TEXT NOT NULL, kg REAL NOT NULL, PRIMARY KEY (user_id, day)
 );
@@ -321,6 +324,23 @@ def delete_session(token_digest: str) -> None:
 def delete_user_sessions(user_id: int) -> None:
     with closing(_connect()) as conn, conn:
         conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+
+
+def create_reset(user_id: int, code_hash: str, expires_at: str) -> None:
+    """One live reset code per person: a new one replaces the previous."""
+    with closing(_connect()) as conn, conn:
+        conn.execute("DELETE FROM resets WHERE user_id = ?", (user_id,))
+        conn.execute("INSERT INTO resets (code_hash, user_id, expires_at) VALUES (?, ?, ?)", (code_hash, user_id, expires_at))
+
+
+def consume_reset(user_id: int, code_hash: str) -> bool:
+    """True once, if the person's code matches and has not expired."""
+    with closing(_connect()) as conn, conn:
+        row = conn.execute("SELECT expires_at FROM resets WHERE user_id = ? AND code_hash = ?", (user_id, code_hash)).fetchone()
+        if row is None:
+            return False
+        conn.execute("DELETE FROM resets WHERE user_id = ?", (user_id,))
+        return row[0] > _now()
 
 
 def create_invite(code: str, note: str | None, created_by: int) -> None:

@@ -1,7 +1,7 @@
 // Minimal app-shell cache. Network-first so a deploy is visible on the next
 // load (no manual cache bump needed); the cache is only the offline fallback.
 // v2: v1 could hold HTML saved under css/js URLs (see nginx /cadence/ fix).
-const CACHE_NAME = 'cadence-shell-v16';
+const CACHE_NAME = 'cadence-shell-v17';
 const SHELL_FILES = [
   'index.html',
   'scan.html',

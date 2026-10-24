@@ -230,13 +230,21 @@ async function loadAdmin() {
     try { await apiDelete(`api/admin/invites/${b.dataset.del}`); loadAdmin(); } catch (err) { showToast(err.message); }
   }));
   $('userList').querySelectorAll('[data-reset]').forEach((b) => b.addEventListener('click', async () => {
-    if (!confirm(`¿Restablecer la contraseña de ${b.dataset.who}? Se cerrará su sesión.`)) return;
+    if (!confirm(`¿Generar un código para que ${b.dataset.who} elija una contraseña nueva?`)) return;
     try {
-      const { password } = await apiPost(`api/admin/users/${b.dataset.reset}/reset-password`, {});
-      openSheet(`<h3 class="disp" style="margin:0 0 8px;font-size:17px;">Contraseña temporal</h3>
-        <p style="margin:0 0 14px;font-size:12.5px;color:var(--ink-soft);line-height:1.5;">Envíasela a ${escapeHtml(b.dataset.who)}; podrá cambiarla en su perfil. No se vuelve a mostrar.</p>
-        <div class="code-pill" style="font-size:20px;text-align:center;padding:14px;background:var(--bg);border-radius:14px;user-select:all;">${escapeHtml(password)}</div>
-        <div class="sheet-actions"><button class="btn-primary" id="sOk">Listo</button></div>`, (sheet, close) => sheet.querySelector('#sOk').addEventListener('click', () => close()));
+      const { code, email } = await apiPost(`api/admin/users/${b.dataset.reset}/reset-password`, {});
+      const link = `${new URL('login.html', window.location.href).href}?reset=${encodeURIComponent(code)}&email=${encodeURIComponent(email)}`;
+      const text = `Hola ${b.dataset.who}, restablecí tu acceso a cadence. Abre ${link} y elige tu nueva contraseña (código ${code}, sirve una vez y vence en 24 h).`;
+      openSheet(`<h3 class="disp" style="margin:0 0 8px;font-size:17px;">Código para ${escapeHtml(b.dataset.who)}</h3>
+        <p style="margin:0 0 14px;font-size:12.5px;color:var(--ink-soft);line-height:1.5;">Envíaselo: en la pantalla de entrar toca «Tengo un código», pone su correo, este código y elige su nueva contraseña. Sirve una vez y vence en 24 horas. Su contraseña actual sigue funcionando hasta que lo use.</p>
+        <div class="code-pill" style="font-size:20px;text-align:center;padding:14px;background:var(--bg);border-radius:14px;user-select:all;">${escapeHtml(code)}</div>
+        <div class="sheet-actions"><button class="btn-secondary" id="sCopy">Compartir mensaje</button><button class="btn-primary" id="sOk">Listo</button></div>`, (sheet, close) => {
+        sheet.querySelector('#sOk').addEventListener('click', () => close());
+        sheet.querySelector('#sCopy').addEventListener('click', async () => {
+          if (navigator.share) { try { await navigator.share({ text }); return; } catch { /* cancelled: copy instead */ } }
+          try { await navigator.clipboard.writeText(text); showToast('Mensaje copiado', 'ok'); } catch { showToast(`Código: ${code}`, 'warn'); }
+        });
+      });
     } catch (err) { showToast(err.message); }
   }));
 }

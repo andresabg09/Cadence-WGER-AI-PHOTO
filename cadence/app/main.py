@@ -158,7 +158,22 @@ def search_page():
 def today():
     wger = get_wger_client()
     try:
-        plan_id = settings.default_nutrition_plan_id or wger.get_default_nutrition_plan_id()
+        plan_id = settings.default_nutrition_plan_id or wger.find_default_nutrition_plan_id()
+        if plan_id is None:
+            # Nothing logged yet: show an empty day instead of creating a plan on a read.
+            return TodayResponse(
+                date=local_now().date().isoformat(),
+                totals=MacroTotals(),
+                goal=MacroTotals(
+                    kcal=settings.fallback_goal_kcal,
+                    protein_g=settings.fallback_goal_protein_g,
+                    carbs_g=settings.fallback_goal_carbs_g,
+                    fat_g=settings.fallback_goal_fat_g,
+                ),
+                meals=[],
+                streak_days=0,
+                user_name=settings.user_name,
+            )
         plan = wger.get_nutrition_plan(plan_id)
 
         now = local_now()
@@ -346,7 +361,9 @@ def recent_foods():
     """Distinct foods logged in the last 30 days, newest first."""
     wger = get_wger_client()
     try:
-        plan_id = settings.default_nutrition_plan_id or wger.get_default_nutrition_plan_id()
+        plan_id = settings.default_nutrition_plan_id or wger.find_default_nutrition_plan_id()
+        if plan_id is None:
+            return []
         now = local_now()
         start = datetime.combine(now.date() - timedelta(days=30), time.min, tzinfo=now.tzinfo)
         entries = wger.get_diary_entries(plan_id, start, now)

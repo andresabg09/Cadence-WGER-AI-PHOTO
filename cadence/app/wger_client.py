@@ -76,19 +76,27 @@ class WgerClient:
             )
         return [r for r in results if r["id"] is not None]
 
-    def get_default_nutrition_plan_id(self) -> int:
+    def find_default_nutrition_plan_id(self) -> int | None:
         response = self._client.get("/api/v2/nutritionplan/", params={"format": "json", "limit": 5})
         response.raise_for_status()
         results = response.json().get("results", [])
-        if not results:
-            raise WgerError(
-                "No hay ningun plan de nutricion en wger para este usuario. "
-                "Crea uno manualmente en la app o via POST /api/v2/nutritionplan/ "
-                "antes de registrar comidas."
-            )
         # wger doesn't expose an "active plan" flag by default; the most
         # recently created plan (highest id) is used as the logging target.
-        return max(results, key=lambda p: p["id"])["id"]
+        return max(p["id"] for p in results) if results else None
+
+    def create_nutrition_plan(self) -> int:
+        """wger needs every diary entry to belong to a plan; cadence creates its own
+        so the user never has to open wger just to make one."""
+        response = self._client.post(
+            "/api/v2/nutritionplan/",
+            json={"description": "cadence", "only_logging": True},
+        )
+        if response.status_code >= 400:
+            raise WgerError(f"wger rechazo crear el plan de nutricion: {response.status_code} {response.text}")
+        return response.json()["id"]
+
+    def get_default_nutrition_plan_id(self) -> int:
+        return self.find_default_nutrition_plan_id() or self.create_nutrition_plan()
 
     def get_nutrition_plan(self, plan_id: int) -> dict:
         response = self._client.get(f"/api/v2/nutritionplan/{plan_id}/", params={"format": "json"})

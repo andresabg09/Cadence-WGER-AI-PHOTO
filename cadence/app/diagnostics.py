@@ -91,9 +91,16 @@ def _wger_checks(checks: list[dict], found: dict[str, int], wger: WgerClient, de
                  "Copia de nuevo la clave en wger -> menu de usuario -> API key (solo la clave, sin 'Token ').", token_valid)
 
     if valid:
-        _run(checks, "Existe un plan de nutricion",
-             "En wger entra a Nutricion y crea un plan (el nombre da igual).",
-             lambda: (_require("plan" in found, "no hay ningun plan"), "ok")[1])
+        def plan() -> str:
+            if "plan" in found:
+                return "plan existente"
+            if not deep:
+                return "se creara solo al registrar la primera comida"
+            found["plan"] = wger.create_nutrition_plan()
+            return "plan creado automaticamente"
+
+        _run(checks, "Plan de nutricion (lo crea cadence solo)",
+             "wger rechazo crear el plan: avisame con este mensaje.", plan)
 
         def diary() -> str:
             from datetime import datetime, timedelta, timezone

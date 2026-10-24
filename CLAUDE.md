@@ -184,6 +184,16 @@ dedicada, evaluando el riesgo de romper el core de wger. El resto del
 lenguaje visual (paleta, tipografia, iconografia Material Symbols de MUI)
 se mantiene igual - es un rebranding de marca, no un rediseno.
 
+## Principio: wger es el almacen, cadence es la unica cara
+
+Cadence no tiene base de datos propia: guarda diario, metas, peso y racha en wger via su API
+REST, y usa su catalogo de alimentos. Andres NO debe tener que entrar a la interfaz de wger
+para nada: todo lo que wger exija (plan de nutricion, etc.) lo crea cadence solo
+(`create_nutrition_plan`). Unicos pasos de servidor, una sola vez: cargar el catalogo
+(`sync-ingredients-bulk`) y generar el token. Si algun dia se quiere independizar del todo,
+la alternativa es base propia en cadence + wger solo como catalogo (reescritura mayor,
+decision de Andres; no hecha).
+
 ## Plan por bloques (fuente de verdad del avance)
 
 Mockup aprobado: artifact "cadence — Diseño" (claude.ai/artifact/VtU9UcFoBkUS7g7Nry3Exc),

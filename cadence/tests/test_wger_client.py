@@ -58,7 +58,7 @@ def test_diagnostics_lists_every_missing_piece(monkeypatch):
     report = diagnostics.run_diagnostics(client_with(handler))
     failed = {c["name"] for c in report["checks"] if not c["ok"]}
     assert report["ok"] is False
-    assert failed == {"Existe un plan de nutricion", "wger tiene ingredientes cargados"}
+    assert failed == {"wger tiene ingredientes cargados"}  # a missing plan is not a failure: cadence creates it
     assert all(c["fix"] for c in report["checks"] if not c["ok"])
 
 
@@ -121,3 +121,30 @@ def test_deep_diagnostics_writes_and_deletes_a_test_entry():
     write = next(c for c in report["checks"] if c["name"].startswith("Registrar y borrar"))
     assert write["ok"] is True
     assert ("DELETE", "/api/v2/nutritiondiary/77/") in calls
+
+
+def test_confirm_creates_the_plan_when_wger_has_none(monkeypatch):
+    posted = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+
+        if request.method == "POST" and request.url.path == "/api/v2/nutritionplan/":
+            posted.append(json.loads(request.content))
+            return httpx.Response(201, json={"id": 8})
+        if request.method == "POST":
+            posted.append(json.loads(request.content))
+            return httpx.Response(201, json={"id": 90})
+        return httpx.Response(200, json={"results": []})
+
+    _stub_wger(monkeypatch, handler)
+    response = TestClient(main.app).post("/api/confirm", json={"items": [{"ingredient_id": 3, "amount_grams": 50}]})
+    assert response.status_code == 200
+    assert posted[0]["description"] == "cadence"
+    assert posted[1]["plan"] == 8
+
+
+def test_today_with_no_plan_is_an_empty_day_not_an_error(monkeypatch):
+    _stub_wger(monkeypatch, lambda request: httpx.Response(200, json={"results": []}))
+    body = TestClient(main.app).get("/api/today").json()
+    assert body["meals"] == [] and body["streak_days"] == 0 and body["goal"]["kcal"] > 0

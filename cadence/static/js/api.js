@@ -333,7 +333,9 @@ const writeWaterPending = (list) => { try { localStorage.setItem(WATER_PENDING_K
 // Adds (or removes, negative) millilitres to a day. Returns the day's new total, or null when offline: it is queued and sent later.
 async function addWater(dateIso, ml) {
   try {
-    return (await apiPost('api/water', { date: dateIso, add_ml: ml })).ml;
+    const out = await apiPost('api/water', { date: dateIso, add_ml: ml });
+    addWater.goal = out.goal_ml; // the person's daily goal, to know if this one reached it
+    return out.ml;
   } catch (err) {
     if (!isNetworkFailure(err)) throw err;
     writeWaterPending([...readWaterPending(), { date: dateIso, add_ml: ml }]);

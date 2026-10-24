@@ -54,6 +54,10 @@
     <!-- Hero: ring + macros -->
     <div class="hero-card">
       <div class="blob-wrap"><div class="blob"></div></div>
+      <div class="seg-toggle" role="tablist" aria-label="Qué mostrar">
+        <button type="button" role="tab" id="modeLeft" aria-selected="true">Restantes</button>
+        <button type="button" role="tab" id="modeBurn" aria-selected="false">Por quemar</button>
+      </div>
       <div style="display:flex;align-items:center;gap:16px;position:relative;">
         <div style="position:relative;width:112px;height:112px;flex-shrink:0;">
           <svg width="112" height="112" viewBox="0 0 112 112" aria-hidden="true">
@@ -69,7 +73,7 @@
           </svg>
           <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
             <span class="mono value-live" id="kcalLeft" style="font-size:23px;font-weight:700;line-height:1;">–</span>
-            <span style="font-size:9.5px;color:var(--ink-soft);font-weight:600;letter-spacing:0.05em;">KCAL LIBRES</span>
+            <span id="kcalCaption" style="font-size:9.5px;color:var(--ink-soft);font-weight:600;letter-spacing:0.05em;">KCAL LIBRES</span>
           </div>
         </div>
         <div style="flex:1;display:flex;flex-direction:column;gap:10px;" id="macroBars"></div>
@@ -80,25 +84,28 @@
       </div>
     </div>
 
-    <!-- Water -->
-    <div class="card" style="display:flex;align-items:center;gap:14px;">
-      <div class="bottle-wrap">
-        <div class="bottle-cap"></div>
-        <div class="bottle-body"><div class="bottle-fill" id="bottleFill" style="height:0%;"></div></div>
+    <!-- Water: one glass = 250 ml; tap a glass to fill (or empty) up to it -->
+    <div class="card" id="waterCard">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span class="md-label">AGUA</span>
+        <span class="mono" style="font-size:12px;font-weight:700;color:var(--accent-to);"><span id="waterMl">0</span><span style="color:var(--ink-soft);font-weight:600;font-size:10.5px;"> / <span id="waterGoal">2000</span> ML</span></span>
       </div>
-      <div style="flex:1;">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;">
-          <span style="font-size:13px;font-weight:700;">Agua</span>
-          <span class="mono" style="font-size:12px;font-weight:700;color:var(--accent-to);">
-            <span id="waterMl">0</span><span style="color:var(--ink-soft);font-weight:600;font-size:10.5px;"> / 2000 ML</span>
-          </span>
-        </div>
-        <div style="display:flex;gap:5px;" id="waterTicks"></div>
+      <div class="glasses" id="glasses" role="group" aria-label="Vasos de agua"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <span id="waterHint" style="font-size:11.5px;color:var(--ink-soft);">Cada vaso son 250 ml · toca para llenar</span>
+        <button type="button" class="link-btn" id="waterGoalBtn">Cambiar meta</button>
       </div>
-      <div style="display:flex;gap:6px;flex-shrink:0;">
-        <button class="step-btn remove" id="waterMinus" aria-label="Quitar vaso de agua">−</button>
-        <button class="step-btn add" id="waterPlus" aria-label="Agregar vaso de agua">+</button>
-      </div>
+    </div>
+
+    <!-- Day score + fibre (hidden until something is logged) -->
+    <div class="card" id="scoreCard" style="display:none;">
+      <div class="md-head"><div><div class="md-label">PUNTUACIÓN DEL DÍA</div><div class="md-big disp" id="scoreLabel">–</div>
+        <div id="scoreSub" style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;"></div></div><div id="scoreRing"></div></div>
+      <div id="awardsRow"></div>
+    </div>
+    <div class="card" id="fibreCard" style="display:none;align-items:center;justify-content:space-between;gap:12px;">
+      <div><div class="md-label">FIBRA</div><div class="md-big disp" id="fibreLabel" style="font-size:22px;">–</div><div id="fibreSub" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div></div>
+      <div id="fibreRing"></div>
     </div>
 
     <!-- Workout (own log; the kcal is an estimate and does not change the ring) -->
@@ -177,7 +184,6 @@
 <script src="static/js/shell.js"></script>
 <script src="static/js/install.js"></script>
 <script>
-const WATER_GOAL_ML = 2000;
 const WATER_STEP_ML = 250;
 const MEAL_ICON_BG = {
   desayuno: 'linear-gradient(140deg, #3a2e22, #241c14)',
@@ -191,38 +197,94 @@ const ADD_MORE_LABEL = { desayuno: 'al desayuno', almuerzo: 'al almuerzo', merie
 
 document.getElementById('profileBtn').addEventListener('click', () => { window.location.href = 'profile.html'; });
 
-// The bar is the server's number for that day (shared by every device); +/- change it at once and confirm with the server.
+// Water is the server's number for that day (shared by every device). Glasses of 250 ml: tapping one fills up to it
+// (or empties back to the one before); the change shows at once and is confirmed with the server.
 let waterInflight = 0;
 async function changeWater(data, delta) {
   const before = data.water_ml || 0;
   const next = Math.max(0, before + delta);
   if (next === before) return;
   data.water_ml = next;
-  renderWater(next);
+  renderWater(data);
   waterInflight += 1;
   try {
     const total = await addWater(data.date, next - before);
-    if (total !== null && waterInflight === 1) { data.water_ml = total; renderWater(total); }
+    if (total !== null && waterInflight === 1) { data.water_ml = total; renderWater(data); }
   } catch (err) {
     data.water_ml = before;
-    renderWater(before);
+    renderWater(data);
     showToast(`No se pudo guardar el agua: ${err.message}`, 'error');
   } finally {
     waterInflight -= 1;
   }
 }
 
-function renderWater(ml) {
+function renderWater(data) {
+  const ml = data.water_ml || 0;
+  const goal = data.water_goal_ml || 2000;
   document.getElementById('waterMl').textContent = ml;
-  document.getElementById('bottleFill').style.height = `${Math.min(100, (ml / WATER_GOAL_ML) * 100)}%`;
-  const filledTicks = Math.round((ml / WATER_GOAL_ML) * 4);
-  const ticksWrap = document.getElementById('waterTicks');
-  ticksWrap.innerHTML = '';
-  for (let i = 0; i < 4; i++) {
-    const tick = document.createElement('div');
-    tick.style.cssText = `flex:1;height:5px;border-radius:100px;background:${i < filledTicks ? 'var(--accent-to)' : 'rgba(127,127,140,0.18)'};`;
-    ticksWrap.appendChild(tick);
+  document.getElementById('waterGoal').textContent = goal;
+  const count = Math.min(16, Math.max(Math.ceil(goal / WATER_STEP_ML), Math.ceil(ml / WATER_STEP_ML)));
+  const nextEmpty = Math.floor(ml / WATER_STEP_ML);
+  const wrap = document.getElementById('glasses');
+  wrap.innerHTML = Array.from({ length: count }, (_, i) => {
+    const fill = Math.max(0, Math.min(1, (ml - i * WATER_STEP_ML) / WATER_STEP_ML));
+    return `<button type="button" class="glass-btn" data-i="${i}" aria-label="Vaso ${i + 1}${fill >= 1 ? ' lleno' : ''}"><span class="glass${fill >= 1 ? ' full' : ''}"><i style="height:${(fill * 100).toFixed(0)}%"></i>${i === nextEmpty && fill < 1 ? '<b>+</b>' : ''}</span></button>`;
+  }).join('');
+  wrap.querySelectorAll('.glass-btn').forEach((btn) => btn.addEventListener('click', () => tapGlass(data, Number(btn.dataset.i))));
+  const extra = ml - goal;
+  document.getElementById('waterHint').textContent = extra > 0 ? `+${extra} ml sobre tu meta` : 'Cada vaso son 250 ml · toca para llenar';
+}
+
+function tapGlass(data, i) {
+  const now = data.water_ml || 0;
+  const goal = data.water_goal_ml || 2000;
+  let target = (i + 1) * WATER_STEP_ML;
+  if (now === target) target = i * WATER_STEP_ML; // tapping the last full glass empties it
+  const delta = target - now;
+  if (!delta) return;
+  changeWater(data, delta);
+  if (window.sfx) {
+    if (delta < 0) sfx.play('tick');
+    else if (now < goal && target >= goal) { sfx.play('goal'); showToast('💧 ¡Meta de agua cumplida!', 'ok'); }
+    else sfx.play('water');
   }
+}
+
+function openWaterGoal(data) {
+  const scrim = document.createElement('div');
+  scrim.className = 'sheet-scrim';
+  const sheet = document.createElement('div');
+  sheet.className = 'entry-sheet';
+  sheet.setAttribute('role', 'dialog');
+  sheet.setAttribute('aria-label', 'Meta de agua');
+  let goal = data.water_goal_ml || 2000;
+  let auto = !!data.water_goal_auto;
+  sheet.innerHTML = `<h3 class="disp">Meta de agua</h3>
+    <p style="margin:6px 0 16px;font-size:12px;color:var(--ink-soft);line-height:1.5;">Por defecto calculamos unos 35 ml por kilo de tu peso. Puedes poner la tuya, en vasos de 250 ml.</p>
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;">
+      <button class="step-btn remove" id="gMinus" aria-label="Menos">−</button>
+      <div style="text-align:center;min-width:120px;"><div class="mono" id="gVal" style="font-size:26px;font-weight:700;"></div><div id="gSub" style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;"></div></div>
+      <button class="step-btn add" id="gPlus" aria-label="Más">+</button>
+    </div>
+    <div class="sheet-actions"><button class="btn-secondary" id="gAuto">Automática</button><button class="btn-primary" id="gSave">Guardar</button></div>
+    <div class="save-error" id="gErr" role="alert" style="margin:10px 0 0;"></div>`;
+  document.body.append(scrim, sheet);
+  pushOverlay(() => { scrim.remove(); sheet.remove(); });
+  scrim.addEventListener('click', () => dismissOverlay());
+  const $ = (id) => sheet.querySelector(`#${id}`);
+  const paint = () => { $('gVal').textContent = `${goal} ml`; $('gSub').textContent = `${goal / WATER_STEP_ML} vasos${auto ? ' · automática' : ''}`; };
+  paint();
+  $('gMinus').addEventListener('click', () => { goal = Math.max(500, goal - WATER_STEP_ML); auto = false; paint(); });
+  $('gPlus').addEventListener('click', () => { goal = Math.min(8000, goal + WATER_STEP_ML); auto = false; paint(); });
+  const save = async (ml) => {
+    try {
+      const out = await apiPut('api/water/goal', { ml });
+      dismissOverlay(() => { data.water_goal_ml = out.goal_ml; data.water_goal_auto = ml === null; renderWater(data); });
+    } catch (err) { const e = $('gErr'); e.textContent = err.message || 'No se pudo guardar'; e.classList.add('show'); }
+  };
+  $('gSave').addEventListener('click', () => save(goal));
+  $('gAuto').addEventListener('click', () => save(null));
 }
 
 function renderMacroBars(totals, goal) {
@@ -244,25 +306,69 @@ function renderMacroBars(totals, goal) {
   });
 }
 
-function renderRing(totals, goal) {
+// "Restantes" shows what is left of the goal; "Por quemar" what is over it after the day's workouts (a guide, not a new goal).
+let kcalMode = (() => { try { return localStorage.getItem('cadence_kcal_mode') === 'burn' ? 'burn' : 'left'; } catch { return 'left'; } })();
+
+function renderRing(data) {
+  const { totals, goal, burn } = data;
   const circumference = 2 * Math.PI * 47; // ~295.3
-  const remaining = Math.max(0, goal.kcal - totals.kcal);
-  const consumedRatio = goal.kcal > 0 ? Math.min(1, totals.kcal / goal.kcal) : 0;
-  const dash = Math.max(4, consumedRatio * circumference); // keep a visible sliver even near 0
-  document.getElementById('ringArc').setAttribute('stroke-dasharray', `${dash.toFixed(1)} ${circumference.toFixed(1)}`);
-  document.getElementById('kcalLeft').textContent = Math.round(remaining);
+  let ratio; let big; let caption;
+  if (kcalMode === 'burn' && burn) {
+    big = burn.kcal; caption = 'KCAL POR QUEMAR';
+    ratio = burn.over_kcal > 0 ? Math.min(1, burn.worked_kcal / burn.over_kcal) : 0;
+  } else {
+    big = Math.round(Math.max(0, goal.kcal - totals.kcal)); caption = 'KCAL LIBRES';
+    ratio = goal.kcal > 0 ? Math.min(1, totals.kcal / goal.kcal) : 0;
+  }
+  document.getElementById('ringArc').setAttribute('stroke-dasharray', `${Math.max(4, ratio * circumference).toFixed(1)} ${circumference.toFixed(1)}`);
+  document.getElementById('kcalLeft').textContent = big;
+  document.getElementById('kcalCaption').textContent = caption;
+  document.getElementById('modeLeft').setAttribute('aria-selected', String(kcalMode === 'left'));
+  document.getElementById('modeBurn').setAttribute('aria-selected', String(kcalMode === 'burn'));
 }
 
-function renderInsight(totals, goal) {
+function renderInsight(data) {
+  const { totals, goal, burn } = data;
   const chip = document.getElementById('insightChip');
+  const text = document.getElementById('insightText');
+  if (kcalMode === 'burn' && burn) {
+    text.textContent = burn.over_kcal === 0
+      ? 'vas dentro de tu meta, no hay nada por quemar. Es solo una guía: no cambia tu meta.'
+      : `comiste ${burn.over_kcal} kcal sobre tu meta${burn.worked_kcal ? ` y tus entrenamientos ya quemaron ${burn.worked_kcal}` : ''}. ${burn.kcal ? `Un trote ligero de unos ${burn.minutes} minutos las compensa.` : 'Ya quedó compensado.'}`;
+    chip.style.display = 'flex';
+    return;
+  }
   const proteinRatio = goal.protein_g > 0 ? totals.protein_g / goal.protein_g : 1;
   if (proteinRatio < 0.6) {
     const pct = Math.round(proteinRatio * 100);
-    document.getElementById('insightText').textContent =
-      `te falta proteína para tu meta (vas en ${pct}%) — un snack con huevo o pollo te acercaría.`;
+    text.textContent = `te falta proteína para tu meta (vas en ${pct}%) — un snack con huevo o pollo te acercaría.`;
     chip.style.display = 'flex';
   } else {
     chip.style.display = 'none';
+  }
+}
+
+// Day score and fibre cards: shown once something is logged that day.
+function renderScoreCards(data) {
+  const scoreCard = document.getElementById('scoreCard');
+  const fibreCard = document.getElementById('fibreCard');
+  const score = data.score;
+  scoreCard.style.display = score ? 'block' : 'none';
+  if (score) {
+    const scored = data.meals.filter((m) => m.score).length;
+    const label = document.getElementById('scoreLabel');
+    label.textContent = score.label;
+    label.className = `md-big disp c-${score.label}`;
+    document.getElementById('scoreSub').textContent = `${scored} comida${scored === 1 ? '' : 's'} puntuada${scored === 1 ? '' : 's'} · promedio por calorías`;
+    document.getElementById('scoreRing').innerHTML = bits.ring(64, score.points, `<span class="mono c-${score.label}" style="font-size:18px;font-weight:700;">${score.points}</span>`, 7,
+      'var(--accent-from)', 'var(--accent-to)');
+  }
+  const fibre = data.levels && data.levels.fibre;
+  fibreCard.style.display = data.score ? 'flex' : 'none';
+  if (data.score) {
+    document.getElementById('fibreLabel').textContent = fibre ? `Nivel ${fibre.label}` : 'Sin datos';
+    document.getElementById('fibreSub').textContent = fibre ? `${Math.round(fibre.value_g)} g de ${Math.round(fibre.target_g)} g` : 'Ningún alimento trae su fibra';
+    document.getElementById('fibreRing').innerHTML = bits.ring(64, fibre ? fibre.pct : 0, `<span class="mono" style="font-size:13px;font-weight:700;">${fibre ? `${fibre.pct}%` : '–'}</span>`, 7, '#F0873A', '#FFD08A');
   }
 }
 
@@ -1002,21 +1108,19 @@ function paintToday(data, stale) {
   document.getElementById('greeting').textContent = data.user_name ? `Hola, ${data.user_name}` : 'Hola';
   document.getElementById('streakValue').textContent = data.streak_days;
   document.getElementById('todayKcalLabel').textContent = `${Math.round(data.totals.kcal)} KCAL`;
-  renderRing(data.totals, data.goal);
+  renderRing(data);
   renderMacroBars(data.totals, data.goal);
-  renderInsight(data.totals, data.goal);
+  renderInsight(data);
   renderMeals(data.meals);
-  renderWater(data.water_ml || 0);
+  renderWater(data);
+  renderScoreCards(data);
   renderWorkouts(data);
 
   if (!stale) { celebrate(data); noteStreak(data); syncExtrasOnce(data); }
-  document.getElementById('waterPlus').onclick = () => {
-    const before = data.water_ml || 0;
-    changeWater(data, WATER_STEP_ML);
-    if (window.sfx) sfx.play(before < WATER_GOAL_ML && before + WATER_STEP_ML >= WATER_GOAL_ML ? 'goal' : 'water'); // a drop; the full bottle gets the chime
-    if (before < WATER_GOAL_ML && before + WATER_STEP_ML >= WATER_GOAL_ML) showToast('💧 ¡Meta de agua cumplida!', 'ok');
-  };
-  document.getElementById('waterMinus').onclick = () => { changeWater(data, -WATER_STEP_ML); if (window.sfx) sfx.play('tick'); };
+  document.getElementById('waterGoalBtn').onclick = () => openWaterGoal(data);
+  const setMode = (mode) => { kcalMode = mode; try { localStorage.setItem('cadence_kcal_mode', mode); } catch { /* no storage */ } if (window.sfx) sfx.play('tick'); renderRing(data); renderInsight(data); };
+  document.getElementById('modeLeft').onclick = () => setMode('left');
+  document.getElementById('modeBurn').onclick = () => setMode('burn');
 }
 
 async function loadToday() {

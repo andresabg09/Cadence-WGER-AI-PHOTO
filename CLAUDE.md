@@ -360,7 +360,7 @@ fotos de stock, tienda de monedas con dinero.
   Hay que leer `fibres`, `carbohydrates_sugar`, `fat_saturated`, `sodium` de `ingredientinfo` (verificar en la instancia real) y
   agregar fibra opcional a los alimentos propios y a los basicos preparados (archivo de la app, sin pasos en el servidor).
   `GET /api/today` devuelve `score` por comida y del dia. Tamano M.
-- **Bloque 9 - Inicio renovado.** Tarjetas: Agua con vasos de 250 ml (meta editable por persona, `water_goal_ml`; reemplaza la
+- **Bloque 9 - Inicio renovado (HECHO, 25 oct 2026).** Agua con vasos de 250 ml (`#glasses` en index.html; tocar un vaso llena o vacia hasta el; meta por persona en `water_goals`, automatica = 35 ml/kg en vasos de 250, `PUT /api/water/goal`, `/api/today` devuelve `water_goal_ml`), tarjetas de puntuacion del dia y de fibra, y el interruptor Restantes / Por quemar (`/api/today` devuelve `burn`: kcal sobre la meta menos lo que quemaron los entrenamientos, y minutos de un trote ligero de 7 MET; el modo se recuerda por dispositivo). Texto original del plan: Tarjetas: Agua con vasos de 250 ml (meta editable por persona, `water_goal_ml`; reemplaza la
   botella), Puntuacion del dia (anillo), "Calorias restantes / por quemar" (alterna; usa los entrenamientos), Fibra. Depende del 8. Tamano M.
 - **Bloque 10 - Premios y Retos.** Premios hexagonales calculados de los datos (los 12 logros de `progress.py` + premios por comida)
   y guardados al desbloquearse (`awards`: persona, clave, dia). Retos diarios (4) y semanales (hasta 6) con progreso calculado

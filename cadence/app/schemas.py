@@ -176,6 +176,13 @@ class WorkoutOut(BaseModel):
     note: str | None = None
 
 
+class BurnOut(BaseModel):
+    over_kcal: int  # eaten above the goal
+    worked_kcal: int  # estimated burn of the day's workouts
+    kcal: int  # still to burn: what is over minus what the workouts already burned
+    minutes: int  # a light jog (about 7 MET) that would burn it
+
+
 class TodayResponse(BaseModel):
     workouts: list[WorkoutOut] = []
     date: str
@@ -188,6 +195,9 @@ class TodayResponse(BaseModel):
     water_ml: int = 0
     score: ScoreOut | None = None  # the day: its meals' scores averaged by calories
     levels: LevelsOut | None = None
+    water_goal_ml: int = 2000
+    water_goal_auto: bool = True
+    burn: "BurnOut | None" = None
 
 
 class WaterAdd(BaseModel):
@@ -202,6 +212,11 @@ class WaterImport(BaseModel):
 class WaterOut(BaseModel):
     date: str
     ml: int
+    goal_ml: int = 2000
+
+
+class WaterGoalIn(BaseModel):
+    ml: int | None = Field(default=None, ge=500, le=8000)  # None = automatic (from the person's weight)
 
 
 class NoteUpdate(BaseModel):

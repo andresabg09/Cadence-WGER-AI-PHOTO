@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS workouts (
 CREATE TABLE IF NOT EXISTS avatars (user_id INTEGER PRIMARY KEY, data BLOB NOT NULL, version INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS water_log (user_id INTEGER NOT NULL, day TEXT NOT NULL, ml INTEGER NOT NULL, PRIMARY KEY (user_id, day));
+CREATE TABLE IF NOT EXISTS water_goals (user_id INTEGER PRIMARY KEY, ml INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS push_subs (
   endpoint TEXT PRIMARY KEY, user_id INTEGER NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL
 );
@@ -403,6 +404,21 @@ def add_water(user_id: int, day: str, delta_ml: int) -> int:
             (user_id, day, WATER_MAX_ML, delta_ml, WATER_MAX_ML, delta_ml),
         )
         return conn.execute("SELECT ml FROM water_log WHERE user_id = ? AND day = ?", (user_id, day)).fetchone()[0]
+
+
+def water_goal(user_id: int) -> int | None:
+    """The goal the person set (None = automatic, from their weight)."""
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT ml FROM water_goals WHERE user_id = ?", (user_id,)).fetchone()
+    return row[0] if row else None
+
+
+def set_water_goal(user_id: int, ml: int | None) -> None:
+    with closing(_connect()) as conn, conn:
+        if ml is None:
+            conn.execute("DELETE FROM water_goals WHERE user_id = ?", (user_id,))
+        else:
+            conn.execute("INSERT OR REPLACE INTO water_goals (user_id, ml) VALUES (?, ?)", (user_id, ml))
 
 
 def import_water(user_id: int, days: dict[str, int]) -> None:

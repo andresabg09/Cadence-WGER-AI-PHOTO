@@ -194,7 +194,7 @@ def test_water_is_kept_on_the_server_per_person_and_shows_in_the_diary(wger):
     admin, ana = two_people()
     day = admin.get("/api/today").json()["date"]
     assert admin.get("/api/today").json()["water_ml"] == 0
-    assert admin.post("/api/water", json={"date": day, "add_ml": 250}).json() == {"date": day, "ml": 250}
+    assert admin.post("/api/water", json={"date": day, "add_ml": 250}).json() == {"date": day, "ml": 250, "goal_ml": 2000}
     assert admin.post("/api/water", json={"date": day, "add_ml": 200}).json()["ml"] == 450
     # the number lives on the server: any browser of the account reads it back; another person does not
     assert admin.get("/api/today").json()["water_ml"] == 450
@@ -250,3 +250,34 @@ def test_today_scores_each_meal_and_the_day_with_partial_data(wger):
     assert day["levels"]["protein"]["value_g"] > 0
     # nothing logged: no score
     assert ana.get("/api/today").json()["score"] is None
+
+
+def test_water_goal_is_automatic_from_weight_and_editable_per_person(wger):
+    admin, ana = two_people()
+    assert admin.get("/api/today").json()["water_goal_ml"] == 2000  # no weight yet
+    admin.post("/api/weight", json={"kg": 80})
+    today = admin.get("/api/today").json()
+    assert (today["water_goal_ml"], today["water_goal_auto"]) == (2750, True)  # 35 ml per kg, in glasses of 250
+    mine = admin.put("/api/water/goal", json={"ml": 3100}).json()
+    assert mine["goal_ml"] == 3000  # rounded to whole glasses
+    today = admin.get("/api/today").json()
+    assert (today["water_goal_ml"], today["water_goal_auto"]) == (3000, False)
+    assert ana.get("/api/today").json()["water_goal_ml"] == 2000  # hers is untouched
+    assert admin.put("/api/water/goal", json={"ml": 100}).status_code == 422
+    assert admin.put("/api/water/goal", json={}).json()["goal_ml"] == 2750  # back to automatic
+    assert new_client().put("/api/water/goal", json={"ml": 2000}).status_code == 401
+
+
+def test_calories_to_burn_subtract_workouts(wger):
+    admin, _ = two_people()
+    admin.post("/api/weight", json={"kg": 70})
+    big = admin.post("/api/foods", json={**FOOD, "name": "Pizza de la casa", "kcal": 300, "protein": 10, "carbs": 30, "fat": 15}).json()
+    goal = admin.get("/api/today").json()["goal"]["kcal"]
+    assert admin.get("/api/today").json()["burn"]["kcal"] == 0
+    grams = (goal + 400) / 3.0  # exactly 400 kcal over the goal
+    admin.post("/api/confirm", json={"items": [{"ingredient_id": big["id"], "amount_grams": grams}]})
+    burn = admin.get("/api/today").json()["burn"]
+    assert burn["over_kcal"] == 400 and burn["kcal"] == 400 and burn["minutes"] == 49  # 400 / (7 MET x 70 kg / 60)
+    admin.post("/api/workouts", json={"kind": "caminar", "minutes": 60})  # 3.5 MET x 70 kg = 245 kcal
+    burn = admin.get("/api/today").json()["burn"]
+    assert (burn["worked_kcal"], burn["kcal"]) == (245, 155)

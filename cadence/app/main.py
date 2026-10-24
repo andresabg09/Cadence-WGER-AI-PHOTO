@@ -40,6 +40,8 @@ from .schemas import (
     ScoreOut,
     ScorePart,
     WaterAdd,
+    WaterGoalIn,
+    BurnOut,
     WaterImport,
     WaterOut,
     AnalyzeResponse,
@@ -400,7 +402,26 @@ def _water_day(raw: str) -> str:
 def add_water(body: WaterAdd, user: store.User = Depends(current_user)):
     """Water is kept per person on the server (it used to live only in one browser): add or remove millilitres of a day."""
     day = _water_day(body.date)
-    return WaterOut(date=day, ml=store.add_water(user.id, day, body.add_ml))
+    return WaterOut(date=day, ml=store.add_water(user.id, day, body.add_ml), goal_ml=water_goal_for(user)[0])
+
+
+def water_goal_for(user: store.User) -> tuple[int, bool]:
+    """(daily water goal in ml, is it automatic?): the person's own, else 35 ml per kg of body weight, in glasses of 250 ml."""
+    own = store.water_goal(user.id)
+    if own:
+        return own, False
+    kg = store.latest_weight(user.id)
+    if not kg:
+        return 2000, True
+    return int(min(4000, max(1500, round(35 * kg / 250) * 250))), True
+
+
+@app.put("/api/water/goal", response_model=WaterOut)
+def set_water_goal(body: WaterGoalIn, user: store.User = Depends(current_user)):
+    """Change the daily water goal (ml), or None to go back to the automatic one."""
+    store.set_water_goal(user.id, None if body.ml is None else int(round(body.ml / 250) * 250))
+    today_iso = local_now().date().isoformat()
+    return WaterOut(date=today_iso, ml=store.water_ml(user.id, today_iso), goal_ml=water_goal_for(user)[0])
 
 
 @app.post("/api/water/import")
@@ -414,6 +435,17 @@ def import_water(body: WaterImport, user: store.User = Depends(current_user)):
             continue
     store.import_water(user.id, days)
     return {"imported": len(days)}
+
+
+JOG_MET = 7.0  # a light jog: the yardstick for "minutes to burn it"
+
+
+def _burn(eaten: float, goal_kcal: float, workouts: list[dict], weight_kg: float | None) -> BurnOut:
+    over = max(0, round(eaten - goal_kcal))
+    worked = round(sum(w["kcal"] for w in workouts))
+    left = max(0, over - worked)
+    kg = weight_kg or 70.0
+    return BurnOut(over_kcal=over, worked_kcal=worked, kcal=left, minutes=int(-(-left // (JOG_MET * kg / 60))) if left else 0)
 
 
 def _scoring_food(item: MealItem) -> scoring.Food:
@@ -585,6 +617,9 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
             streak_days=streak_days,
             user_name=user.name,
             water_ml=store.water_ml(user.id, shown_date.isoformat()),
+            water_goal_ml=water_goal_for(user)[0],
+            water_goal_auto=water_goal_for(user)[1],
+            burn=_burn(totals.kcal, goal.kcal, store.workouts_between(user.id, shown_date.isoformat(), shown_date.isoformat()), store.latest_weight(user.id)),
         )
     finally:
         wger.close()

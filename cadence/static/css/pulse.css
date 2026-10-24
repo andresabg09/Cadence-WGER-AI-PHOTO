@@ -916,3 +916,16 @@ html { -webkit-text-size-adjust: 100%; }
 .hex-row { display: flex; gap: 8px; margin-top: 12px; }
 .hex-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; text-align: center; font-size: 10.5px; font-weight: 700; line-height: 1.2; }
 .hex-cell small { font-weight: 600; color: var(--ink-soft); font-size: 10px; margin-top: -3px; }
+
+/* ---- Block 9: water glasses, kcal mode toggle ---- */
+.glasses { display: flex; flex-wrap: wrap; gap: 8px 6px; margin: 12px -2px 8px; }
+.glass-btn { width: 44px; height: 58px; border: none; padding: 0; background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
+.glass { position: relative; display: block; width: 34px; height: 46px; border-radius: 5px 5px 11px 11px; background: rgba(127, 150, 255, 0.10); border: 1px solid rgba(127, 127, 140, 0.28); overflow: hidden; transition: transform 0.15s; }
+.glass-btn:active .glass { transform: scale(0.92); }
+.glass i { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(180deg, color-mix(in srgb, var(--accent-to) 70%, transparent), var(--accent-from)); transition: height 0.3s cubic-bezier(.34, 1.4, .64, 1); }
+.glass.full { border-color: color-mix(in srgb, var(--accent-to) 60%, transparent); box-shadow: 0 0 12px color-mix(in srgb, var(--accent-to) 35%, transparent); }
+.glass b { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--ink); opacity: 0.8; }
+.link-btn { background: none; border: none; color: var(--accent-from); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; padding: 8px 0 8px 8px; }
+.seg-toggle { position: relative; display: flex; background: rgba(127, 127, 140, 0.14); border-radius: 100px; padding: 3px; margin-bottom: 14px; }
+.seg-toggle button { flex: 1; min-height: 34px; border: none; border-radius: 100px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.seg-toggle button[aria-selected="true"] { background: var(--ink); color: var(--bg); }

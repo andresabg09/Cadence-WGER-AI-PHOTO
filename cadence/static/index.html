@@ -28,7 +28,6 @@
 <div class="app">
   <div class="app-header">
     <div>
-      <div class="date" id="todayLabel">&nbsp;</div>
       <h1 class="disp" id="greeting">Hola</h1>
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
@@ -46,6 +45,26 @@
       <button class="icon-btn" id="profileBtn" aria-label="Perfil">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.6" stroke="var(--ink-soft)" stroke-width="1.8"/><path d="M5 20c1.4-3.8 4.2-5.6 7-5.6s5.6 1.8 7 5.6" stroke="var(--ink-soft)" stroke-width="1.8"/></svg>
       </button>
+    </div>
+  </div>
+
+  <!-- The day you are looking at: always on top, with the week and a way back to today -->
+  <div class="day-bar" id="dayBar">
+    <div class="db-top">
+      <div class="db-title"><span class="disp db-label" id="dbLabel">Hoy</span><span class="db-date" id="dbDate"></span></div>
+      <button type="button" class="db-cal" id="dbCal" aria-label="Abrir el calendario">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3" stroke="currentColor" stroke-width="2"/><path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span id="dbMonth">Octubre</span>
+      </button>
+    </div>
+    <div class="db-strip" id="dbStrip" role="group" aria-label="Días de la semana">
+      <button type="button" class="db-nav" id="dbPrevW" aria-label="Semana anterior">‹</button>
+      <div class="db-days" id="dbDays"></div>
+      <button type="button" class="db-nav" id="dbNextW" aria-label="Semana siguiente">›</button>
+    </div>
+    <div class="db-away" id="dbAway" hidden>
+      <span id="dbAwayText"></span>
+      <button type="button" class="db-back" id="dbBack"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>Volver a hoy</button>
     </div>
   </div>
 
@@ -125,11 +144,7 @@
     <!-- Meals -->
     <div style="display:flex;flex-direction:column;gap:10px;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:0 2px;">
-        <div class="day-nav" id="dayNav">
-          <button class="nav-arrow" id="dayPrev" aria-label="Día anterior">‹</button>
-          <button class="day-label disp" id="dayLabel" aria-label="Abrir el calendario"><span id="dayLabelText">Hoy</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="margin-left:6px;opacity:.6"><rect x="4" y="5" width="16" height="15" rx="3" stroke="currentColor" stroke-width="2"/><path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-          <button class="nav-arrow" id="dayNext" aria-label="Día siguiente">›</button>
-        </div>
+        <span class="md-label">COMIDAS</span>
         <div style="display:flex;align-items:center;gap:10px;">
           <span class="mono" id="todayKcalLabel" style="font-size:10.5px;color:var(--ink-soft);">0 KCAL</span>
           <a href="search.html" aria-label="Buscar alimento manualmente" style="width:26px;height:26px;border-radius:9px;background:var(--card);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;">
@@ -1078,17 +1093,89 @@ function goToDate(iso) {
   loadToday();
 }
 
-function renderDayNav(data) {
-  const label = document.getElementById('dayLabel');
-  const labelText = document.getElementById('dayLabelText');
+// ---- The day bar: what day you are looking at (big), the week with its flames, and the way back to today ----
+const DOW_LETTER = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+const stripInfo = {}; // iso day -> calendar info ({streak}); kept between days so the flames do not blink
+let stripWeek = null; // Monday (iso) of the week on screen
+let stripFor = null; // the day that week was chosen for
+let stripSig = '';
+const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+const longDay = (iso, withYear) => new Date(`${iso}T12:00:00`).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', ...(withYear ? { year: 'numeric' } : {}) }).replace(',', '');
+
+function weekStartOf(iso) {
+  const lead = (new Date(`${iso}T12:00:00`).getDay() + 6) % 7; // weeks start on Monday
+  return shiftDate(iso, -lead);
+}
+
+function paintStrip(data) {
+  const week = Array.from({ length: 7 }, (_, i) => shiftDate(stripWeek, i));
+  document.getElementById('dbDays').innerHTML = week.map((iso, i) => {
+    const info = stripInfo[iso];
+    const future = iso > data.today;
+    const selected = iso === data.date;
+    const flame = info && info.streak > 0;
+    const mark = future ? '' : flame ? flameSvg(info.streak, 13) : info ? '<i class="cal-late" title="Registrado después: no suma a la racha"></i>' : '<i class="db-dot"></i>';
+    const aria = `${cap(longDay(iso))}${flame ? `, racha de ${info.streak} ${info.streak === 1 ? 'día' : 'días'}` : info ? ', registrado después, sin racha' : future ? '' : ', sin registro'}`;
+    return `<button type="button" class="db-day${selected ? ' sel' : ''}${iso === data.today ? ' today' : ''}" data-date="${iso}" ${future ? 'disabled' : ''} aria-pressed="${selected}" aria-label="${aria}">
+      <span class="db-dow">${DOW_LETTER[i]}</span><span class="db-num mono">${Number(iso.slice(8))}</span><span class="db-mark">${mark}</span></button>`;
+  }).join('');
+  document.getElementById('dbNextW').disabled = shiftDate(stripWeek, 7) > data.today;
+}
+
+async function refreshStrip(data) {
+  const months = [...new Set([stripWeek, shiftDate(stripWeek, 6)].map(monthKey))];
+  const results = await Promise.all(months.map((m) => apiGet(`api/calendar?month=${m}`).catch(() => null)));
+  if (latestToday !== data) return;
+  let changed = false;
+  results.forEach((res, i) => {
+    if (!res) return;
+    (res.days || []).forEach((d) => { if (JSON.stringify(stripInfo[d.date]) !== JSON.stringify(d)) { stripInfo[d.date] = d; changed = true; } });
+    // days of that month that no longer have anything (a plate deleted) lose their mark
+    Object.keys(stripInfo).filter((iso) => monthKey(iso) === months[i] && !(res.days || []).some((d) => d.date === iso)).forEach((iso) => { delete stripInfo[iso]; changed = true; });
+  });
+  if (changed) paintStrip(data);
+}
+
+function renderDayBar(data) {
   const isToday = data.date === data.today;
   const yesterday = shiftDate(data.today, -1);
-  labelText.textContent = isToday ? 'Hoy' : data.date === yesterday ? 'Ayer'
-    : new Date(`${data.date}T12:00:00`).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '');
-  document.getElementById('dayNext').disabled = isToday;
-  document.getElementById('dayPrev').onclick = () => goToDate(shiftDate(data.date, -1));
-  document.getElementById('dayNext').onclick = () => goToDate(shiftDate(data.date, 1));
-  label.onclick = () => openCalendar(data.date, data.today);
+  const year = data.date.slice(0, 4) !== data.today.slice(0, 4);
+  document.getElementById('dbLabel').textContent = isToday ? 'Hoy' : data.date === yesterday ? 'Ayer' : cap(longDay(data.date, year));
+  document.getElementById('dbDate').textContent = isToday || data.date === yesterday ? `· ${longDay(data.date)}` : '';
+  document.getElementById('dbMonth').textContent = cap(new Date(`${data.date}T12:00:00`).toLocaleDateString('es', { month: 'long' }));
+  if (stripWeek === null || stripFor !== data.date) { stripWeek = weekStartOf(data.date); stripFor = data.date; }
+  document.getElementById('dbCal').onclick = () => { if (window.sfx) sfx.play('open'); openCalendar(data.date, data.today); };
+  document.getElementById('dbDays').onclick = (e) => {
+    const btn = e.target.closest('.db-day');
+    if (!btn || btn.disabled || btn.dataset.date === data.date) return;
+    if (window.sfx) sfx.play('tick');
+    goToDate(btn.dataset.date);
+  };
+  const flip = (weeks) => { stripWeek = shiftDate(stripWeek, 7 * weeks); paintStrip(data); refreshStrip(data); if (window.sfx) sfx.play('tick'); };
+  document.getElementById('dbPrevW').onclick = () => flip(-1);
+  document.getElementById('dbNextW').onclick = () => { if (shiftDate(stripWeek, 7) <= data.today) flip(1); };
+  const strip = document.getElementById('dbStrip');
+  let x0 = null;
+  strip.ontouchstart = (e) => { x0 = e.touches[0].clientX; };
+  strip.ontouchend = (e) => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    x0 = null;
+    if (dx > 60) flip(-1); else if (dx < -60 && shiftDate(stripWeek, 7) <= data.today) flip(1);
+  };
+  const away = document.getElementById('dbAway');
+  away.hidden = isToday;
+  if (!isToday) {
+    const sameMonth = data.date.slice(0, 7) === data.today.slice(0, 7);
+    const named = new Date(`${data.date}T12:00:00`).toLocaleDateString('es', { weekday: 'long', day: 'numeric', ...(sameMonth ? {} : { month: 'long' }) });
+    document.getElementById('dbAwayText').innerHTML = `Estás viendo <b>el ${escapeHtml(named)}</b>, no hoy`;
+    document.getElementById('dbBack').onclick = () => { if (window.sfx) sfx.play('pick'); goToDate(data.today); };
+  }
+  // Today's own flame comes straight from the diary being shown; the rest from the calendar, refreshed behind it.
+  if (isToday && data.totals && data.totals.kcal > 0 && data.streak_days > 0) stripInfo[data.date] = { date: data.date, streak: data.streak_days };
+  paintStrip(data);
+  const sig = `${data.date}|${Math.round(data.totals ? data.totals.kcal : 0)}|${data.streak_days}`;
+  if (sig !== stripSig) { stripSig = sig; refreshStrip(data); }
 }
 
 // ---- Workouts: search an activity, pick a duration (js/workouts.js). The burn is an estimate and does not change the goal. ----
@@ -1221,12 +1308,8 @@ function noteStreak(data) {
 function paintToday(data, stale) {
   latestToday = data;
   if (!stale) hideBanner('wger');
-  renderDayNav(data);
+  renderDayBar(data);
 
-  // Label from the server's "today" (user's timezone), not the device clock.
-  document.getElementById('todayLabel').textContent = new Date(`${data.date}T12:00:00`)
-    .toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'short' })
-    .replace(/\./g, '').replace(',', '').toUpperCase();
   document.getElementById('greeting').textContent = data.user_name ? `Hola, ${data.user_name}` : 'Hola';
   document.getElementById('streakValue').textContent = data.streak_days;
   document.getElementById('todayKcalLabel').textContent = `${Math.round(data.totals.kcal)} KCAL`;

@@ -42,6 +42,7 @@ from .schemas import (
     ChallengeOut,
     ChallengesResponse,
     ClaimIn,
+    BulkDelete,
     ClaimOut,
     ShopBuyIn,
     ShopEquipIn,
@@ -1395,25 +1396,51 @@ def recent_foods(user: store.User = Depends(current_user)):
         wger.close()
 
 
+def _remove_entry(wger: WgerClient, entry_id: str) -> None:
+    if store.is_local_entry(entry_id):
+        store.delete_local_entry(entry_id)
+    else:
+        wger.delete_diary_entry(entry_id)
+    try:
+        store.delete_entry(entry_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("no se pudo limpiar el almacen local de %s", entry_id)
+
+
 @app.delete("/api/diary/{entry_id}")
 def delete_diary_entry(entry_id: str, user: store.User = Depends(current_user)):
     wger = get_wger_client()
     try:
         if not owns_entry(wger, user, entry_id):
             raise HTTPException(404, "Registro no encontrado")
-        if store.is_local_entry(entry_id):
-            store.delete_local_entry(entry_id)
-        else:
-            wger.delete_diary_entry(entry_id)
+        _remove_entry(wger, entry_id)
         invalidate_entries(user.id)
-        try:
-            store.delete_entry(entry_id)
-        except Exception:  # noqa: BLE001
-            logger.exception("no se pudo limpiar el almacen local de %s", entry_id)
         return {"status": "deleted"}
     except WgerError as exc:
         raise HTTPException(502, str(exc)) from exc
     finally:
+        wger.close()
+
+
+@app.post("/api/diary/bulk-delete")
+def bulk_delete_diary_entries(body: BulkDelete, user: store.User = Depends(current_user)):
+    """Delete a whole plate (every food that came from one photo) in one go. All-or-nothing on ownership: if any id is
+    not the caller's, nothing is deleted."""
+    ids = list(dict.fromkeys(body.ids))
+    wger = get_wger_client()
+    deleted = 0
+    try:
+        if not all(owns_entry(wger, user, entry_id) for entry_id in ids):
+            raise HTTPException(404, "Registro no encontrado")
+        for entry_id in ids:
+            _remove_entry(wger, entry_id)
+            deleted += 1
+        return {"status": "deleted", "deleted": deleted}
+    except WgerError as exc:
+        raise HTTPException(502, f"Se borraron {deleted} de {len(ids)}: {exc}") from exc
+    finally:
+        if deleted:
+            invalidate_entries(user.id)
         wger.close()
 
 

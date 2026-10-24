@@ -76,7 +76,7 @@ def register(http, email, invite=None, password="clave-segura-1", name="Persona"
 def test_nothing_is_reachable_without_signing_in(wger):
     http = new_client()
     for method, path in [("get", "/api/today"), ("get", "/api/calendar"), ("get", "/api/streaks"), ("get", "/api/auth/me"),
-                         ("get", "/api/search?term=a"), ("get", "/api/recent"), ("delete", "/api/diary/e1"),
+                         ("get", "/api/search?term=a"), ("get", "/api/recent"), ("delete", "/api/diary/e1"), ("post", "/api/diary/bulk-delete"),
                          ("get", "/api/media/crop/e1"), ("get", "/api/admin/overview"), ("get", "/api/diagnostics")]:
         assert getattr(http, method)(path).status_code == 401, path
     assert http.post("/api/analyze", files={"image": ("p.jpg", b"x", "image/jpeg")}).status_code == 401
@@ -223,3 +223,25 @@ def test_password_change_and_admin_reset(wger):
     assert new_client().post("/api/auth/login", json={"email": "ana@example.com", "password": "otra-clave-12"}).status_code == 200
     # a code works once, and only for its owner
     assert new_client().post("/api/auth/reset", json={"email": "ana@example.com", "code": reset["code"], "password": "tercera-clave-1"}).status_code == 403
+
+
+def test_a_whole_plate_is_deleted_at_once_and_never_someone_elses(wger):
+    admin, ana = new_client(), new_client()
+    register(admin, "admin@example.com")
+    code = admin.post("/api/admin/invites", json={}).json()["code"]
+    register(ana, "ana@example.com", code)
+    plate = {"items": [{"ingredient_id": 5, "amount_grams": 100}, {"ingredient_id": 6, "amount_grams": 80}, {"ingredient_id": 7, "amount_grams": 50}], "meal": "almuerzo"}
+    mine = [c["diary_entry_id"] for c in admin.post("/api/confirm", json=plate).json()["created"]]
+    hers = [c["diary_entry_id"] for c in ana.post("/api/confirm", json=plate).json()["created"]]
+    assert len(mine) == 3 and len(hers) == 3
+
+    # Ana mixes one of the admin's foods into her list: nothing at all is deleted (all or nothing)
+    assert ana.post("/api/diary/bulk-delete", json={"ids": hers[:2] + [mine[0]]}).status_code == 404
+    assert len(wger.entries) == 6
+    assert ana.post("/api/diary/bulk-delete", json={"ids": []}).status_code == 422
+
+    # the owner deletes the whole plate in one call (a repeated id is harmless)
+    out = admin.post("/api/diary/bulk-delete", json={"ids": mine + [mine[0]]})
+    assert out.status_code == 200 and out.json()["deleted"] == 3
+    assert admin.get("/api/today").json()["meals"] == []
+    assert len(ana.get("/api/today").json()["meals"][0]["items"]) == 3  # Ana's plate is untouched

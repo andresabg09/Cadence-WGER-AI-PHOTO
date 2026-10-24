@@ -488,11 +488,21 @@ function mealRowsHtml(items, mealKey) {
     if (members.length < 2) return mealItemRow(members[0], mealKey);
     const kcal = members.reduce((sum, it) => sum + it.kcal, 0);
     const photo = `api/media/plate/${encodeURIComponent(members[0].plate_key)}`;
+    const ids = members.map((it) => it.diary_entry_id).join(',');
     return `
-      <div class="plate-group">
-        <button type="button" class="pg-photo" data-photo="${photo}" aria-label="Ver la foto del plato" style="background-image:url('${photo}');">
-          <span class="pg-chip">${members.length} alimentos · ${Math.round(kcal)} kcal</span>
-        </button>
+      <div class="plate-group" data-ids="${ids}" data-count="${members.length}" data-kcal="${Math.round(kcal)}">
+        <div class="pg-swipe">
+          <button type="button" class="pg-del" aria-label="Borrar todo el plato">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2m-9 0l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Borrar plato
+          </button>
+          <button type="button" class="pg-photo" data-photo="${photo}" aria-label="Ver la foto del plato" style="background-image:url('${photo}');">
+            <span class="pg-chip">${members.length} alimentos · ${Math.round(kcal)} kcal</span>
+          </button>
+          <button type="button" class="pg-trash" aria-label="Borrar todo el plato (${members.length} alimentos)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2m-9 0l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </div>
         ${members.map((it) => mealItemRow(it, mealKey)).join('')}
       </div>`;
   }).join('');
@@ -565,8 +575,8 @@ function renderMeals(meals) {
   });
 
   list.appendChild(container);
-  container.querySelectorAll('.pg-photo').forEach((btn) => btn.addEventListener('click', () => openLightbox(btn.dataset.photo, null)));
   wireSwipeToDelete();
+  wirePlateGroups();
 }
 
 function wireSwipeToDelete() {
@@ -611,6 +621,64 @@ function wireSwipeToDelete() {
 }
 
 
+
+// A plate (everything one photo produced) can be deleted whole: the trash on its photo, or swiping the photo to the left.
+// It asks first, because it removes several foods at once.
+function wirePlateGroups() {
+  document.querySelectorAll('.plate-group').forEach((group) => {
+    const photo = group.querySelector('.pg-photo');
+    let startX = null;
+    let swiped = false;
+    photo.addEventListener('pointerdown', (e) => { startX = e.clientX; swiped = false; });
+    photo.addEventListener('pointermove', (e) => {
+      if (startX === null) return;
+      const dx = e.clientX - startX;
+      if (Math.abs(dx) > 8) swiped = true;
+      if (dx < -24) photo.classList.add('open');
+      if (dx > 24) photo.classList.remove('open');
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach((type) => photo.addEventListener(type, () => { startX = null; }));
+    photo.addEventListener('click', () => {
+      if (swiped) return;
+      if (photo.classList.contains('open')) { photo.classList.remove('open'); return; }
+      openLightbox(photo.dataset.photo, null);
+    });
+    const ask = () => confirmDeletePlate(group.dataset.ids.split(','), Number(group.dataset.count), Number(group.dataset.kcal), photo);
+    group.querySelector('.pg-del').addEventListener('click', ask);
+    group.querySelector('.pg-trash').addEventListener('click', ask);
+  });
+}
+
+function confirmDeletePlate(ids, count, kcal, photoEl) {
+  const scrim = document.createElement('div');
+  scrim.className = 'sheet-scrim';
+  const sheet = document.createElement('div');
+  sheet.className = 'entry-sheet';
+  sheet.setAttribute('role', 'dialog');
+  sheet.setAttribute('aria-label', 'Borrar el plato');
+  sheet.innerHTML = `<h3 class="disp">¿Borrar todo el plato?</h3>
+    <p style="margin:8px 0 16px;font-size:13px;color:var(--ink-soft);line-height:1.5;">Se borran los ${count} alimentos de esta foto (${kcal} kcal) del diario. Si solo sobra uno, bórralo desde su fila.</p>
+    <div class="save-error" id="pdErr" role="alert"></div>
+    <div class="sheet-actions"><button type="button" class="btn-secondary" id="pdNo">Cancelar</button><button type="button" class="btn-danger" id="pdYes">Borrar los ${count}</button></div>`;
+  document.body.append(scrim, sheet);
+  pushOverlay(() => { scrim.remove(); sheet.remove(); if (photoEl) photoEl.classList.remove('open'); });
+  scrim.addEventListener('click', () => dismissOverlay());
+  sheet.querySelector('#pdNo').addEventListener('click', () => dismissOverlay());
+  sheet.querySelector('#pdYes').addEventListener('click', async (e) => {
+    e.currentTarget.disabled = true;
+    try {
+      await apiPost('api/diary/bulk-delete', { ids });
+      swrClear();
+      if (window.sfx) sfx.play('remove');
+      dismissOverlay(loadToday);
+    } catch (err) {
+      e.currentTarget.disabled = false;
+      const box = sheet.querySelector('#pdErr');
+      box.textContent = `No se pudo borrar: ${err.message}`;
+      box.classList.add('show');
+    }
+  });
+}
 
 // ---- Calendar: a flame on every day with something logged; its colour and number are the streak ----
 const calCache = {};

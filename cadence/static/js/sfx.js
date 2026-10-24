@@ -154,6 +154,25 @@
       tone(t + 0.02, G5, 0.15, { gain: 0.09, bell: true, send: 0.08 });
       tone(t + 0.08, C6, 0.2, { gain: 0.09, bell: true, send: 0.1 });
     },
+    // Diario: a warm "welcome back", a bright note that settles a fifth lower.
+    navDiary(t) {
+      tone(t, G5, 0.12, { gain: 0.09, bell: true, send: 0.08 });
+      tone(t + 0.07, C5, 0.2, { type: 'triangle', gain: 0.12, send: 0.1 });
+      tone(t + 0.07, C6, 0.17, { gain: 0.05, bell: true, send: 0.08 });
+    },
+    // Historial: two dry clock ticks and a low, round note, like turning back through pages.
+    navHistory(t) {
+      tone(t, 1500, 0.04, { gain: 0.07, send: 0.05 });
+      tone(t + 0.06, 1180, 0.04, { gain: 0.06, send: 0.05 });
+      tone(t + 0.12, N(-5), 0.17, { type: 'triangle', gain: 0.12, send: 0.1 });
+      tone(t + 0.12, N(7), 0.15, { gain: 0.05, bell: true, send: 0.08 });
+    },
+    // Ideas de comidas: a little pop and a sparkle on top, the "light bulb" moment.
+    navIdeas(t) {
+      tone(t, 620, 0.09, { glideTo: 1500, gain: 0.1, send: 0.1 });
+      tone(t + 0.08, E6, 0.2, { gain: 0.09, bell: true, send: 0.1 });
+      air(t + 0.08, 0.1, 6000, 11000, { gain: 0.02, type: 'highpass', q: 0.5 });
+    },
     // Collecting coins: two bright metallic pings.
     coin(t) { tone(t, 1760, 0.5, { gain: 0.13, bell: true }); tone(t + 0.07, 2637, 0.6, { gain: 0.1, bell: true }); air(t, 0.06, 5000, 9000, { gain: 0.03, type: 'highpass' }); },
     // A new award: a quick rise and a bright chord.
@@ -181,7 +200,7 @@
     error(t) { tone(t, 247, 0.22, { gain: 0.14 }); tone(t + 0.13, 196, 0.3, { gain: 0.13 }); },
   };
 
-  const BUZZ = { coin: [10, 30, 10], award: [14, 40, 14, 40, 24], navProgress: 8, navChallenges: 8, navAwards: 8, streakOpen: [12, 70, 40], add: 10, pick: 6, open: 8, save: [14, 40, 14], photo: [10, 30, 18], water: 10, goal: [20, 50, 20, 50, 40], streak: [16, 40, 30], error: [30, 40, 30], remove: 12 };
+  const BUZZ = { coin: [10, 30, 10], award: [14, 40, 14, 40, 24], navProgress: 8, navChallenges: 8, navAwards: 8, navDiary: 8, navHistory: 8, navIdeas: 8, streakOpen: [12, 70, 40], add: 10, pick: 6, open: 8, save: [14, 40, 14], photo: [10, 30, 18], water: 10, goal: [20, 50, 20, 50, 40], streak: [16, 40, 30], error: [30, 40, 30], remove: 12 };
 
   function play(name, opts) {
     const s = settings();
@@ -226,26 +245,38 @@
     if (ctx.state === 'suspended') ctx.resume().then(flush).catch(() => {}); else flush();
   }
 
-  // Taps on the links to Progreso / Retos / Premios make their sound first (the tap is what lets the browser play it, a
-  // freshly opened page often may not) and the page opens a breath later, once the sound has started.
-  const NAV_SOUND = { 'progress.html': 'navProgress', 'challenges.html': 'navChallenges', 'awards.html': 'navAwards' };
+  // Taps on the main links (Progreso, Retos, Premios, Historial, Ideas, and the way back to the Diario) make their sound
+  // first (the tap is what lets the browser play it, a freshly opened page often may not) and the page leaves only after
+  // NAV_DELAY, so the sound is whole. The tap is held in the capture phase and replayed afterwards, so the page's own
+  // handlers (history.back() on the back arrows, etc.) still do their job.
+  const NAV_SOUND = { 'progress.html': 'navProgress', 'challenges.html': 'navChallenges', 'awards.html': 'navAwards', 'history.html': 'navHistory', 'ideas.html': 'navIdeas' };
   const NAV_DELAY = 340; // ms: longer than the longest nav sound including its decay
   let leaving = false;
+  let replaying = false;
+  const navSoundFor = (a) => {
+    if (a.hasAttribute('data-leave') || a.hasAttribute('data-replace')) return null;
+    const file = (a.getAttribute('href') || '').split(/[?#]/)[0];
+    if (NAV_SOUND[file]) return NAV_SOUND[file];
+    // The Diario: only from the side bar and from a page's back arrow (flows have their own exit and stay silent).
+    if (file === 'index.html' && (a.closest('.side-nav') || a.getAttribute('aria-label') === 'Volver')) return 'navDiary';
+    return null;
+  };
   document.addEventListener('click', (e) => {
-    if (leaving || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (replaying || leaving || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const a = e.target.closest ? e.target.closest('a[href]') : null;
     if (!a || (a.target && a.target !== '_self') || a.hasAttribute('download')) return;
-    const name = NAV_SOUND[(a.getAttribute('href') || '').split(/[?#]/)[0]];
+    const name = navSoundFor(a);
     if (!name || !settings().on || !(window.AudioContext || window.webkitAudioContext)) return;
-    if (a.pathname === location.pathname) return;
+    if (a.pathname === location.pathname || (/\/$/.test(location.pathname) && /index\.html$/.test(a.pathname))) return;
     e.preventDefault();
+    e.stopImmediatePropagation();
     leaving = true;
     play(name);
     // A quick fade so the short wait reads as a transition, not as lag.
     if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) document.body.classList.add('nav-leaving');
-    setTimeout(() => { location.assign(a.href); }, NAV_DELAY);
+    setTimeout(() => { replaying = true; try { a.click(); } finally { replaying = false; } }, NAV_DELAY);
     setTimeout(() => { leaving = false; document.body.classList.remove('nav-leaving'); }, 1500); // if the page was kept (bfcache) the next tap works again
-  });
+  }, true);
 
   ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'].forEach((type) => window.addEventListener(type, unlock, { passive: true }));
 

@@ -108,6 +108,14 @@
       <div id="fibreRing"></div>
     </div>
 
+    <!-- Ideas to complete the day (today only, while there are calories left) -->
+    <a class="card ideas-link" id="ideasLink" href="ideas.html" style="display:none;">
+      <span class="il-ico" aria-hidden="true">✨</span>
+      <span style="flex:1;min-width:0;"><span class="md-label">IDEAS PARA COMPLETAR TU DÍA</span>
+        <span class="il-sub" id="ideasSub"></span></span>
+      <span class="chev" aria-hidden="true">›</span>
+    </a>
+
     <!-- Workout (own log; the kcal is an estimate and does not change the ring) -->
     <div class="workout-card" id="workoutCard"></div>
 
@@ -1078,6 +1086,13 @@ function celebrateAwards(data) {
 }
 
 // A dot on the Retos tab when there are coins to collect.
+function renderIdeasLink(data) {
+  const link = document.getElementById('ideasLink');
+  const left = Math.round(data.goal.kcal - data.totals.kcal);
+  link.style.display = data.date === data.today && left > 150 ? '' : 'none';
+  document.getElementById('ideasSub').textContent = `Te faltan ${left} kcal · ${Math.max(0, Math.round(data.goal.protein_g - data.totals.protein_g))} g de proteína`;
+}
+
 function paintRetosDot(d) { const dot = document.getElementById('retosDot'); if (dot) dot.hidden = !d.claimable; }
 
 function noteStreak(data) {
@@ -1103,6 +1118,7 @@ function paintToday(data, stale) {
   renderMeals(data.meals);
   renderWater(data);
   renderScoreCards(data);
+  renderIdeasLink(data);
   renderWorkouts(data);
   cadenceWorkouts.load().then(() => { if (latestToday === data) renderWorkouts(data); }).catch(() => {}); // activity names and icons
 

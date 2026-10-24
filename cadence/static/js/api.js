@@ -156,7 +156,8 @@ async function apiGetSWR(path, onData) {
 }
 
 async function apiGet(path) {
-  const response = await fetch(path);
+  // no-store: going Back must not replay an old answer from the browser's memory (it served yesterday's diary).
+  const response = await fetch(path, { cache: 'no-store' });
   handleAuth(response);
   if (!response.ok) throw new Error(await safeText(response));
   return response.json();

@@ -12,6 +12,8 @@ class Settings(BaseSettings):
 
     # Wger REST API
     wger_base_url: str = "https://crm-wger.cjauws.easypanel.host"
+    # Optional direct route to wger inside the Docker network (e.g. http://nginx): much faster than the public address.
+    wger_internal_url: str = ""
     wger_api_token: str = ""
     wger_language_id: int = 2  # 2 = English in wger's default fixtures
     wger_language_code: str = "en"  # same language, as ISO code (new search endpoint)

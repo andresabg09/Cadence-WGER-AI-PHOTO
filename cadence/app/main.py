@@ -3,11 +3,15 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date as date_type, datetime, time, timedelta
 
+import hashlib
+from pathlib import Path
+
 import httpx
 import threading
 
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import accounts, auth, nutrition, reminders, store
@@ -72,6 +76,7 @@ app.include_router(reminders.router)
 @app.on_event("startup")
 def _start_reminder_scheduler():
     reminders.start_scheduler()
+app.add_middleware(GZipMiddleware, minimum_size=800)  # pages and scripts are ~45 KB of text: send them squeezed
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 _vision_client: GeminiVisionClient | None = None
@@ -116,7 +121,8 @@ def get_vision_client() -> GeminiVisionClient:
 def get_wger_client() -> WgerClient:
     if not settings.wger_api_token:
         raise HTTPException(500, "WGER_API_TOKEN no esta configurado")
-    return WgerClient(settings.wger_base_url, settings.wger_api_token, settings.wger_language_id, settings.wger_language_code)
+    return WgerClient(settings.wger_base_url, settings.wger_api_token, settings.wger_language_id, settings.wger_language_code,
+                      settings.wger_internal_url)
 
 
 _plan_lock = threading.Lock()
@@ -147,10 +153,37 @@ def plan_for(wger: WgerClient, user: store.User, create: bool = True) -> int | s
         return plan
 
 
+_entries_cache: dict[tuple, tuple[float, list[dict]]] = {}
+_entries_gen: dict[int, int] = {}
+_entries_lock = threading.Lock()
+ENTRIES_TTL = 120
+
+
+def invalidate_entries(user_id: int) -> None:
+    """Call after every change to a person's diary: their cached reads are dropped."""
+    with _entries_lock:
+        _entries_gen[user_id] = _entries_gen.get(user_id, 0) + 1
+
+
 def user_entries(wger: WgerClient, user: store.User, plan_id: int | str | None, start: datetime, end: datetime) -> list[dict]:
     """The person's diary in [start, end]: their wger plan plus the entries cadence keeps itself
-    (own foods and scanned products, which wger's read-only catalog cannot hold)."""
-    entries = wger.get_diary_entries(plan_id, start, end) if plan_id is not None else []
+    (own foods and scanned products, which wger's read-only catalog cannot hold).
+
+    The wger part is remembered for 2 minutes (only cadence writes to a person's plan, and every write
+    clears it), so moving between Diario, Progreso and Historial does not re-read wger each time."""
+    entries: list[dict] = []
+    if plan_id is not None:
+        with _entries_lock:
+            key = (user.id, _entries_gen.get(user.id, 0), str(plan_id), start.isoformat(), end.isoformat())
+            hit = _entries_cache.get(key)
+        if hit and monotonic() - hit[0] < ENTRIES_TTL:
+            entries = hit[1]
+        else:
+            entries = wger.get_diary_entries(plan_id, start, end)
+            with _entries_lock:
+                if len(_entries_cache) > 300:
+                    _entries_cache.clear()
+                _entries_cache[key] = (monotonic(), entries)
     return entries + store.local_entries(user.id, start, end)
 
 
@@ -261,12 +294,29 @@ def index_page():
     return FileResponse("static/index.html")
 
 
+_build: dict[str, str] = {}
+
+
+def _build_id() -> str:
+    """Short fingerprint of the static files (names, sizes, times): changes whenever a deploy changes anything."""
+    if "id" not in _build:
+        digest = hashlib.sha1()
+        for path in sorted(Path("static").rglob("*")):
+            if path.is_file():
+                info = path.stat()
+                digest.update(f"{path}:{info.st_size}:{int(info.st_mtime)}".encode())
+        _build["id"] = digest.hexdigest()[:10]
+    return _build["id"]
+
+
 @app.get("/sw.js")
 def service_worker():
     # Served at the app root (not /static/sw.js) on purpose: a service
     # worker's default scope is its own directory, and we need it to
     # control every page under /cadence/, not just /cadence/static/.
-    return FileResponse("static/sw.js", media_type="application/javascript")
+    # The build id (a fingerprint of every static file) makes each deploy a new worker.
+    body = Path("static/sw.js").read_text(encoding="utf-8").replace("__BUILD__", _build_id())
+    return Response(body, media_type="application/javascript", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/scan.html")
@@ -297,6 +347,11 @@ def onboarding_page():
 @app.get("/profile.html")
 def profile_page():
     return FileResponse("static/profile.html")
+
+
+@app.get("/settings.html")
+def settings_page():
+    return FileResponse("static/settings.html")
 
 
 @app.get("/progress.html")
@@ -371,6 +426,11 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
                     ingredient_cache[ingredient_id] = {"name": "(alimento no disponible)"}
             return ingredient_cache[ingredient_id]
 
+        # Read every distinct food of the day at once (wger answers each in ~hundreds of ms; they used to queue).
+        wanted = {e["ingredient"] for e in today_entries}
+        if len(wanted) > 1:
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                list(pool.map(macros_for, wanted))
         groups: dict[str, list[MealItem]] = {key: [] for key in MEAL_ORDER}
         totals = MacroTotals()
 
@@ -545,14 +605,15 @@ def streaks(user: store.User = Depends(current_user)):
 
 
 def _year_entries(wger: WgerClient, user: store.User, plan_id, now: datetime, days: int = 366) -> list[dict]:
-    """The person's diary for the last `days` days, read in ~4-month chunks to keep wger pages small."""
-    entries: list[dict] = []
-    for chunk in range(0, days, 122):
-        end = now.date() - timedelta(days=chunk)
-        start = end - timedelta(days=min(121, days - chunk - 1))
-        entries += user_entries(wger, user, plan_id, datetime.combine(start, time.min, tzinfo=now.tzinfo),
-                                datetime.combine(end, time.max, tzinfo=now.tzinfo))
-    return entries
+    """The person's diary for the last `days` days, read in parallel ~4-month chunks to keep wger pages small."""
+    def chunk(offset: int) -> list[dict]:
+        end = now.date() - timedelta(days=offset)
+        start = end - timedelta(days=min(121, days - offset - 1))
+        return user_entries(wger, user, plan_id, datetime.combine(start, time.min, tzinfo=now.tzinfo),
+                            datetime.combine(end, time.max, tzinfo=now.tzinfo))
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        return [e for part in pool.map(chunk, range(0, days, 122)) for e in part]
 
 
 def _goal_kcal(user: store.User) -> float:
@@ -925,6 +986,7 @@ def delete_diary_entry(entry_id: str, user: store.User = Depends(current_user)):
             store.delete_local_entry(entry_id)
         else:
             wger.delete_diary_entry(entry_id)
+        invalidate_entries(user.id)
         try:
             store.delete_entry(entry_id)
         except Exception:  # noqa: BLE001
@@ -1011,6 +1073,7 @@ def update_diary_entry(entry_id: str, update: DiaryUpdate, user: store.User = De
             store.update_local_entry(entry_id, update.amount_grams, when)
         else:
             wger.update_diary_entry(entry_id, update.amount_grams, when)
+        invalidate_entries(user.id)
         return {"status": "updated"}
     except WgerError as exc:
         raise HTTPException(502, str(exc)) from exc
@@ -1043,6 +1106,7 @@ def confirm(request: ConfirmRequest, user: store.User = Depends(current_user)):
                     diary_entry_id=diary_entry_id,
                 )
             )
+        invalidate_entries(user.id)
         entry_day = when.astimezone(local_tz()).date()
         real_today = local_now().date()
         try:

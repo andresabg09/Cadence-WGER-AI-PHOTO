@@ -36,7 +36,7 @@ def day_totals(entries: list[dict], info: Callable[[int], dict]) -> dict[date, d
         except Exception:  # noqa: BLE001 - one unreadable food must not sink the page
             return ingredient_id, {}
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=8) as pool:
         foods = dict(pool.map(load, ids))
     totals: dict[date, dict[str, float]] = {}
     for entry in entries:

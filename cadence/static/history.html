@@ -8,7 +8,10 @@
 <link rel="manifest" href="static/manifest.json">
 <link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
 <link rel="stylesheet" href="static/css/pulse.css">
 <script>
   (function () {
@@ -88,36 +91,46 @@ function renderStrip(loadedDays) {
   $('weekStrip').innerHTML = html;
 }
 
-async function loadPage(first) {
-  const query = nextBefore ? `?before=${nextBefore}&days=14` : '?days=14';
-  const page = await apiGet(`api/history${query}`);
+function addDays(days) {
+  const fresh = days.filter((d) => !seen.has(d.date));
+  fresh.forEach((d) => seen.add(d.date));
+  $('list').insertAdjacentHTML('beforeend', fresh.map(card).join(''));
+}
+
+function paintFirst(page) {
+  seen.clear();
   goal = page.goal_kcal;
   nextBefore = page.next_before;
-  const fresh = page.days.filter((d) => !seen.has(d.date));
-  fresh.forEach((d) => seen.add(d.date));
-  if (first) $('list').innerHTML = '';
-  if (first && fresh.length === 0) $('list').innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><span style="font-size:34px;">🗓️</span><h3 class="disp" style="margin:12px 0 6px;font-size:15px;">Todavía no hay días para mostrar</h3><p style="margin:0;font-size:12px;color:var(--ink-soft);">Cuando registres comidas, cada día aparecerá aquí.</p></div>';
-  $('list').insertAdjacentHTML('beforeend', fresh.map(card).join(''));
+  $('list').innerHTML = '';
+  if (page.days.length === 0) $('list').innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><span style="font-size:34px;">🗓️</span><h3 class="disp" style="margin:12px 0 6px;font-size:15px;">Todavía no hay días para mostrar</h3><p style="margin:0;font-size:12px;color:var(--ink-soft);">Cuando registres comidas, cada día aparecerá aquí.</p></div>';
+  addDays(page.days);
+  renderStrip(page.days.map((d) => d.date));
   $('more').style.display = nextBefore ? '' : 'none';
-  return page;
+}
+
+async function loadMore() {
+  const page = await apiGet(`api/history?before=${nextBefore}&days=14`);
+  goal = page.goal_kcal;
+  nextBefore = page.next_before;
+  addDays(page.days);
+  $('more').style.display = nextBefore ? '' : 'none';
 }
 
 $('more').addEventListener('click', async () => {
   $('more').disabled = true;
-  try { await loadPage(false); } catch (err) { showToast(err.message); }
+  try { await loadMore(); } catch (err) { showToast(err.message); }
   $('more').disabled = false;
 });
 
 (async function init() {
-  let me;
-  try { me = await ensureSession(); } catch { return; }
+  today = iso(new Date());
+  const session = ensureSession().catch(() => null); // alongside the list, not before it
   try {
-    today = iso(new Date());
-    const page = await loadPage(true);
-    renderStrip(page.days.map((d) => d.date));
+    await apiGetSWR('api/history?days=14', paintFirst);
   } catch (err) {
     $('list').innerHTML = `<div class="chart-empty">No se pudo cargar el historial: ${escapeHtml(err.message)}</div>`;
   }
+  await session;
 })();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>

@@ -1,6 +1,12 @@
+import logging
+import threading
+import time
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 import httpx
+
+logger = logging.getLogger("cadence.wger")
 
 
 STAPLES_SOURCE = "cadence"
@@ -10,6 +16,75 @@ class WgerError(RuntimeError):
     pass
 
 
+class _Reject(Exception):
+    """The internal route answered like a wrong door (bad host, redirect, gateway error)."""
+
+
+class _Http:
+    """One long-lived connection pool to wger, shared by every request of the process.
+
+    A fresh client per request meant a new TLS handshake to wger's PUBLIC address (out to the internet and
+    back through the proxy) on every call. With `internal` set, calls go straight to the nginx container on
+    the Docker network, presenting the public Host so wger sees what it always saw. If that route is not
+    there (or looks wrong on its first answer), it falls back to the public address and retries later."""
+
+    BAD_FIRST = {301, 302, 307, 308, 400, 502, 503, 504}
+
+    def __init__(self, public: httpx.Client, internal: httpx.Client | None = None):
+        self.public = public
+        self.internal = internal
+        self._checked = False
+        self._down_until = 0.0
+
+    def request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        if self.internal is not None and time.monotonic() >= self._down_until:
+            try:
+                response = self.internal.request(method, url, **kwargs)
+                if not self._checked:
+                    if response.status_code in self.BAD_FIRST:
+                        raise _Reject(response.status_code)
+                    self._checked = True
+                return response
+            except (httpx.ConnectError, httpx.ConnectTimeout, _Reject) as exc:
+                logger.warning("ruta interna a wger no disponible (%s): uso la direccion publica 5 minutos", exc)
+                self._down_until = time.monotonic() + 300
+                self._checked = False
+        return self.public.request(method, url, **kwargs)
+
+    def get(self, url, **kw): return self.request("GET", url, **kw)
+    def post(self, url, **kw): return self.request("POST", url, **kw)
+    def patch(self, url, **kw): return self.request("PATCH", url, **kw)
+    def put(self, url, **kw): return self.request("PUT", url, **kw)
+    def delete(self, url, **kw): return self.request("DELETE", url, **kw)
+    def close(self) -> None: pass  # shared for the life of the process
+
+
+_pools: dict[tuple, _Http] = {}
+_pools_lock = threading.Lock()
+_ingredients: dict[int, tuple[float, dict]] = {}  # a food's nutrition does not change: remember it
+INGREDIENT_TTL = 6 * 3600
+INGREDIENT_MAX = 6000
+
+
+def _shared_http(base_url: str, token: str, internal_url: str) -> _Http:
+    key = (base_url, token, internal_url)
+    with _pools_lock:
+        pool = _pools.get(key)
+        if pool is None:
+            limits = httpx.Limits(max_connections=20, max_keepalive_connections=10, keepalive_expiry=60)
+            headers = {"Authorization": f"Token {token}"}
+            public = httpx.Client(base_url=base_url, headers=headers, timeout=15.0, limits=limits)
+            internal = None
+            if internal_url:
+                host = urlsplit(base_url)
+                internal = httpx.Client(
+                    base_url=internal_url.rstrip("/"), timeout=15.0, limits=limits,
+                    headers={**headers, "Host": host.netloc, "X-Forwarded-Proto": host.scheme or "https"},
+                )
+            pool = _pools[key] = _Http(public, internal)
+        return pool
+
+
 class WgerClient:
     """Thin client over wger's own REST API - never a separate database.
 
@@ -17,15 +92,12 @@ class WgerClient:
     database via this client; the vision model never supplies one.
     """
 
-    def __init__(self, base_url: str, api_token: str, language_id: int = 2, language_code: str = "en"):
+    def __init__(self, base_url: str, api_token: str, language_id: int = 2, language_code: str = "en",
+                 internal_url: str = ""):
         self._base_url = base_url.rstrip("/")
         self._language_id = language_id
         self._language_code = language_code
-        self._client = httpx.Client(
-            base_url=self._base_url,
-            headers={"Authorization": f"Token {api_token}"},
-            timeout=15.0,
-        )
+        self._client = _shared_http(self._base_url, api_token, internal_url)
 
     def search_ingredients(self, term: str, limit: int = 15) -> list[dict]:
         """Text search in wger's ingredient DB.
@@ -186,9 +258,17 @@ class WgerClient:
         return results
 
     def get_ingredient(self, ingredient_id: int) -> dict:
+        now = time.monotonic()
+        hit = _ingredients.get(ingredient_id)
+        if hit and now - hit[0] < INGREDIENT_TTL:
+            return hit[1]
         response = self._client.get(f"/api/v2/ingredient/{ingredient_id}/", params={"format": "json"})
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        if len(_ingredients) >= INGREDIENT_MAX:
+            _ingredients.clear()
+        _ingredients[ingredient_id] = (now, data)
+        return data
 
     def log_diary_entry(
         self,

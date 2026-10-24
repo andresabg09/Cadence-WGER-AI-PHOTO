@@ -8,7 +8,10 @@
 <link rel="manifest" href="static/manifest.json">
 <link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
 <link rel="stylesheet" href="static/css/pulse.css">
 <script>
   (function () {
@@ -23,7 +26,10 @@
     <a href="index.html" id="backLink" aria-label="Volver" class="icon-btn" style="width:36px;height:36px;border-radius:11px;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
     </a>
-    <h1 class="disp" style="margin:0;font-size:17px;font-weight:700;">Perfil</h1>
+    <h1 class="disp" style="margin:0;font-size:17px;font-weight:700;flex:1;">Perfil</h1>
+    <a href="settings.html" aria-label="Ajustes" class="icon-btn" style="width:36px;height:36px;border-radius:11px;">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9" stroke="var(--ink)" stroke-width="1.8" stroke-linecap="round"/><circle cx="15" cy="7" r="2" stroke="var(--ink)" stroke-width="1.8"/><circle cx="9" cy="17" r="2" stroke="var(--ink)" stroke-width="1.8"/></svg>
+    </a>
   </div>
 
   <div class="app-content" id="content" style="display:flex;flex-direction:column;gap:16px;padding-bottom:60px;">
@@ -52,50 +58,19 @@
       </div>
     </div>
 
-    <div id="ajustes">
-      <div class="section-title">APP</div>
-      <div class="menu-card">
-        <button class="menu-row" id="installRow"><span class="ico" style="background:rgba(61,220,132,0.12);">📲</span><span class="label">Instalar app</span><span class="hint" id="installHint"></span><span class="chev">›</span></button>
-        <button class="menu-row" id="themeRow"><span class="ico" style="background:rgba(255,138,91,0.12);">🎨</span><span class="label">Apariencia</span><span class="hint" id="themeHint"></span><span class="chev">›</span></button>
-        <a class="menu-row" href="reminders.html"><span class="ico" style="background:rgba(45,212,255,0.12);">🔔</span><span class="label">Recordatorios</span><span class="chev">›</span></a>
-        <a class="menu-row" href="history.html"><span class="ico">📜</span><span class="label">Historial completo</span><span class="chev">›</span></a>
-        <a class="menu-row" href="progress.html"><span class="ico" style="background:rgba(61,220,132,0.12);">📈</span><span class="label">Progreso y logros</span><span class="chev">›</span></a>
-      </div>
-    </div>
-
-    <div id="adminBox" style="display:none;">
-      <div class="section-title">INVITACIONES (ADMINISTRACIÓN)</div>
-      <div class="menu-card" style="padding:14px 15px;display:flex;flex-direction:column;gap:12px;">
-        <p style="margin:0;font-size:12px;color:var(--ink-soft);line-height:1.5;">Cada persona necesita un código para crear su cuenta. Cada código se usa una sola vez.</p>
-        <div style="display:flex;gap:8px;">
-          <input class="input" id="inviteNote" maxlength="80" placeholder="Para quién es (opcional)" style="min-height:44px;font-size:13px;">
-          <button class="btn-secondary" id="makeInvite" style="white-space:nowrap;min-height:44px;">Crear código</button>
-        </div>
-        <div id="newInvite" style="display:none;"></div>
-        <div id="inviteList" style="display:flex;flex-direction:column;gap:8px;"></div>
-        <div class="section-title" style="padding-top:6px;margin:0;">PERSONAS</div>
-        <div id="userList" style="display:flex;flex-direction:column;gap:8px;"></div>
-      </div>
-    </div>
-
     <div>
-      <div class="section-title">CUENTA</div>
+      <div class="section-title">TU ACTIVIDAD</div>
       <div class="menu-card">
-        <button class="menu-row" id="passwordRow"><span class="ico" style="background:rgba(127,127,140,0.15);">🔑</span><span class="label">Cambiar contraseña</span><span class="chev">›</span></button>
-        <button class="menu-row" data-soon="Ayuda y soporte"><span class="ico" style="background:rgba(127,127,140,0.15);">❓</span><span class="label">Ayuda y soporte</span><span class="hint">PRONTO</span><span class="chev">›</span></button>
-        <button class="menu-row" data-soon="Términos y privacidad"><span class="ico" style="background:rgba(127,127,140,0.15);">📄</span><span class="label">Términos y privacidad</span><span class="hint">PRONTO</span><span class="chev">›</span></button>
+        <a class="menu-row" href="progress.html"><span class="ico" style="background:rgba(61,220,132,0.12);">📈</span><span class="label">Progreso y logros</span><span class="chev">›</span></a>
+        <a class="menu-row" href="history.html"><span class="ico">📜</span><span class="label">Historial completo</span><span class="chev">›</span></a>
       </div>
     </div>
-
-    <button id="logout" style="display:flex;align-items:center;justify-content:center;padding:14px;border-radius:16px;border:1px solid rgba(255,92,92,0.35);background:transparent;color:var(--bad);font:inherit;font-size:13px;font-weight:700;cursor:pointer;min-height:48px;">Cerrar sesión</button>
-    <div style="text-align:center;font-size:10.5px;color:var(--ink-soft);opacity:0.7;">cadence</div>
   </div>
 </div>
 
 <script src="static/js/api.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/shell.js"></script>
-<script src="static/js/install.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const GOAL_LABEL = { lose: 'Bajar de peso', maintain: 'Mantener', gain: 'Subir de peso', muscle: 'Ganar músculo' };
@@ -128,9 +103,6 @@ function render() {
   $('statKcal').textContent = me.targets ? me.targets.kcal : '–';
   $('goalHint').textContent = p.goal ? GOAL_LABEL[p.goal].toUpperCase() : '';
   $('weightHint').textContent = p.target_weight_kg ? `META ${p.target_weight_kg} KG` : '';
-  $('themeHint').textContent = LABELS[getStoredTheme()].toUpperCase();
-  $('installHint').textContent = window.cadenceInstall && window.cadenceInstall.isInstalled() ? 'INSTALADA ✓' : '';
-  $('adminBox').style.display = me.is_admin ? 'block' : 'none';
 }
 
 async function loadStreak() {
@@ -169,108 +141,10 @@ $('weightRow').addEventListener('click', () => openSheet(`
   });
 }));
 
-// ---- password ----
-$('passwordRow').addEventListener('click', () => openSheet(`
-  <h3 class="disp" style="margin:0 0 14px;font-size:17px;">Cambiar contraseña</h3>
-  <label class="field"><span>CONTRASEÑA ACTUAL</span><input class="input" id="cur" type="password" autocomplete="current-password"></label>
-  <label class="field"><span>NUEVA CONTRASEÑA</span><input class="input" id="neu" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres"></label>
-  <div class="form-error" id="sErr"></div>
-  <div class="sheet-actions"><button class="btn-primary" id="sSave">Cambiar</button></div>`, (sheet, close) => {
-  sheet.querySelector('#sSave').addEventListener('click', async () => {
-    try {
-      await apiPost('api/auth/password', { current: sheet.querySelector('#cur').value, new: sheet.querySelector('#neu').value });
-      close(() => showToast('Contraseña cambiada', 'ok'));
-    } catch (err) { const e = sheet.querySelector('#sErr'); e.textContent = err.message; e.classList.add('show'); }
-  });
-}));
-
-// ---- app: install and appearance ----
-$('installRow').addEventListener('click', () => {
-  if (window.cadenceInstall && window.cadenceInstall.isInstalled()) { showToast('cadence ya está instalada en este dispositivo', 'ok'); return; }
-  if (window.cadenceInstall) window.cadenceInstall.open();
-});
-$('themeRow').addEventListener('click', () => {
-  const next = THEME_CYCLE[(THEME_CYCLE.indexOf(getStoredTheme()) + 1) % THEME_CYCLE.length];
-  localStorage.setItem(STORAGE_KEY, next);
-  applyTheme(next);
-  $('themeHint').textContent = LABELS[next].toUpperCase();
-});
-document.querySelectorAll('[data-soon]').forEach((el) => el.addEventListener('click', () => showToast(`${el.dataset.soon}: próximamente`, 'warn')));
-$('logout').addEventListener('click', signOut);
-
-// ---- administration: invitations and people ----
-function inviteLink(code) {
-  return `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, '')}login.html?invite=${encodeURIComponent(code)}`;
-}
-
-async function shareInvite(code, note) {
-  const link = inviteLink(code);
-  const text = `${note ? `${note}, t` : 'T'}e invito a cadence. Crea tu cuenta aquí (código ${code}): ${link}`;
-  if (navigator.share) { try { await navigator.share({ text }); return; } catch { /* cancelled: copy instead */ } }
-  try { await navigator.clipboard.writeText(text); showToast('Invitación copiada', 'ok'); }
-  catch { showToast(`Código: ${code}`, 'warn'); }
-}
-
-async function loadAdmin() {
-  if (!me.is_admin) return;
-  let overview;
-  try { overview = await apiGet('api/admin/overview'); } catch (err) { showToast(err.message); return; }
-  $('inviteList').innerHTML = overview.invites.length ? overview.invites.map((i) => `
-    <div style="display:flex;align-items:center;gap:10px;font-size:12px;">
-      <span class="code-pill" style="${i.used_at ? 'opacity:.45;text-decoration:line-through;' : ''}">${escapeHtml(i.code)}</span>
-      <span style="flex:1;color:var(--ink-soft);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.used_at ? `usada por ${escapeHtml(i.used_by || '')}` : escapeHtml(i.note || 'sin usar')}</span>
-      ${i.used_at ? '' : `<button class="link-btn" data-share="${i.code}" data-note="${escapeHtml(i.note || '')}" style="padding:6px;">Compartir</button><button class="link-btn" data-del="${i.code}" style="padding:6px;color:var(--bad);">Borrar</button>`}
-    </div>`).join('') : '<span style="font-size:12px;color:var(--ink-soft);">Aún no hay invitaciones.</span>';
-  $('userList').innerHTML = overview.users.map((u) => `
-    <div style="display:flex;align-items:center;gap:10px;font-size:12px;">
-      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><b>${escapeHtml(u.name)}</b> <span style="color:var(--ink-soft);">${escapeHtml(u.email)}${u.is_admin ? ' · admin' : ''}</span></span>
-      ${u.id === me.id ? '' : `<button class="link-btn" data-reset="${u.id}" data-who="${escapeHtml(u.name)}" style="padding:6px;">Restablecer clave</button>`}
-    </div>`).join('');
-  $('inviteList').querySelectorAll('[data-share]').forEach((b) => b.addEventListener('click', () => shareInvite(b.dataset.share, b.dataset.note)));
-  $('inviteList').querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
-    try { await apiDelete(`api/admin/invites/${b.dataset.del}`); loadAdmin(); } catch (err) { showToast(err.message); }
-  }));
-  $('userList').querySelectorAll('[data-reset]').forEach((b) => b.addEventListener('click', async () => {
-    if (!confirm(`¿Generar un código para que ${b.dataset.who} elija una contraseña nueva?`)) return;
-    try {
-      const { code, email } = await apiPost(`api/admin/users/${b.dataset.reset}/reset-password`, {});
-      const link = `${new URL('login.html', window.location.href).href}?reset=${encodeURIComponent(code)}&email=${encodeURIComponent(email)}`;
-      const text = `Hola ${b.dataset.who}, restablecí tu acceso a cadence. Abre ${link} y elige tu nueva contraseña (código ${code}, sirve una vez y vence en 24 h).`;
-      openSheet(`<h3 class="disp" style="margin:0 0 8px;font-size:17px;">Código para ${escapeHtml(b.dataset.who)}</h3>
-        <p style="margin:0 0 14px;font-size:12.5px;color:var(--ink-soft);line-height:1.5;">Envíaselo: en la pantalla de entrar toca «Tengo un código», pone su correo, este código y elige su nueva contraseña. Sirve una vez y vence en 24 horas. Su contraseña actual sigue funcionando hasta que lo use.</p>
-        <div class="code-pill" style="font-size:20px;text-align:center;padding:14px;background:var(--bg);border-radius:14px;user-select:all;">${escapeHtml(code)}</div>
-        <div class="sheet-actions"><button class="btn-secondary" id="sCopy">Compartir mensaje</button><button class="btn-primary" id="sOk">Listo</button></div>`, (sheet, close) => {
-        sheet.querySelector('#sOk').addEventListener('click', () => close());
-        sheet.querySelector('#sCopy').addEventListener('click', async () => {
-          if (navigator.share) { try { await navigator.share({ text }); return; } catch { /* cancelled: copy instead */ } }
-          try { await navigator.clipboard.writeText(text); showToast('Mensaje copiado', 'ok'); } catch { showToast(`Código: ${code}`, 'warn'); }
-        });
-      });
-    } catch (err) { showToast(err.message); }
-  }));
-}
-
-$('makeInvite').addEventListener('click', async () => {
-  try {
-    const note = $('inviteNote').value.trim();
-    const { code } = await apiPost('api/admin/invites', { note });
-    $('inviteNote').value = '';
-    const box = $('newInvite');
-    box.style.display = 'block';
-    box.innerHTML = `<div style="background:var(--bg);border-radius:14px;padding:14px;text-align:center;">
-      <div class="code-pill" style="font-size:22px;user-select:all;">${escapeHtml(code)}</div>
-      <button class="btn-primary" id="shareNew" style="margin-top:12px;">Compartir invitación</button></div>`;
-    $('shareNew').addEventListener('click', () => shareInvite(code, note));
-    loadAdmin();
-  } catch (err) { showToast(err.message); }
-});
-
 (async function init() {
   try { me = await ensureSession(); } catch { return; }
   render();
   loadStreak();
-  loadAdmin();
-  if (window.location.hash === '#ajustes') $('ajustes').scrollIntoView();
 })();
 // Coming back from Objetivos can restore this page from memory: show the saved numbers.
 window.addEventListener('pageshow', async (e) => {

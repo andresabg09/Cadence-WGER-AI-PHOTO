@@ -8,7 +8,10 @@
 <link rel="manifest" href="static/manifest.json">
 <link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
 <link rel="stylesheet" href="static/css/pulse.css">
 <script>
   (function () {
@@ -843,34 +846,36 @@ function openWorkoutSheet(day) {
   });
 }
 
+function paintToday(data, stale) {
+  latestToday = data;
+  if (!stale) hideBanner('wger');
+  renderDayNav(data);
+
+  // Label from the server's "today" (user's timezone), not the device clock.
+  document.getElementById('todayLabel').textContent = new Date(`${data.date}T12:00:00`)
+    .toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'short' })
+    .replace(/\./g, '').replace(',', '').toUpperCase();
+  document.getElementById('greeting').textContent = data.user_name ? `Hola, ${data.user_name}` : 'Hola';
+  document.getElementById('streakValue').textContent = data.streak_days;
+  document.getElementById('todayKcalLabel').textContent = `${Math.round(data.totals.kcal)} KCAL`;
+  renderRing(data.totals, data.goal);
+  renderMacroBars(data.totals, data.goal);
+  renderInsight(data.totals, data.goal);
+  renderMeals(data.meals);
+  renderWater(getWaterMl(data.date));
+  renderWorkouts(data);
+
+  if (!stale) syncExtrasOnce(data);
+  document.getElementById('waterPlus').onclick = () => setWaterMl(data.date, getWaterMl(data.date) + WATER_STEP_ML);
+  document.getElementById('waterMinus').onclick = () => setWaterMl(data.date, getWaterMl(data.date) - WATER_STEP_ML);
+}
+
 async function loadToday() {
   Object.keys(calCache).forEach((k) => delete calCache[k]);
-  const dateLabel = document.getElementById('todayLabel');
-
   try {
     await flushPending().catch(() => {});
-    const data = await apiGet(viewDate ? `api/today?date=${encodeURIComponent(viewDate)}` : 'api/today');
-    latestToday = data;
-    hideBanner('wger');
-    renderDayNav(data);
-
-    // Label from the server's "today" (user's timezone), not the device clock.
-    dateLabel.textContent = new Date(`${data.date}T12:00:00`)
-      .toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'short' })
-      .replace(/\./g, '').replace(',', '').toUpperCase();
-    document.getElementById('greeting').textContent = data.user_name ? `Hola, ${data.user_name}` : 'Hola';
-    document.getElementById('streakValue').textContent = data.streak_days;
-    document.getElementById('todayKcalLabel').textContent = `${Math.round(data.totals.kcal)} KCAL`;
-    renderRing(data.totals, data.goal);
-    renderMacroBars(data.totals, data.goal);
-    renderInsight(data.totals, data.goal);
-    renderMeals(data.meals);
-    renderWater(getWaterMl(data.date));
-    renderWorkouts(data);
-
-    syncExtrasOnce(data);
-    document.getElementById('waterPlus').onclick = () => setWaterMl(data.date, getWaterMl(data.date) + WATER_STEP_ML);
-    document.getElementById('waterMinus').onclick = () => setWaterMl(data.date, getWaterMl(data.date) - WATER_STEP_ML);
+    // The last diary this device saw shows at once; the fresh one replaces it a moment later.
+    await apiGetSWR(viewDate ? `api/today?date=${encodeURIComponent(viewDate)}` : 'api/today', paintToday);
   } catch (err) {
     if (!navigator.onLine) return; // the offline banner already explains it
     showBanner('wger', `No pudimos cargar tu diario: ${err.message}`, 'Reintentar', loadToday);
@@ -878,10 +883,11 @@ async function loadToday() {
 }
 
 (async function start() {
-  // Signed in and set up, or on the way to the screen that fixes that.
-  try { await ensureSession(); } catch { return; }
+  // Signed in and set up, or on the way to the screen that fixes that. Checked alongside the diary
+  // (not before it): the diary call answers 401 by itself if the session is gone.
   applyReturnHints();
   loadToday();
+  try { await ensureSession(); } catch { /* redirected */ }
 })();
 // Back from a flow can restore this page from the browser's memory: refresh what it shows.
 window.addEventListener('pageshow', (e) => { if (e.persisted) { applyReturnHints(); loadToday(); } });

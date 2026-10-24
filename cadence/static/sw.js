@@ -1,8 +1,9 @@
-// Minimal app-shell cache. Network-first so a deploy is visible on the next
-// load (no manual cache bump needed); the cache is only the offline fallback.
-// v2: v1 could hold HTML saved under css/js URLs (see nginx /cadence/ fix).
-const CACHE_NAME = 'cadence-shell-v19';
+// App-shell cache. Pages and assets open INSTANTLY from the cache and are refreshed in the background
+// (stale-while-revalidate); API calls are never cached here. __BUILD__ changes with every deploy
+// (the server stamps it), so a new deploy installs a fresh copy of everything and the page offers a reload.
+const CACHE_NAME = 'cadence-shell-__BUILD__';
 const SHELL_FILES = [
+  './',
   'index.html',
   'scan.html',
   'confirm.html',
@@ -10,6 +11,7 @@ const SHELL_FILES = [
   'login.html',
   'onboarding.html',
   'profile.html',
+  'settings.html',
   'goals.html',
   'progress.html',
   'history.html',
@@ -20,6 +22,7 @@ const SHELL_FILES = [
   'static/js/theme.js',
   'static/js/shell.js',
   'static/js/install.js',
+  'static/js/datepicker.js',
   'static/js/food-sheet.js',
   'static/js/barcode.js',
   'static/icons/icon-192.png',
@@ -29,7 +32,10 @@ const SHELL_FILES = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_FILES)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME)
+      // One missing file must not stop the whole update: add them one by one, skipping the HTTP cache.
+      .then((cache) => Promise.allSettled(SHELL_FILES.map((f) => cache.add(new Request(f, { cache: 'reload' })))))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -50,16 +56,22 @@ self.addEventListener('fetch', (event) => {
 
   // Never cache API calls - nutrition data must always be fresh.
   if (url.pathname.includes('/api/')) return;
+  if (url.pathname.endsWith('/sw.js')) return;
 
-  event.respondWith(
-    fetch(request).then((response) => {
-      if (response.ok) {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-      }
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    // ?date=... and similar only change what the page asks the API for, not the page itself.
+    const cached = await cache.match(request, { ignoreSearch: true });
+    const refresh = fetch(request, { cache: 'no-cache' }).then((response) => {
+      if (response.ok && response.type === 'basic' && !response.redirected) cache.put(request.mode === 'navigate' ? new Request(url.origin + url.pathname) : request, response.clone());
       return response;
-    }).catch(() => caches.match(request))
-  );
+    });
+    if (cached) {
+      event.waitUntil(refresh.catch(() => {}));
+      return cached;
+    }
+    try { return await refresh; } catch { return (await cache.match(request, { ignoreSearch: true })) || Response.error(); }
+  })());
 });
 
 // ---- Push notifications (reminders) ----

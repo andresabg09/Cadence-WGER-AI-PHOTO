@@ -24,6 +24,16 @@ def isolated_store(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def fresh_caches():
+    """Reads are remembered for minutes in production; every test starts with nothing remembered."""
+    from app import main, wger_client
+    main._entries_cache.clear()
+    main._entries_gen.clear()
+    wger_client._ingredients.clear()
+    yield
+
+
+@pytest.fixture(autouse=True)
 def signed_in(request, isolated_store):
     """Most tests are about food, not login: they run as the administrator, who owns wger plan 1.
 

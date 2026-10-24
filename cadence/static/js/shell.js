@@ -20,7 +20,7 @@
   ];
   const BOTTOM = [
     { key: 'perfil', label: 'Perfil', href: 'profile.html' },
-    { key: 'ajustes', label: 'Ajustes', href: 'profile.html#ajustes' },
+    { key: 'ajustes', label: 'Ajustes', href: 'settings.html' },
   ];
 
   function itemHtml(item, current) {

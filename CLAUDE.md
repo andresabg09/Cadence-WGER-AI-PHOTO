@@ -233,7 +233,9 @@ de wger. Diseno:
 ## Plan por bloques (fuente de verdad del avance)
 
 Mockup aprobado: artifact "cadence — Diseño" (claude.ai/artifact/VtU9UcFoBkUS7g7Nry3Exc),
-15 pantallas de celular + (desde el Bloque 1) versiones tablet y escritorio.
+Reorganizado el 25 oct 2026 en cuatro paginas: Celular, Tablet, Escritorio (diseno FINAL de todas las pantallas, incluidos los bloques 8-12)
+y Pruebas (los cambios nuevos se prueban primero ahi, en una copia, y solo al aprobarse se aplican a las tres). No volver a crear tableros
+"Plan N" ni duplicados de tablet/escritorio: se edita el tablero final.
 Cada bloque se construye COMPLETO, se prueba (tests + navegador con wger simulado),
 se publica a `master` y se valida con UNA sola revision en el servidor
 (`/cadence/api/diagnostics?deep=1`). No se entrega a medias ni bug por bug.

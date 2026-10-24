@@ -103,6 +103,23 @@ def meal_now(at: str | None = None):
     return {"meal": meal_key_for_entry({"datetime": when.isoformat()}), "at": when.isoformat()}
 
 
+_staples_cache: dict = {"at": 0.0, "items": []}
+
+
+def candidate_pool(wger: WgerClient, term: str) -> list[dict]:
+    """wger's text search plus the ready-to-eat staples (cached 10 min), without repeats."""
+    pool = wger.search_ingredients(term, limit=settings.search_fetch_limit)
+    now = monotonic()
+    if now - _staples_cache["at"] > 600:
+        try:
+            _staples_cache.update(at=now, items=wger.list_staples())
+        except Exception:  # noqa: BLE001 - staples are a bonus; search works without them
+            logger.exception("no se pudieron leer los basicos")
+            _staples_cache.update(at=now - 540, items=_staples_cache["items"])  # retry in a minute
+    seen = {item["id"] for item in pool}
+    return pool + [item for item in _staples_cache["items"] if item["id"] not in seen]
+
+
 _wger_status_cache: dict = {"at": 0.0, "value": None}
 
 
@@ -306,8 +323,8 @@ async def analyze(image: UploadFile):
             # Search/rank with the English generic name (wger's DB language);
             # detected_name stays the Spanish label the user sees.
             term = component.search_name or component.name
-            raw_matches = wger.search_ingredients(term, limit=settings.search_fetch_limit)
-            candidates = rank_candidates(term, raw_matches, settings.match_candidate_count)
+            raw_matches = candidate_pool(wger, term)
+            candidates = rank_candidates(term, raw_matches, settings.match_candidate_count, alt=component.name)
             if candidates and candidates[0].energy_kcal_100g is None:
                 # Older wger versions don't send nutrition values with the search
                 # hit; fetch the top pick only (others load on demand through
@@ -357,7 +374,7 @@ def search_foods(term: str):
         return []
     wger = get_wger_client()
     try:
-        matches = wger.search_ingredients(term, limit=settings.search_fetch_limit)
+        matches = candidate_pool(wger, term)
         results: list[SearchResult] = []
         for _score, match in rank_matches(term, matches, 8):
             energy = match.get("energy")

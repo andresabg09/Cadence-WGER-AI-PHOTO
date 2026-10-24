@@ -28,8 +28,9 @@ Reglas estrictas:
   foto, 1000,1000 la inferior derecha). Encierra solo ese componente, ajustado,
   no todo el plato; las cajas de componentes distintos pueden tocarse.
 - "name" va en espanol (es lo que ve el usuario). "search_name" es el mismo
-  alimento como nombre generico corto en ingles (ej: "grilled chicken breast",
-  "white rice"), porque la base de datos nutricional esta en ingles.
+  alimento como nombre generico corto en ingles y TAL COMO SE COME (cocido o
+  preparado, no crudo): "cooked white rice", "grilled chicken breast",
+  "boiled egg", "vanilla ice cream". La base de datos nutricional esta en ingles.
 
 Responde UNICAMENTE con un JSON array, sin texto adicional, con esta forma:
 [{"name": "pollo a la plancha", "search_name": "grilled chicken breast", "confidence": 0.9, "estimated_grams": 120, "box_2d": [250, 100, 700, 480]}, ...]

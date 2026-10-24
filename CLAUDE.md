@@ -237,6 +237,11 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   sin EXIF = fecha del archivo). `ConfirmRequest.taken_at` fecha el registro en el DIA de la foto
   y, si el usuario elige otra comida, dentro de la ventana de esa comida (`datetime_for_meal`).
   Una hora futura se recorta a "ahora". `/api/meal-now?at=` devuelve la sugerencia.
+  Alimentos "como se comen" (24 oct): el catalogo de wger (Open Food Facts) es de productos
+  CRUDOS/de supermercado ("White Rice" = 340 kcal, cocido = 130). `cadence/scripts/seed_staples.py`
+  agrega ~60 basicos preparados en en/es (source_name=`cadence`, valores tipo USDA); la busqueda
+  los trae siempre (`candidate_pool`), les da +20 puntos, muestra el gemelo en/es una sola vez en
+  el idioma del usuario, y el prompt pide `search_name` "tal como se come" (cooked/grilled).
 - **Bloque 3 - Datos personales.** Perfil, Objetivos (Mifflin-St Jeor, guarda goal_* del
   plan), Progreso (racha, peso desde weightentry, logros), Historial.
 - **Bloque 4 - Ajustes y habitos.** Ajustes (hub), Apariencia (toggle ya hecho),

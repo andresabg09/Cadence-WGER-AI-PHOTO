@@ -18,9 +18,8 @@ def test_search_uses_ingredientinfo_and_returns_inline_energy():
         assert request.url.params["language__code"] == "en"
         return httpx.Response(200, json={"results": [{"id": 7, "name": "Chicken", "energy": 165, "image": None}]})
 
-    assert client_with(handler).search_ingredients("chicken") == [
-        {"id": 7, "name": "Chicken", "image": None, "energy": 165}
-    ]
+    found = client_with(handler).search_ingredients("chicken")
+    assert [(f["id"], f["name"], f["energy"]) for f in found] == [(7, "Chicken", 165)]
 
 
 def test_search_falls_back_to_legacy_endpoint_on_404():
@@ -263,3 +262,35 @@ def test_confirm_stamps_the_photo_day_inside_the_chosen_meal(monkeypatch):
     # no taken_at (manual add): today
     client.post("/api/confirm", json={"items": base["items"], "meal": "almuerzo"})
     assert posted[-1]["datetime"][:10] == local_today_prefix()
+
+
+def test_analyze_offers_the_ready_to_eat_staple_in_spanish(monkeypatch):
+    from app.schemas import DetectedComponent
+
+    class StubVision:
+        def identify_components(self, image_bytes, mime):
+            return [DetectedComponent(name="arroz blanco", search_name="cooked white rice", confidence=0.9, estimated_grams=150,
+                                      box=[0.1, 0.2, 0.3, 0.4])]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v2/ingredientinfo/" and request.url.params.get("source_name") == "cadence":
+            staples = [
+                {"id": 2, "name": "Cooked white rice", "energy": 130, "protein": 2.7, "carbohydrates": 28.2, "fat": 0.3, "source_name": "cadence"},
+                {"id": 3, "name": "Arroz blanco cocido", "energy": 130, "protein": 2.7, "carbohydrates": 28.2, "fat": 0.3, "source_name": "cadence"},
+            ]
+            return httpx.Response(200, json={"results": staples})
+        if request.url.path == "/api/v2/ingredientinfo/":
+            dry = {"id": 1, "name": "White Rice", "energy": 340, "protein": 7, "carbohydrates": 79, "fat": 0.6, "source_name": "USDA"}
+            return httpx.Response(200, json={"results": [dry]})
+        return httpx.Response(404)
+
+    main._staples_cache.update(at=0.0, items=[])
+    _stub_wger(monkeypatch, handler)
+    monkeypatch.setattr(main, "get_vision_client", lambda: StubVision())
+    response = TestClient(main.app).post("/api/analyze", files={"image": ("plate.jpg", b"fake-bytes", "image/jpeg")})
+    assert response.status_code == 200
+    component = response.json()["components"][0]
+    assert component["estimated_grams"] == 150 and component["box"] == [0.1, 0.2, 0.3, 0.4]
+    names = [c["name"] for c in component["candidates"]]
+    assert names[0] == "Arroz blanco cocido" and component["candidates"][0]["energy_kcal_100g"] == 130
+    assert not ({"Cooked white rice"} & set(names[:1])) and names.count("Cooked white rice") + names.count("Arroz blanco cocido") == 1

@@ -3,6 +3,9 @@ from datetime import datetime, timezone
 import httpx
 
 
+STAPLES_SOURCE = "cadence"
+
+
 class WgerError(RuntimeError):
     pass
 
@@ -49,11 +52,32 @@ class WgerClient:
                     "name": item.get("name"),
                     "image": item.get("image"),
                     "energy": item.get("energy"),
+                    "protein": item.get("protein"),
+                    "carbohydrates": item.get("carbohydrates"),
+                    "fat": item.get("fat"),
+                    "source": item.get("source_name"),
                 }
                 for item in response.json().get("results", [])
                 if item.get("id") is not None
             ]
         return self._search_ingredients_legacy(term, limit)
+
+    def list_staples(self) -> list[dict]:
+        """The ready-to-eat staples loaded by scripts/seed_staples.py (source_name=cadence)."""
+        response = self._client.get(
+            "/api/v2/ingredientinfo/",
+            params={"source_name": STAPLES_SOURCE, "limit": 500, "format": "json"},
+        )
+        response.raise_for_status()
+        return [
+            {
+                "id": item.get("id"), "name": item.get("name"), "image": item.get("image"),
+                "energy": item.get("energy"), "protein": item.get("protein"),
+                "carbohydrates": item.get("carbohydrates"), "fat": item.get("fat"), "source": STAPLES_SOURCE,
+            }
+            for item in response.json().get("results", [])
+            if item.get("id") is not None
+        ]
 
     def _search_ingredients_legacy(self, term: str, limit: int) -> list[dict]:
         response = self._client.get(

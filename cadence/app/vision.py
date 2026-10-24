@@ -23,12 +23,16 @@ Reglas estrictas:
   en la foto (entero). Si el plato es una sola unidad (una paleta, una barra,
   una manzana), reparte su peso total entre los componentes que la forman.
   Es solo una estimacion de porcion: NO es un dato nutricional.
+- "box_2d": donde esta ESE componente en la foto, como [ymin, xmin, ymax, xmax]
+  con valores enteros de 0 a 1000 (0,0 es la esquina superior izquierda de la
+  foto, 1000,1000 la inferior derecha). Encierra solo ese componente, ajustado,
+  no todo el plato; las cajas de componentes distintos pueden tocarse.
 - "name" va en espanol (es lo que ve el usuario). "search_name" es el mismo
   alimento como nombre generico corto en ingles (ej: "grilled chicken breast",
   "white rice"), porque la base de datos nutricional esta en ingles.
 
 Responde UNICAMENTE con un JSON array, sin texto adicional, con esta forma:
-[{"name": "pollo a la plancha", "search_name": "grilled chicken breast", "confidence": 0.9, "estimated_grams": 120}, ...]
+[{"name": "pollo a la plancha", "search_name": "grilled chicken breast", "confidence": 0.9, "estimated_grams": 120, "box_2d": [250, 100, 700, 480]}, ...]
 """
 
 
@@ -59,6 +63,7 @@ def _parse_components(raw_text: str) -> list[DetectedComponent]:
             search_name=item.get("search_name"),
             confidence=item.get("confidence"),
             estimated_grams=_sane_grams(item.get("estimated_grams")),
+            box=_box_from_gemini(item.get("box_2d")),
         )
         for item in data
     ]
@@ -71,3 +76,19 @@ def _sane_grams(value) -> int | None:
     except (TypeError, ValueError):
         return None
     return grams if 5 <= grams <= 1500 else None
+
+
+def _box_from_gemini(raw) -> list[float] | None:
+    """Gemini boxes are [ymin, xmin, ymax, xmax] on a 0-1000 grid; the UI wants
+    [x, y, width, height] as 0-1 fractions of the photo. Anything implausible is
+    dropped (the UI then falls back to the whole photo)."""
+    try:
+        ymin, xmin, ymax, xmax = (float(v) for v in raw)
+    except (TypeError, ValueError):
+        return None
+    ymin, xmin = max(0.0, ymin), max(0.0, xmin)
+    ymax, xmax = min(1000.0, ymax), min(1000.0, xmax)
+    width, height = (xmax - xmin) / 1000, (ymax - ymin) / 1000
+    if width < 0.03 or height < 0.03:
+        return None
+    return [round(xmin / 1000, 4), round(ymin / 1000, 4), round(width, 4), round(height, 4)]

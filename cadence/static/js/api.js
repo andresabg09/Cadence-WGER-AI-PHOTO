@@ -124,49 +124,74 @@ async function prepareImage(file, maxDim = 1280) {
       return canvas;
     };
     const blob = await new Promise((resolve) => draw(maxDim).toBlob(resolve, 'image/jpeg', 0.85));
-    const thumb = draw(640).toDataURL('image/jpeg', 0.7);
+    const thumb = draw(800).toDataURL('image/jpeg', 0.75); // also the source for per-ingredient crops
     return { blob: blob || file, thumb };
   } catch {
     return { blob: file, thumb: null };
   }
 }
 
-const SCAN_SESSION_KEYS = ['cadence_analyze_result', 'cadence_photo', 'cadence_meal'];
+const SCAN_SESSION_KEYS = ['cadence_analyze_result', 'cadence_photos', 'cadence_meal'];
 function clearScanSession() {
   SCAN_SESSION_KEYS.forEach((key) => sessionStorage.removeItem(key));
 }
 
-// ---- Thumbnails: the user's own photo next to each diary entry it created ----
+// ---- Photos of the plate being confirmed (one or several) and per-ingredient crops ----
+function readPhotos() {
+  try { return JSON.parse(sessionStorage.getItem('cadence_photos') || '[]'); } catch { return []; }
+}
+
+function writePhotos(list) {
+  try { sessionStorage.setItem('cadence_photos', JSON.stringify(list)); } catch { /* quota: the plate still works without photos */ }
+}
+
+const _imageCache = new Map();
+function loadImage(src) {
+  if (!_imageCache.has(src)) {
+    _imageCache.set(src, new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = src;
+    }));
+  }
+  return _imageCache.get(src);
+}
+
+// Square, zoomed and centred on the ingredient's zone. box = [x, y, w, h] as 0-1 fractions.
+async function cropThumb(src, box, size = 140) {
+  const img = await loadImage(src);
+  if (!img) return null;
+  const W = img.naturalWidth;
+  const H = img.naturalHeight;
+  const [bx, by, bw, bh] = box;
+  const cx = (bx + bw / 2) * W;
+  const cy = (by + bh / 2) * H;
+  const shortSide = Math.min(W, H);
+  // 15% margin around the zone, never tighter than a fifth of the photo, never beyond it.
+  let side = Math.max(bw * W, bh * H) * 1.15;
+  side = Math.min(Math.max(side, shortSide * 0.2), shortSide);
+  const sx = Math.max(0, Math.min(W - side, cx - side / 2));
+  const sy = Math.max(0, Math.min(H - side, cy - side / 2));
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  canvas.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, size, size);
+  return canvas.toDataURL('image/jpeg', 0.8);
+}
+
+// ---- The diary keeps each entry's own crop (localStorage, newest 150) ----
 const THUMBS_KEY = 'cadence_thumbs';
 
 function readThumbs() {
   try { return JSON.parse(localStorage.getItem(THUMBS_KEY) || '{}'); } catch { return {}; }
 }
 
-function shrinkDataUrl(dataUrl, size = 96) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = size;
-      const scale = Math.max(size / img.width, size / img.height);
-      const w = img.width * scale;
-      const h = img.height * scale;
-      canvas.getContext('2d').drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
-      resolve(canvas.toDataURL('image/jpeg', 0.7));
-    };
-    img.onerror = () => resolve(null);
-    img.src = dataUrl;
-  });
-}
-
-async function rememberThumbs(created, photoDataUrl) {
-  if (!photoDataUrl || !created || !created.length) return;
-  const small = await shrinkDataUrl(photoDataUrl);
-  if (!small) return;
+// created[i] is the diary entry of the i-th item we sent; crops[i] is that item's crop (or null).
+function rememberThumbs(created, crops) {
+  if (!created || !created.length) return;
   const map = readThumbs();
-  created.forEach((entry) => { map[entry.diary_entry_id] = small; });
+  created.forEach((entry, i) => { if (crops[i]) map[entry.diary_entry_id] = crops[i]; });
   const ids = Object.keys(map);
-  if (ids.length > 150) ids.slice(0, ids.length - 150).forEach((id) => delete map[id]); // keep storage small
+  if (ids.length > 150) ids.slice(0, ids.length - 150).forEach((id) => delete map[id]);
   try { localStorage.setItem(THUMBS_KEY, JSON.stringify(map)); } catch { /* storage full or unavailable */ }
 }

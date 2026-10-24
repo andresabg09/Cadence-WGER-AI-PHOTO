@@ -32,3 +32,16 @@ def test_generic_name_beats_longer_variants():
 def test_inline_energy_is_carried_to_the_candidate():
     raw = [{"id": 9, "name": "Chicken Breast", "energy": 98}]
     assert rank_candidates("chicken breast", raw)[0].energy_kcal_100g == 98.0
+
+
+def test_gemini_boxes_become_fractions_and_bad_ones_are_dropped():
+    from app.vision import _box_from_gemini, _parse_components
+
+    # [ymin, xmin, ymax, xmax] on 0-1000  ->  [x, y, w, h] on 0-1
+    assert _box_from_gemini([250, 100, 700, 480]) == [0.1, 0.25, 0.38, 0.45]
+    assert _box_from_gemini([-20, -5, 1200, 2000]) == [0.0, 0.0, 1.0, 1.0]  # clamped
+    assert _box_from_gemini([100, 100, 105, 900]) is None  # a sliver is not a food
+    assert _box_from_gemini("nope") is None and _box_from_gemini(None) is None
+
+    parsed = _parse_components('[{"name": "pollo", "search_name": "chicken", "confidence": 0.9, "estimated_grams": 120, "box_2d": [0, 500, 500, 1000]}]')
+    assert parsed[0].box == [0.5, 0.0, 0.5, 0.5]

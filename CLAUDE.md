@@ -225,6 +225,12 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   ranking de candidatos (trae 100 de wger y puntua `WRatio + ratio`), miniaturas con la foto
   del usuario (localStorage, `cadence_thumbs`), y errores 500 ahora dicen la causa en vez de
   quedar en blanco (`/api/today` ya no cae si el plan o un alimento no se pueden leer).
+  Fotos por ingrediente (24 oct): la IA devuelve `box_2d` por componente (0-1000, convertido a
+  `box=[x,y,w,h]` 0-1); la pantalla Confirmar muestra la(s) foto(s) arriba con cada zona
+  numerada, y cada ingrediente lleva su recorte con zoom (`cropThumb` en api.js, sessionStorage
+  `cadence_photos`, cada componente con `photo`+`box`). "Agregar otra foto" (`scan.html?append=1`)
+  suma fotos a un mismo registro. El diario guarda el recorte de cada entrada (localStorage).
+  Sin `box` valido se usa la foto entera. Pendiente de validar con cajas reales de Gemini.
 - **Bloque 3 - Datos personales.** Perfil, Objetivos (Mifflin-St Jeor, guarda goal_* del
   plan), Progreso (racha, peso desde weightentry, logros), Historial.
 - **Bloque 4 - Ajustes y habitos.** Ajustes (hub), Apariencia (toggle ya hecho),

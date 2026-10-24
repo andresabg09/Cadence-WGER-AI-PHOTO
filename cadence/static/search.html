@@ -112,7 +112,7 @@ function addFood(food) {
     try { result = JSON.parse(sessionStorage.getItem('cadence_analyze_result')) || result; } catch { /* start fresh */ }
   } else {
     // A manual add from the dashboard starts a new plate: drop any old photo.
-    sessionStorage.removeItem('cadence_photo');
+    sessionStorage.removeItem('cadence_photos');
   }
   result.components.push({
     detected_name: food.name,

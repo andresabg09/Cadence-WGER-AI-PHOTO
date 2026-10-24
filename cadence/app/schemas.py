@@ -10,6 +10,8 @@ class DetectedComponent(BaseModel):
     # Portion the model sees on the plate. Only a starting point for the
     # quantity stepper - the user always confirms, calories come from wger.
     estimated_grams: int | None = None
+    # Where it is in the photo: [x, y, width, height] as 0-1 fractions.
+    box: list[float] | None = None
 
 
 class IngredientCandidate(BaseModel):
@@ -27,6 +29,7 @@ class ComponentMatch(BaseModel):
     detected_name: str
     confidence: float | None = None
     estimated_grams: int | None = None
+    box: list[float] | None = None
     candidates: list[IngredientCandidate]
 
 

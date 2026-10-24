@@ -144,7 +144,9 @@ let facingMode = 'environment';
 let stream = null;
 
 // A new scan starts a clean session; ?meal= comes from the dashboard's "Agregar almuerzo" etc.
-clearScanSession();
+// ?append=1 (from the confirm screen's "Agregar otra foto") keeps the current plate and adds to it.
+const appending = new URLSearchParams(location.search).get('append') === '1';
+if (!appending) clearScanSession();
 const requestedMeal = new URLSearchParams(location.search).get('meal');
 if (requestedMeal) sessionStorage.setItem('cadence_meal', requestedMeal);
 
@@ -275,6 +277,19 @@ function setBusy(busy) {
   document.getElementById('dropzone').style.pointerEvents = busy ? 'none' : 'auto';
 }
 
+// Adds this photo's result to the plate (a fresh plate, or the current one when appending).
+function storePlate(newComponents, thumb) {
+  const photos = appending ? readPhotos() : [];
+  let components = [];
+  if (appending) {
+    try { components = JSON.parse(sessionStorage.getItem('cadence_analyze_result')).components || []; } catch { components = []; }
+  }
+  const photoIdx = thumb ? photos.push(thumb) - 1 : null;
+  newComponents.forEach((c) => { c.photo = photoIdx; }); // which photo it belongs to; c.box says where
+  sessionStorage.setItem('cadence_analyze_result', JSON.stringify({ components: components.concat(newComponents) }));
+  writePhotos(photos);
+}
+
 async function runAnalysis(source) {
   setBusy(true);
   const { blob, thumb } = await prepareImage(source);
@@ -285,15 +300,14 @@ async function runAnalysis(source) {
   try {
     const data = await apiPost('api/analyze', formData, { isFormData: true });
     renderLiveChips(data.components);
-    sessionStorage.setItem('cadence_analyze_result', JSON.stringify(data));
-    if (thumb) sessionStorage.setItem('cadence_photo', thumb);
+    storePlate(data.components, thumb);
     setTimeout(() => { window.location.href = 'confirm.html'; }, 600);
   } catch (err) {
     setBusy(false);
     if (/identific/i.test(err.message || '')) {
-      // The AI saw no food: the confirm screen has the "No logramos identificar el plato" state.
-      sessionStorage.setItem('cadence_analyze_result', JSON.stringify({ components: [] }));
-      if (thumb) sessionStorage.setItem('cadence_photo', thumb);
+      // The AI saw no food: the confirm screen has the "No logramos identificar el plato" state
+      // (or, when appending, the plate we already had).
+      storePlate([], thumb);
       window.location.href = 'confirm.html';
       return;
     }

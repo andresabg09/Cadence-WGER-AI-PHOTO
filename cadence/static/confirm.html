@@ -14,6 +14,28 @@
   .gram-btn { width: 36px; height: 36px; border-radius: 11px; font-size: 16px; font-weight: 700; cursor: pointer; }
   @media (max-width: 599px) { .gram-btn { width: 32px; height: 32px; } }
   @media (min-width: 600px) and (max-width: 1023px) { .gram-btn { width: 44px; height: 44px; } }
+
+  /* Photo(s) on top: each ingredient's zone is outlined and numbered, and the same
+     number sits on the ingredient's zoomed thumbnail below. */
+  .photo-strip { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .photo-strip::-webkit-scrollbar { display: none; }
+  .photo-card { flex: 0 0 auto; max-width: 100%; scroll-snap-align: center; position: relative; border-radius: 22px; overflow: hidden; border: 1px solid var(--card-border); background: #0d0b12; display: flex; align-items: center; justify-content: center; }
+  .photo-strip.many .photo-card { max-width: 88%; }
+  .photo-frame { position: relative; display: block; line-height: 0; }
+  .photo-frame img { display: block; max-width: 100%; max-height: 230px; width: auto; height: auto; }
+  @media (min-width: 600px) { .photo-frame img { max-height: 320px; } }
+  @media (min-width: 1024px) { .photo-frame img { max-height: 460px; } }
+  .photo-tag { position: absolute; left: 10px; top: 10px; background: rgba(10,10,15,0.75); border: 1px solid rgba(255,255,255,0.16); color: #F5F5F7; border-radius: 100px; padding: 4px 10px; font-size: 11px; font-weight: 700; line-height: 1.3; }
+  .pbox { position: absolute; border: 2px solid var(--c); border-radius: 8px; box-shadow: 0 0 0 1px rgba(0,0,0,0.35); cursor: pointer; transition: opacity 0.2s, box-shadow 0.2s; }
+  .pbox .pnum { position: absolute; left: -2px; top: -2px; transform: translate(0, -100%); min-width: 20px; height: 20px; padding: 0 5px; border-radius: 7px 7px 7px 0; background: var(--c); color: #0A0A0F; font: 700 11px 'Space Mono', monospace; display: flex; align-items: center; justify-content: center; line-height: 1; }
+  .photo-frame.focus .pbox:not(.on) { opacity: 0.25; }
+  .pbox.on { box-shadow: 0 0 0 3px var(--c), 0 0 24px var(--c); }
+  .thumb-wrap { position: relative; width: 52px; height: 52px; flex-shrink: 0; }
+  .thumb-wrap .thumb-photo, .thumb-wrap .thumb-empty { width: 100%; height: 100%; border-radius: 14px; }
+  .thumb-empty { background: linear-gradient(140deg, #7C5CFF, #2DD4FF); opacity: 0.35; }
+  .thumb-wrap .tnum { position: absolute; left: -4px; top: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 6px; background: var(--c); color: #0A0A0F; font: 700 10.5px 'Space Mono', monospace; display: flex; align-items: center; justify-content: center; border: 2px solid var(--card); }
+  .item-card.flash { box-shadow: 0 0 0 2px var(--c); }
+  .add-photo { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border-radius: 18px; border: 1px solid var(--card-border); background: var(--card); color: var(--ink); font-size: 12.5px; font-weight: 700; cursor: pointer; }
 </style>
 <script>
   (function () {
@@ -36,9 +58,7 @@
 
   <div class="app-content" style="padding-bottom:150px;">
     <div class="confirm-grid">
-      <div class="col" id="photoCol">
-        <div class="photo-card" id="photoCard"><div class="chips" id="photoChips"></div></div>
-      </div>
+      <div class="col" id="photoCol"></div>
       <div class="col" id="itemsCol">
         <div class="meal-pick" id="mealPick" role="group" aria-label="Comida"></div>
         <div class="confirm-items" id="itemsWrap"></div>
@@ -68,15 +88,20 @@ const MEALS = [
   { key: 'merienda', label: 'Merienda' },
   { key: 'cena', label: 'Cena' },
 ];
+// One colour per ingredient: its zone on the photo, its number and its thumbnail share it.
+const ZONE_COLORS = ['#7C5CFF', '#2DD4FF', '#FF8A5B', '#3DDC84', '#FFC83D', '#FF5C9E'];
+const zoneColor = (idx) => ZONE_COLORS[idx % ZONE_COLORS.length];
 
 const raw = sessionStorage.getItem('cadence_analyze_result');
 if (!raw) {
   window.location.href = 'scan.html';
 }
 const analyzeResult = JSON.parse(raw || '{"components":[]}');
+const photos = readPhotos();
 let meal = sessionStorage.getItem('cadence_meal') || null;
 
-// Per-component live state: selected candidate id, its kcal/100g, grams.
+// Per-component live state: selected candidate id, its kcal/100g, grams, and
+// where it sits on which photo (null for foods added by hand).
 const state = analyzeResult.components.map((component) => {
   // selectedId/grams are present when we come back from search.html after the
   // user already tweaked this plate (see persistState()).
@@ -89,6 +114,9 @@ const state = analyzeResult.components.map((component) => {
     energyPer100g: selected ? (selected.energy_kcal_100g || 0) : 0,
     // The model's portion guess (if any) is only a starting point; the stepper is the truth.
     grams: component.grams || component.estimated_grams || 100,
+    photo: component.photo ?? null,
+    box: component.box ?? null,
+    crop: null,
   };
 });
 
@@ -99,6 +127,8 @@ function persistState() {
     candidates: item.candidates,
     selectedId: item.selectedId,
     grams: item.grams,
+    photo: item.photo,
+    box: item.box,
   }));
   sessionStorage.setItem('cadence_analyze_result', JSON.stringify({ components: merged }));
   if (meal) sessionStorage.setItem('cadence_meal', meal);
@@ -112,6 +142,7 @@ function renderSubtitle() {
   if (state.length === 0) text = 'Sin componentes';
   else if (ai === 0) text = plural(manual, 'alimento agregado', 'alimentos agregados');
   else text = `✨ ${plural(ai, 'identificado', 'identificados')} por IA${manual ? ` · ${plural(manual, 'manual', 'manuales')}` : ''}`;
+  if (photos.length > 1) text += ` · ${photos.length} fotos`;
   document.getElementById('subtitle').textContent = text;
 }
 
@@ -124,18 +155,76 @@ function renderTotal() {
   document.getElementById('totalKcal').textContent = `${Math.round(total)} kcal`;
 }
 
-// ---- Photo (tablet/desktop only; CSS keeps it hidden on phones) ----
-function renderPhoto() {
-  const photo = sessionStorage.getItem('cadence_photo');
-  if (!photo) return;
-  const card = document.getElementById('photoCard');
-  card.style.backgroundImage = `url("${photo}")`;
-  card.classList.add('has-photo');
-  const chips = document.getElementById('photoChips');
-  chips.innerHTML = state
-    .filter((item) => item.confidence != null)
-    .map((item) => `<div class="photo-chip"><span>${escapeHtml(item.detected_name)}</span><span class="mono">${Math.round(item.confidence * 100)}%</span></div>`)
-    .join('');
+// ---- Photos on top, with each ingredient's zone outlined and numbered ----
+function renderPhotos() {
+  const col = document.getElementById('photoCol');
+  col.innerHTML = '';
+  if (photos.length === 0) return;
+
+  const strip = document.createElement('div');
+  strip.className = `photo-strip${photos.length > 1 ? ' many' : ''}`;
+  photos.forEach((src, photoIdx) => {
+    const boxes = state
+      .map((item, idx) => ({ item, idx }))
+      .filter(({ item }) => item.photo === photoIdx && item.box)
+      .map(({ item, idx }) => {
+        const [x, y, w, h] = item.box;
+        return `<div class="pbox" data-item="${idx}" style="--c:${zoneColor(idx)};left:${x * 100}%;top:${y * 100}%;width:${w * 100}%;height:${h * 100}%;" title="${escapeHtml(item.detected_name)}"><span class="pnum">${idx + 1}</span></div>`;
+      })
+      .join('');
+    const count = state.filter((item) => item.photo === photoIdx).length;
+    const card = document.createElement('div');
+    card.className = 'photo-card';
+    card.innerHTML = `
+      <div class="photo-frame" data-photo="${photoIdx}">
+        <img src="${src}" alt="Foto ${photoIdx + 1} de tu plato">
+        ${boxes}
+        ${photos.length > 1 ? `<span class="photo-tag">Foto ${photoIdx + 1} · ${count} alimento${count === 1 ? '' : 's'}</span>` : ''}
+      </div>`;
+    strip.appendChild(card);
+  });
+  col.appendChild(strip);
+
+  col.querySelectorAll('.pbox').forEach((box) => {
+    box.addEventListener('click', () => focusItem(Number(box.dataset.item), { scroll: true }));
+  });
+}
+
+// Highlight an ingredient both on the photo (its zone) and in the list (its card).
+let focusTimer = null;
+function focusItem(idx, { scroll = false } = {}) {
+  document.querySelectorAll('.pbox').forEach((box) => box.classList.toggle('on', Number(box.dataset.item) === idx));
+  document.querySelectorAll('.photo-frame').forEach((frame) => frame.classList.add('focus'));
+  document.querySelectorAll('.item-card').forEach((card) => card.classList.toggle('flash', Number(card.dataset.idx) === idx));
+  if (scroll) {
+    const card = document.querySelector(`.item-card[data-idx="${idx}"]`);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  clearTimeout(focusTimer);
+  focusTimer = setTimeout(() => {
+    document.querySelectorAll('.pbox.on').forEach((box) => box.classList.remove('on'));
+    document.querySelectorAll('.photo-frame.focus').forEach((frame) => frame.classList.remove('focus'));
+    document.querySelectorAll('.item-card.flash').forEach((card) => card.classList.remove('flash'));
+  }, 1800);
+}
+
+// Zoomed, centred crop of the ingredient's zone (computed once, then cached on the item).
+async function hydrateThumbs() {
+  await Promise.all(state.map(async (item, idx) => {
+    if (item.photo == null || !photos[item.photo]) return;
+    if (!item.crop) item.crop = await cropThumb(photos[item.photo], item.box || [0, 0, 1, 1], 140);
+    const el = document.querySelector(`.thumb-wrap[data-idx="${idx}"] .thumb-photo`);
+    if (el && item.crop) el.style.backgroundImage = `url('${item.crop}')`;
+  }));
+}
+
+function thumbHtml(item, idx) {
+  const color = zoneColor(idx);
+  const body = item.photo != null && photos[item.photo]
+    ? `<div class="thumb-photo"${item.crop ? ` style="background-image:url('${item.crop}')"` : ''}></div>`
+    : '<div class="thumb-empty"></div>';
+  const num = item.photo != null ? `<span class="tnum">${idx + 1}</span>` : '';
+  return `<div class="thumb-wrap" data-idx="${idx}" style="--c:${color};">${body}${num}</div>`;
 }
 
 // ---- Meal picker: the slot the entries are stamped into (see /api/confirm) ----
@@ -169,6 +258,10 @@ async function selectCandidate(idx, candidateId) {
   renderItems();
 }
 
+function stepFor(grams) {
+  return grams >= 100 ? 10 : 5;
+}
+
 function emptyState() {
   const mealQuery = meal ? `&meal=${meal}` : '';
   return `
@@ -182,17 +275,6 @@ function emptyState() {
         <button type="button" class="btn-secondary" id="barcodeBtn" style="min-height:44px;">▦ Escanear código de barras</button>
       </div>
     </div>`;
-}
-
-// The photo the user just took, as the item thumbnail; gradient chip when there is none.
-function thumbHtml() {
-  const photo = sessionStorage.getItem('cadence_photo');
-  if (photo) return `<div class="thumb-photo" style="width:52px;height:52px;border-radius:14px;flex-shrink:0;background-image:url('${photo}');"></div>`;
-  return '<div style="width:52px;height:52px;border-radius:14px;background:linear-gradient(140deg,#7C5CFF,#2DD4FF);flex-shrink:0;opacity:0.35;"></div>';
-}
-
-function stepFor(grams) {
-  return grams >= 100 ? 10 : 5;
 }
 
 function renderItems() {
@@ -213,10 +295,9 @@ function renderItems() {
 
   state.forEach((item, idx) => {
     const card = document.createElement('div');
-    card.className = 'card';
-    card.style.display = 'flex';
-    card.style.flexDirection = 'column';
-    card.style.gap = '0';
+    card.className = 'card item-card';
+    card.dataset.idx = idx;
+    card.style.cssText = `display:flex;flex-direction:column;gap:0;--c:${zoneColor(idx)};`;
 
     const pills = item.candidates.map((c) => {
       const active = c.id === item.selectedId;
@@ -225,7 +306,7 @@ function renderItems() {
 
     card.innerHTML = `
       <div style="display:flex;gap:11px;">
-        ${thumbHtml()}
+        ${thumbHtml(item, idx)}
         <div style="flex:1;min-width:0;">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
             <span style="font-size:14px;font-weight:700;">${escapeHtml(item.detected_name)}</span>
@@ -254,12 +335,23 @@ function renderItems() {
   addMore.addEventListener('click', persistState);
   wrap.appendChild(addMore);
 
+  const morePhoto = document.createElement('a');
+  morePhoto.href = `scan.html?append=1${meal ? `&meal=${meal}` : ''}`;
+  morePhoto.className = 'add-photo span-all';
+  morePhoto.innerHTML = '📷 Agregar otra foto a este registro';
+  morePhoto.addEventListener('click', persistState);
+  wrap.appendChild(morePhoto);
+
   const note = document.createElement('div');
   note.className = 'span-all';
   note.style.cssText = 'display:flex;gap:7px;align-items:flex-start;padding:2px 4px;';
   note.innerHTML = '<span style="font-size:12px;">ℹ️</span><span style="font-size:11px;color:var(--ink-soft);line-height:1.4;">La IA identifica los alimentos — las calorías reales siempre vienen de la base de datos de wger.</span>';
   wrap.appendChild(note);
 
+  wrap.querySelectorAll('.thumb-wrap').forEach((thumb) => {
+    thumb.style.cursor = 'pointer';
+    thumb.addEventListener('click', () => focusItem(Number(thumb.dataset.idx)));
+  });
   wrap.querySelectorAll('.candidate-pill').forEach((btn) => {
     btn.addEventListener('click', () => selectCandidate(Number(btn.dataset.idx), Number(btn.dataset.cid)));
   });
@@ -277,6 +369,7 @@ function renderItems() {
   });
 
   renderTotal();
+  hydrateThumbs();
 }
 
 // On desktop the total + confirm button live in the right column (mockup);
@@ -295,13 +388,12 @@ function placeBar() {
 desktopMq.addEventListener('change', placeBar);
 
 document.getElementById('confirmBtn').addEventListener('click', async () => {
-  const items = state
-    .filter((item) => item.selectedId)
-    .map((item) => ({
-      ingredient_id: item.selectedId,
-      amount_grams: item.grams,
-      detected_name: item.detected_name,
-    }));
+  const chosen = state.filter((item) => item.selectedId);
+  const items = chosen.map((item) => ({
+    ingredient_id: item.selectedId,
+    amount_grams: item.grams,
+    detected_name: item.detected_name,
+  }));
 
   if (items.length === 0) {
     showToast('No hay nada que confirmar todavía');
@@ -315,7 +407,8 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
 
   try {
     const saved = await apiPost('api/confirm', payload);
-    await rememberThumbs(saved.created, sessionStorage.getItem('cadence_photo'));
+    // Each diary entry remembers its own zoomed crop (same order as the items we sent).
+    await rememberThumbs(saved.created, chosen.map((item) => item.crop));
     clearScanSession();
     window.location.href = 'index.html';
   } catch (err) {
@@ -341,7 +434,7 @@ async function init() {
       if (now.meal && now.meal !== 'otro') meal = now.meal;
     } catch { /* picker simply starts empty */ }
   }
-  renderPhoto();
+  renderPhotos();
   renderMealPick();
   renderItems();
   placeBar();

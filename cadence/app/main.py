@@ -317,6 +317,7 @@ async def analyze(image: UploadFile):
                     detected_name=component.name,
                     confidence=component.confidence,
                     estimated_grams=component.estimated_grams,
+                    box=component.box,
                     candidates=candidates,
                 )
             )

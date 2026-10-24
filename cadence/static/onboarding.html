@@ -54,6 +54,7 @@
 
 <script src="static/js/api.js"></script>
 <script src="static/js/theme.js"></script>
+<script src="static/js/datepicker.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const STEPS = ['intro', 'about', 'body', 'activity', 'goal', 'plan'];
@@ -106,9 +107,12 @@ const VIEWS = {
     <h1 class="disp ob-title">Cuéntanos de ti</h1>
     <p class="ob-sub">Con esto calculamos tu gasto diario. Es privado y solo lo usa cadence.</p>
     ${choices([['female', 'Mujer', ''], ['male', 'Hombre', ''], ['other', 'Prefiero no decir', '']], 'sex').replace('choice-grid', 'choice-grid two')}
-    <label class="field" style="margin-top:18px;"><span>FECHA DE NACIMIENTO</span>
-      <input class="input" id="birthdate" type="date" max="${maxBirthdate()}" value="${data.birthdate}" autocomplete="bday">
-    </label>`,
+    <div class="field" style="margin-top:18px;"><span>FECHA DE NACIMIENTO</span>
+      <button type="button" class="input date-btn" id="birthBtn">
+        <span class="${data.birthdate ? '' : 'ph'}" id="birthText">${data.birthdate ? formatDateEs(data.birthdate) : 'Elige tu fecha'}</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>`,
   body: () => `
     <h1 class="disp ob-title">Tu cuerpo</h1>
     <p class="ob-sub">Tu estatura y tu peso de hoy. Después podrás actualizarlos.</p>
@@ -167,7 +171,15 @@ function bind() {
     document.querySelectorAll(`.choice[data-key="${btn.dataset.key}"]`).forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
     showError('');
   }));
-  const birth = $('birthdate'); if (birth) birth.addEventListener('input', () => { data.birthdate = birth.value; });
+  const birth = $('birthBtn');
+  if (birth) birth.addEventListener('click', async () => {
+    const picked = await pickDate(data.birthdate, { maxIso: maxBirthdate(), minYear: new Date().getFullYear() - 110 });
+    if (!picked) return;
+    data.birthdate = picked;
+    $('birthText').textContent = formatDateEs(picked);
+    $('birthText').classList.remove('ph');
+    showError('');
+  });
   const height = $('height'); if (height) height.addEventListener('input', () => { data.height_cm = height.value; });
   const weight = $('weight'); if (weight) weight.addEventListener('input', () => { data.weight_kg = weight.value; });
   const less = $('less'); const more = $('more');

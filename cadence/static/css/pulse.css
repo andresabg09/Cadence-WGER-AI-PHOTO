@@ -631,3 +631,45 @@ svg.flame { animation: none; }                      /* the calendar grid stays c
 .stat b { display: block; font-family: 'Space Mono', monospace; font-size: 17px; }
 .stat span { font-size: 9.5px; color: var(--ink-soft); letter-spacing: 0.03em; font-weight: 600; }
 .code-pill { font-family: 'Space Mono', monospace; font-weight: 700; letter-spacing: 0.08em; }
+
+/* Native controls (number spinners, scrollbars, any leftover picker) follow the app theme. */
+:root, :root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"], :root[data-theme="reading"] { color-scheme: light; }
+@media (prefers-color-scheme: light) { :root:not([data-theme]) { color-scheme: light; } }
+
+/* Full-screen setup pages: the glow and dots fill the whole window; on wide screens the
+   content sits in a centred card instead of a phone strip with empty space around it. */
+body:has(.plain-page) {
+  background:
+    radial-gradient(circle at 50% 18%, rgba(124,92,255,0.16), transparent 55%),
+    radial-gradient(circle at 1px 1px, rgba(127,127,140,var(--dot-opacity)) 1px, transparent 0) 0 0/18px 18px,
+    var(--bg);
+}
+.plain-page { background: none; }
+@media (min-width: 700px) {
+  body:has(.plain-page) { display: flex; align-items: center; justify-content: center; min-height: 100dvh; }
+  .plain-page {
+    min-height: 0; width: 100%; max-width: 460px; margin: 32px auto; border: 1px solid var(--card-border);
+    border-radius: 32px; background: rgba(127,127,140,0.05); box-shadow: 0 40px 90px -40px rgba(0,0,0,0.65);
+  }
+  .plain-body { min-height: min(680px, calc(100dvh - 64px)); }
+}
+
+/* ---- Date picker ---- */
+.date-btn { display: flex; align-items: center; justify-content: space-between; text-align: left; cursor: pointer; }
+.date-btn .ph { color: var(--ink-soft); }
+.date-btn svg { color: var(--ink-soft); flex-shrink: 0; }
+.picker-sheet { max-width: 420px; }
+.pick-preview { margin: 0 0 12px; font-size: 13px; color: var(--accent-to); font-weight: 600; min-height: 18px; }
+.pick-cols { display: grid; grid-template-columns: 0.8fr 1.5fr 1fr; gap: 8px; position: relative; }
+.pick-col {
+  height: 232px; overflow-y: auto; scrollbar-width: none; padding: 92px 0; box-sizing: border-box; border-radius: 16px;
+  background: var(--bg); -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
+  mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
+}
+.pick-col::-webkit-scrollbar { display: none; }
+.pick-item {
+  display: block; width: 100%; height: 44px; border: none; background: transparent; color: var(--ink-soft);
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-transform: capitalize;
+}
+.pick-item.on { color: #fff; background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); border-radius: 12px; font-weight: 700; }

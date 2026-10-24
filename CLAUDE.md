@@ -223,6 +223,8 @@ de wger. Diseno:
   de kcal, menores de 18 sin deficit, peso bajo no baja). Pocas opciones a la vez: lo demas se va
   mostrando de a poco. `profile.html` = Perfil + Ajustes (Instalar app siempre disponible,
   apariencia, peso, invitaciones y personas para el admin); `goals.html` = Objetivos.
+- Fechas: usar `pickDate()` (js/datepicker.js), nunca `<input type="date">` (se ve viejo y su icono es ilegible en oscuro). `color-scheme` sigue al tema.
+- Pantallas de pantalla completa (scan) se fijan a `--app-h` (= innerHeight real): en la app instalada `100dvh` puede ser mayor que lo visible y tapaba el boton de captura.
 - Al cambiar de persona en un dispositivo se borran sus caches locales (`rememberUser`).
 - Pendiente para vender/alquilar: terminos y privacidad reales, recuperacion de contrasena por correo,
   respaldo del volumen `cadence-data`, y revisar AGPL de wger si se modifica su codigo (rebranding).

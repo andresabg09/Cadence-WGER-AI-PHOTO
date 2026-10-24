@@ -22,7 +22,7 @@
   @media (min-width: 1024px) {
     body:not(.webcam-open) .scan-root { display: none; }
     .desktop-scan { display: flex; }
-    body.webcam-open .scan-root { display: flex; position: fixed; inset: 0; max-width: none; margin: 0; z-index: 100; min-height: 100dvh; }
+    body.webcam-open .scan-root { display: flex; position: fixed; inset: 0; max-width: none; margin: 0; z-index: 100; height: auto; }
     body.webcam-open .desktop-scan, body.webcam-open .side-nav { display: none; }
     .dropzone.over { border-color: var(--accent-to); background: radial-gradient(circle at 50% 40%, rgba(45,212,255,0.16), transparent 65%); }
   }
@@ -30,7 +30,9 @@
   .tip { display: flex; gap: 12px; }
   .tip .k { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; color: var(--accent-to); width: 38px; flex-shrink: 0; }
   .tip .t { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
-  .scan-root { width: 100%; max-width: 480px; margin: 0 auto; min-height: 100dvh; background: #05050A; color: #fff; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+  /* Pinned to the visible screen (--app-h is the real inner height: in the installed app `dvh` can be taller than
+     what is on screen, which cut the shutter button off). */
+  .scan-root { position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100dvh); width: 100%; max-width: 480px; margin: 0 auto; background: #05050A; color: #fff; display: flex; flex-direction: column; overflow: hidden; }
   video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .veil { position: absolute; inset: 0; background: radial-gradient(circle at 50% 42%, transparent 30%, rgba(5,5,10,0.55) 100%); pointer-events: none; }
   @keyframes scanline { 0% { top: 14%; opacity: 0; } 10% { opacity: 1; } 50% { top: 82%; opacity: 1; } 90% { opacity: 1; } 100% { top: 14%; opacity: 0; } }
@@ -89,7 +91,7 @@
   <div class="veil"></div>
 
   <!-- Scan brackets -->
-  <div style="position:absolute;left:32px;right:32px;top:180px;height:300px;">
+  <div style="position:absolute;left:32px;right:32px;top:calc(44% - 150px);height:300px;">
     <div style="position:absolute;left:0;top:0;width:34px;height:34px;border-top:3px solid var(--accent-to);border-left:3px solid var(--accent-to);border-radius:10px 0 0 0;"></div>
     <div style="position:absolute;right:0;top:0;width:34px;height:34px;border-top:3px solid var(--accent-to);border-right:3px solid var(--accent-to);border-radius:0 10px 0 0;"></div>
     <div style="position:absolute;left:0;bottom:0;width:34px;height:34px;border-bottom:3px solid var(--accent-to);border-left:3px solid var(--accent-to);border-radius:0 0 0 10px;"></div>
@@ -123,7 +125,7 @@
     <span class="disp" id="caption" style="font-size:13.5px;font-weight:600;color:rgba(255,255,255,0.85);">Encuadra tu plato a ~45°</span>
   </div>
 
-  <div style="position:relative;z-index:2;padding:10px 0 calc(38px + env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:center;gap:46px;">
+  <div style="position:relative;z-index:2;padding:10px 0 calc(30px + env(safe-area-inset-bottom, 0px));display:flex;align-items:center;justify-content:center;gap:46px;">
     <label style="width:44px;height:44px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="3" stroke="#fff" stroke-width="1.6"/><circle cx="8.5" cy="10" r="1.6" fill="#fff"/><path d="M3 16l5-4 4 3 4-5 5 6" stroke="#fff" stroke-width="1.5"/></svg>
       <input type="file" accept="image/*" id="fileInput" style="display:none;">
@@ -138,6 +140,11 @@
 <script src="static/js/api.js"></script>
 <script src="static/js/shell.js"></script>
 <script>
+function fitScreen() { document.documentElement.style.setProperty('--app-h', `${window.innerHeight}px`); }
+fitScreen();
+window.addEventListener('resize', fitScreen);
+window.addEventListener('orientationchange', fitScreen);
+
 const TARGET_MIN = 35, TARGET_MAX = 55;
 let lastAngleOk = false;
 let facingMode = 'environment';

@@ -530,7 +530,20 @@ async def analyze(image: UploadFile, user: store.User = Depends(current_user)):
             # detected_name stays the Spanish label the user sees.
             term = component.search_name or component.name
             raw_matches = candidate_pool(wger, term)
-            candidates = rank_candidates(term, raw_matches, settings.match_candidate_count, alt=component.name)
+            # The catalog may name the food differently ("chicken soup" vs "chicken noodle soup"):
+            # search the model's alternative names (and, if still thin, the Spanish one) too.
+            seen_ids = {m["id"] for m in raw_matches}
+            for extra in [*component.search_alternatives[:3], component.name]:
+                if extra.lower() == term.lower():
+                    continue
+                try:
+                    more = wger.search_ingredients(extra, limit=settings.search_fetch_limit // 2)
+                except Exception:  # noqa: BLE001 - alternatives are a bonus
+                    continue
+                raw_matches += [m for m in more if m["id"] not in seen_ids]
+                seen_ids.update(m["id"] for m in more)
+            candidates = rank_candidates(term, raw_matches, settings.match_candidate_count,
+                                        alt=[component.name, *component.search_alternatives])
             if candidates and candidates[0].energy_kcal_100g is None:
                 # Older wger versions don't send nutrition values with the search
                 # hit; fetch the top pick only (others load on demand through
@@ -686,9 +699,11 @@ def save_entry_media(upload: MediaUpload, user: store.User = Depends(current_use
         if item.entry_id not in mine:
             continue
         crop = store.decode_image(item.crop)
-        plate_key = keys.get(item.photo) if item.photo is not None else None
+        # A food added by hand to a photographed plate belongs to that plate (same group in the diary).
+        plate_key = keys.get(item.photo) if item.photo is not None else next(iter(keys.values()), None)
+        box = item.box if item.photo is not None else None
         if crop or plate_key:
-            store.set_media(item.entry_id, crop, plate_key, item.box, user.id)
+            store.set_media(item.entry_id, crop, plate_key, box, user.id)
             saved += 1
     return {"saved": saved}
 

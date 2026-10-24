@@ -483,8 +483,10 @@ button { font-family: inherit; }
 @media (min-width: 700px) {
   .entry-sheet { bottom: auto; top: 50%; transform: translateY(-50%); border-radius: 26px; animation: none; }
 }
-.entry-sheet .plate-photo { position: relative; border-radius: 16px; overflow: hidden; margin-bottom: 14px; background: var(--bg); }
-.entry-sheet .plate-photo img { display: block; width: 100%; max-height: 230px; object-fit: cover; }
+.entry-sheet .plate-photo { position: relative; border-radius: 16px; overflow: hidden; margin-bottom: 14px; background: #0d0b12; display: flex; justify-content: center; }
+/* The frame wraps the image exactly, so the zone (in % of the photo) lands on the right spot. */
+.entry-sheet .plate-photo .plate-frame { position: relative; display: block; line-height: 0; max-width: 100%; }
+.entry-sheet .plate-photo img { display: block; max-width: 100%; max-height: 260px; width: auto; height: auto; }
 .entry-sheet .plate-photo .zone { position: absolute; border: 2px solid var(--accent-to); border-radius: 8px; box-shadow: 0 0 0 1px rgba(0,0,0,0.4); }
 .entry-sheet h3 { margin: 0; font-size: 17px; font-weight: 700; }
 .entry-sheet .when { font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; }
@@ -673,3 +675,19 @@ body:has(.plain-page) {
   font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-transform: capitalize;
 }
 .pick-item.on { color: #fff; background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); border-radius: 12px; font-weight: 700; }
+
+/* A plate (one photo, several foods): the photo on top, its foods underneath. */
+.plate-group { border: 1px solid var(--card-border); border-radius: 18px; padding: 8px 10px 6px; background: var(--card); display: flex; flex-direction: column; gap: 8px; }
+.plate-group .pg-photo { position: relative; display: block; width: 100%; height: 132px; border: 0; border-radius: 13px; background-size: cover; background-position: center; background-color: #0d0b12; cursor: zoom-in; padding: 0; }
+.plate-group .pg-chip { position: absolute; left: 8px; bottom: 8px; background: rgba(10,10,15,0.72); color: #fff; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 100px; backdrop-filter: blur(6px); }
+@media (min-width: 1024px) { .plate-group .pg-photo { height: 160px; } }
+
+/* Per-ingredient "type it yourself" search (confirm.html). */
+.find-box { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.find-input { width: 100%; box-sizing: border-box; min-height: 44px; border-radius: 13px; border: 1px solid var(--card-border); background: var(--bg); color: var(--ink); padding: 0 14px; font: inherit; font-size: 14px; }
+.find-input:focus { outline: 2px solid var(--accent-to); outline-offset: 0; }
+.find-results { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+.find-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--card-border); background: var(--bg); color: var(--ink); text-align: left; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.find-row small { color: var(--ink-soft); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.find-row:hover { border-color: var(--accent-to); }
+.find-note { font-size: 12px; color: var(--ink-soft); padding: 6px 4px; }

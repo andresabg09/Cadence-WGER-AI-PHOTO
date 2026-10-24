@@ -66,3 +66,10 @@ def test_spanish_name_finds_the_spanish_staple_and_twins_are_shown_once():
     assert len({2, 3} & set(ids)) == 1, ids  # English and Spanish twin: one of them, not both
     top_es = rank_candidates("cooked white rice", _dry_and_staple(), top_n=3, alt="arroz blanco cocido")
     assert top_es[0].id == 3  # the user's own wording wins
+
+
+def test_alternative_names_rescue_a_food_the_catalog_names_differently():
+    from app.matching import rank_matches
+    raw = [{"id": 1, "name": "Sopa de pescado"}, {"id": 2, "name": "Chicken noodle soup"}, {"id": 3, "name": "Sopa de vaca"}]
+    ranked = rank_matches("sopa de pollo", raw, 3, alt=["chicken soup", "chicken noodle soup"])
+    assert ranked[0][1]["id"] == 2

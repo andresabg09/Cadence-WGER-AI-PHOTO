@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # entry by the viewer's offset (e.g. a 7am breakfast in Panama lands in
     # "almuerzo", and anything after 7pm counts as tomorrow).
     timezone: str = "America/Panama"
-    match_candidate_count: int = 3
+    match_candidate_count: int = 5
     # How many wger matches to fetch before re-ranking them locally (wger's own
     # order is not by similarity, so the best match may not be in the first few).
     search_fetch_limit: int = 100

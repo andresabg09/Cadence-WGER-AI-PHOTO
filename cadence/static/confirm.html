@@ -294,6 +294,46 @@ async function selectCandidate(idx, candidateId) {
   renderItems();
 }
 
+// Type the food yourself when the 5 suggestions are not it: results come from the same
+// catalog and replace/extend this ingredient's options without touching the others.
+async function runFind(idx, term) {
+  const item = state[idx];
+  const text = (term || '').trim();
+  if (text.length < 2) { item.searchResults = []; paintFind(idx); return; }
+  const box = document.getElementById(`find-${idx}`);
+  if (box) box.innerHTML = '<div class="find-note">Buscando…</div>';
+  try {
+    const found = await apiGet(`api/search?term=${encodeURIComponent(text)}`);
+    if (item.searchTerm != null && item.searchTerm.trim() !== text) return; // the user typed on since
+    item.searchResults = found;
+  } catch (err) {
+    item.searchResults = null;
+    if (box) box.innerHTML = `<div class="find-note">No se pudo buscar: ${escapeHtml(err.message || 'error')}</div>`;
+    return;
+  }
+  paintFind(idx);
+}
+
+function paintFind(idx) {
+  const box = document.getElementById(`find-${idx}`);
+  const found = state[idx].searchResults;
+  if (!box || !found) return;
+  if (found.length === 0) { box.innerHTML = '<div class="find-note">No encontré nada con ese nombre. Prueba con otra palabra (ej. «caldo», «pollo»).</div>'; return; }
+  box.innerHTML = found.map((f) => `
+    <button type="button" class="find-row" data-id="${f.id}">
+      <span>${escapeHtml(f.name)}</span><small>${Math.round(f.energy_kcal_100g)} kcal / 100 g</small>
+    </button>`).join('');
+  box.querySelectorAll('.find-row').forEach((btn, i) => btn.addEventListener('click', () => {
+    const picked = found[i];
+    const item = state[idx];
+    if (!item.candidates.some((c) => c.id === picked.id)) {
+      item.candidates.push({ id: picked.id, name: picked.name, score: null, energy_kcal_100g: picked.energy_kcal_100g });
+    }
+    item.searching = false;
+    selectCandidate(idx, picked.id);
+  }));
+}
+
 function stepFor(grams) {
   return grams >= 100 ? 10 : 5;
 }
@@ -337,7 +377,7 @@ function renderItems() {
 
     const pills = item.candidates.map((c) => {
       const active = c.id === item.selectedId;
-      return `<button data-idx="${idx}" data-cid="${c.id}" class="candidate-pill chip-soft${active ? ' active' : ''}">${active ? '✓ ' : ''}${escapeHtml(c.name)} ${Math.round(c.score * 100)}%</button>`;
+      return `<button data-idx="${idx}" data-cid="${c.id}" class="candidate-pill chip-soft${active ? ' active' : ''}">${active ? '✓ ' : ''}${escapeHtml(c.name)}${c.score != null ? ` ${Math.round(c.score * 100)}%` : ''}</button>`;
     }).join('');
 
     card.innerHTML = `
@@ -348,9 +388,16 @@ function renderItems() {
             <span style="font-size:14px;font-weight:700;">${escapeHtml(item.detected_name)}</span>
             <span class="disp" id="kcal-${idx}" style="font-size:13px;font-weight:700;color:var(--accent-to);white-space:nowrap;">${Math.round(itemKcal(item))} kcal</span>
           </div>
-          <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;">${pills || '<span style="font-size:11px;color:var(--ink-soft);">Sin coincidencias — búscalo manualmente.</span>'}</div>
+          <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;">${pills || '<span style="font-size:11px;color:var(--ink-soft);">Sin coincidencias — búscalo aquí abajo.</span>'}
+            <button type="button" class="candidate-pill chip-soft find-btn" data-idx="${idx}" aria-expanded="${item.searching ? 'true' : 'false'}">🔍 Buscar otro</button>
+          </div>
         </div>
       </div>
+      ${item.searching ? `
+      <div class="find-box" data-idx="${idx}">
+        <input type="search" class="find-input" data-idx="${idx}" placeholder="Escríbelo como quieras: sopa de pollo…" value="${escapeHtml(item.searchTerm ?? item.detected_name)}" autocomplete="off" enterkeyhint="search">
+        <div class="find-results" id="find-${idx}"></div>
+      </div>` : ''}
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:11px;padding-top:11px;border-top:1px solid var(--card-border);">
         <span style="font-size:11.5px;color:var(--ink-soft);font-weight:600;">Cantidad</span>
         <div style="display:flex;align-items:center;gap:10px;">
@@ -390,8 +437,30 @@ function renderItems() {
     thumb.style.cursor = 'pointer';
     thumb.addEventListener('click', () => focusItem(Number(thumb.dataset.idx)));
   });
-  wrap.querySelectorAll('.candidate-pill').forEach((btn) => {
+  wrap.querySelectorAll('.candidate-pill:not(.find-btn)').forEach((btn) => {
     btn.addEventListener('click', () => selectCandidate(Number(btn.dataset.idx), Number(btn.dataset.cid)));
+  });
+  wrap.querySelectorAll('.find-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const item = state[Number(btn.dataset.idx)];
+      item.searching = !item.searching;
+      renderItems();
+      if (item.searching) {
+        const input = document.querySelector(`.find-input[data-idx="${btn.dataset.idx}"]`);
+        if (input) { input.focus(); input.select(); runFind(Number(btn.dataset.idx), input.value); }
+      }
+    });
+  });
+  wrap.querySelectorAll('.find-input').forEach((input) => {
+    const idx = Number(input.dataset.idx);
+    if (state[idx].searchResults) paintFind(idx);
+    let timer = null;
+    input.addEventListener('input', () => {
+      state[idx].searchTerm = input.value;
+      clearTimeout(timer);
+      timer = setTimeout(() => runFind(idx, input.value), 350);
+    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); runFind(idx, input.value); } });
   });
   wrap.querySelectorAll('.gram-btn').forEach((btn) => {
     btn.addEventListener('click', () => {

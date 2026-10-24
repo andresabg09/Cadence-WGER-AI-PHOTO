@@ -31,9 +31,12 @@ Reglas estrictas:
   alimento como nombre generico corto en ingles y TAL COMO SE COME (cocido o
   preparado, no crudo): "cooked white rice", "grilled chicken breast",
   "boiled egg", "vanilla ice cream". La base de datos nutricional esta en ingles.
+- "search_alternatives": hasta 3 nombres alternativos cortos en ingles del MISMO
+  alimento, de lo mas especifico a lo mas general ("chicken noodle soup",
+  "chicken soup", "chicken broth"). Sirven para encontrarlo si la base lo nombra distinto.
 
 Responde UNICAMENTE con un JSON array, sin texto adicional, con esta forma:
-[{"name": "pollo a la plancha", "search_name": "grilled chicken breast", "confidence": 0.9, "estimated_grams": 120, "box_2d": [250, 100, 700, 480]}, ...]
+[{"name": "pollo a la plancha", "search_name": "grilled chicken breast", "search_alternatives": ["chicken breast", "grilled chicken"], "confidence": 0.9, "estimated_grams": 120, "box_2d": [250, 100, 700, 480]}, ...]
 """
 
 
@@ -62,12 +65,19 @@ def _parse_components(raw_text: str) -> list[DetectedComponent]:
         DetectedComponent(
             name=item["name"],
             search_name=item.get("search_name"),
+            search_alternatives=_alternatives(item.get("search_alternatives")),
             confidence=item.get("confidence"),
             estimated_grams=_sane_grams(item.get("estimated_grams")),
             box=_box_from_gemini(item.get("box_2d")),
         )
         for item in data
     ]
+
+
+def _alternatives(raw) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    return [str(term).strip() for term in raw if str(term).strip()][:3]
 
 
 def _sane_grams(value) -> int | None:

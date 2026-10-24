@@ -246,6 +246,39 @@ function mealItemRow(item, mealKey) {
   `;
 }
 
+// Foods that came from one photo are shown together under that photo (a plate with 8 foods is
+// ONE block, not 8 loose rows). A photo with a single food stays a plain row.
+function plateGroupId(item) {
+  if (!item.plate_key) return null;
+  const cut = item.plate_key.lastIndexOf(':');
+  return cut > 0 ? item.plate_key.slice(0, cut) : item.plate_key;
+}
+
+function mealRowsHtml(items, mealKey) {
+  const order = [];
+  const groups = new Map();
+  items.forEach((item) => {
+    const id = plateGroupId(item);
+    if (id && !groups.has(id)) { groups.set(id, []); order.push({ group: id }); }
+    if (id) groups.get(id).push(item);
+    else order.push({ item });
+  });
+  return order.map((entry) => {
+    if (entry.item) return mealItemRow(entry.item, mealKey);
+    const members = groups.get(entry.group);
+    if (members.length < 2) return mealItemRow(members[0], mealKey);
+    const kcal = members.reduce((sum, it) => sum + it.kcal, 0);
+    const photo = `api/media/plate/${encodeURIComponent(members[0].plate_key)}`;
+    return `
+      <div class="plate-group">
+        <button type="button" class="pg-photo" data-photo="${photo}" aria-label="Ver la foto del plato" style="background-image:url('${photo}');">
+          <span class="pg-chip">${members.length} alimentos · ${Math.round(kcal)} kcal</span>
+        </button>
+        ${members.map((it) => mealItemRow(it, mealKey)).join('')}
+      </div>`;
+  }).join('');
+}
+
 function mealCard(meal, key) {
   const card = document.createElement('div');
   card.className = 'card';
@@ -258,7 +291,7 @@ function mealCard(meal, key) {
       <span style="font-size:11px;color:var(--ink-soft);font-weight:700;text-transform:uppercase;letter-spacing:0.03em;">${escapeHtml(meal.label)}</span>
       <span style="font-size:11px;color:var(--ink-soft);font-weight:600;">${Math.round(meal.totals.kcal)} kcal</span>
     </div>
-    ${meal.items.map((item) => mealItemRow(item, key)).join('')}
+    ${mealRowsHtml(meal.items, key)}
     ${addLabel ? `
     <a href="search.html?meal=${key}" style="display:flex;align-items:center;gap:8px;padding:2px 0 0;color:var(--ink-soft);min-height:44px;">
       <span style="width:22px;height:22px;border-radius:8px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--accent-to);">+</span>
@@ -308,6 +341,7 @@ function renderMeals(meals) {
   });
 
   list.appendChild(container);
+  container.querySelectorAll('.pg-photo').forEach((btn) => btn.addEventListener('click', () => openLightbox(btn.dataset.photo, null)));
   wireSwipeToDelete();
 }
 
@@ -587,7 +621,7 @@ function openEntryDetail(entryId) {
   if (plate) {
     const b = plate.box;
     const zone = b ? `<div class="zone" style="left:${b[0] * 100}%;top:${b[1] * 100}%;width:${b[2] * 100}%;height:${b[3] * 100}%;"></div>` : '';
-    photoHtml = `<div class="plate-photo zoomable" id="sPhoto" role="button" aria-label="Ampliar la foto"><img alt="Foto del plato" src="${plate.photo}">${zone}<span class="zoom-hint">🔍 Toca para ampliar</span></div>`;
+    photoHtml = `<div class="plate-photo zoomable" id="sPhoto" role="button" aria-label="Ampliar la foto"><div class="plate-frame"><img alt="Foto del plato" src="${plate.photo}">${zone}</div><span class="zoom-hint">🔍 Toca para ampliar</span></div>`;
   } else if (crop) {
     photoHtml = `<div class="plate-photo zoomable" id="sPhoto" role="button" aria-label="Ampliar la foto"><img alt="Foto del alimento" src="${crop}" style="max-height:260px;"><span class="zoom-hint">🔍 Toca para ampliar</span></div>`;
   }

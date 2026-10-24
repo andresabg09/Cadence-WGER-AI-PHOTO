@@ -124,3 +124,14 @@ def compute_streak(entries: list[dict], today: date) -> int:
         streak += 1
         cursor -= timedelta(days=1)
     return streak
+
+
+def streak_by_day(days: set[date]) -> dict[date, int]:
+    """For every logged day, how many consecutive logged days end on it.
+
+    A gap resets the count, so the day after a lost streak is 1 again.
+    """
+    counts: dict[date, int] = {}
+    for day in sorted(days):
+        counts[day] = counts.get(day - timedelta(days=1), 0) + 1
+    return counts

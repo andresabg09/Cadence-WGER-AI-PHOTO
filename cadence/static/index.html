@@ -102,9 +102,8 @@
       <div style="display:flex;justify-content:space-between;align-items:center;padding:0 2px;">
         <div class="day-nav" id="dayNav">
           <button class="nav-arrow" id="dayPrev" aria-label="Día anterior">‹</button>
-          <button class="day-label disp" id="dayLabel" aria-label="Elegir otro día">Hoy</button>
+          <button class="day-label disp" id="dayLabel" aria-label="Abrir el calendario"><span id="dayLabelText">Hoy</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="margin-left:6px;opacity:.6"><rect x="4" y="5" width="16" height="15" rx="3" stroke="currentColor" stroke-width="2"/><path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
           <button class="nav-arrow" id="dayNext" aria-label="Día siguiente">›</button>
-          <input type="date" id="dayPicker" tabindex="-1" aria-hidden="true">
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span class="mono" id="todayKcalLabel" style="font-size:10.5px;color:var(--ink-soft);">0 KCAL</span>
@@ -353,6 +352,103 @@ function wireSwipeToDelete() {
 }
 
 
+
+// ---- Calendar: a flame on every day with something logged; its colour and number are the streak ----
+const FLAME_PATH = 'M12 2c.7 3.2-1.3 4.9-3 6.8C7.4 10.6 6 12.4 6 15c0 3.3 2.7 6 6 6s6-2.7 6-6c0-2.3-1-3.9-2.2-5.1-.3 1.2-1 2-1.9 2.4.6-3.5-.6-7.4-1.9-10.3z';
+const calCache = {};
+const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+// 1-2 ember, 3-6 orange, 7-13 red, 14-29 magenta (glow), 30+ violet (glow): more days in a row, hotter flame.
+function flameTier(streak) {
+  return streak >= 30 ? 5 : streak >= 14 ? 4 : streak >= 7 ? 3 : streak >= 3 ? 2 : 1;
+}
+
+function flameSvg(streak, size = 15) {
+  return `<svg class="flame t${flameTier(streak)}" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><path d="${FLAME_PATH}"/></svg>`;
+}
+
+function monthKey(date) { return date.slice(0, 7); }
+
+function closeCalendar() {
+  document.querySelectorAll('.cal-scrim, .cal-sheet').forEach((el) => el.remove());
+}
+
+async function openCalendar(selected, today) {
+  closeCalendar();
+  let month = monthKey(selected);
+  const scrim = document.createElement('div');
+  scrim.className = 'sheet-scrim cal-scrim';
+  const sheet = document.createElement('div');
+  sheet.className = 'entry-sheet cal-sheet';
+  sheet.setAttribute('role', 'dialog');
+  sheet.setAttribute('aria-label', 'Calendario');
+  document.body.appendChild(scrim);
+  document.body.appendChild(sheet);
+  scrim.addEventListener('click', closeCalendar);
+
+  const render = (days, loading) => {
+    const [year, mon] = month.split('-').map(Number);
+    const first = new Date(year, mon - 1, 1);
+    const lead = (first.getDay() + 6) % 7; // weeks start on Monday
+    const total = new Date(year, mon, 0).getDate();
+    const byDay = Object.fromEntries((days || []).map((d) => [d.date, d]));
+    const cells = [];
+    for (let i = 0; i < lead; i += 1) cells.push('<span class="cal-cell blank"></span>');
+    for (let day = 1; day <= total; day += 1) {
+      const iso = `${month}-${String(day).padStart(2, '0')}`;
+      const info = byDay[iso];
+      const future = iso > today;
+      const cls = ['cal-cell', iso === selected ? 'selected' : '', iso === today ? 'today' : '', info ? 'has' : '', future ? 'future' : ''].join(' ');
+      const aria = info ? `${day}, racha de ${info.streak} ${info.streak === 1 ? 'día' : 'días'}` : `${day}`;
+      cells.push(`<button type="button" class="${cls}" data-date="${iso}" ${future ? 'disabled' : ''} aria-label="${aria}">
+        <span class="cal-num">${day}</span>
+        <span class="cal-flame">${info ? `${flameSvg(info.streak)}<b>${info.streak}</b>` : ''}</span>
+      </button>`);
+    }
+    const atCurrentMonth = month >= monthKey(today);
+    sheet.innerHTML = `
+      <div class="cal-head">
+        <button type="button" class="nav-arrow" id="calPrev" aria-label="Mes anterior">‹</button>
+        <div class="disp cal-title">${MONTH_NAMES[mon - 1]} ${year}${loading ? ' <span class="cal-loading">…</span>' : ''}</div>
+        <button type="button" class="nav-arrow" id="calNext" aria-label="Mes siguiente" ${atCurrentMonth ? 'disabled' : ''}>›</button>
+      </div>
+      <div class="cal-grid cal-dow">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d) => `<span>${d}</span>`).join('')}</div>
+      <div class="cal-grid">${cells.join('')}</div>
+      <div class="cal-legend">
+        <span>${flameSvg(1, 12)} 1-2</span><span>${flameSvg(3, 12)} 3-6</span><span>${flameSvg(7, 12)} 7-13</span>
+        <span>${flameSvg(14, 12)} 14-29</span><span>${flameSvg(30, 12)} 30+</span>
+      </div>
+      <p class="cal-note">El número es tu racha: días seguidos con algo registrado. Si falta un día, vuelve a 1.</p>
+      <div class="sheet-actions"><button type="button" class="btn-primary" id="calToday">Ir a hoy</button></div>`;
+    sheet.querySelector('#calPrev').addEventListener('click', () => shiftMonth(-1));
+    sheet.querySelector('#calNext').addEventListener('click', () => shiftMonth(1));
+    sheet.querySelector('#calToday').addEventListener('click', () => { closeCalendar(); goToDate(today); });
+    sheet.querySelectorAll('.cal-cell[data-date]').forEach((cell) => cell.addEventListener('click', () => {
+      closeCalendar();
+      goToDate(cell.dataset.date);
+    }));
+  };
+
+  const show = async () => {
+    if (calCache[month]) { render(calCache[month], false); return; }
+    render([], true);
+    const shown = month;
+    try {
+      const data = await apiGet(`api/calendar?month=${shown}`);
+      calCache[shown] = data.days;
+    } catch { calCache[shown] = []; }
+    if (shown === month && document.body.contains(sheet)) render(calCache[shown], false);
+  };
+  const shiftMonth = (delta) => {
+    const [year, mon] = month.split('-').map(Number);
+    const d = new Date(year, mon - 1 + delta, 1);
+    month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    show();
+  };
+  show();
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCalendar(); });
+
 // ---- Entry detail: photo, numbers, portion, meal and a note ----
 const MEAL_CHOICES = [['desayuno', 'Desayuno'], ['almuerzo', 'Almuerzo'], ['merienda', 'Merienda'], ['cena', 'Cena']];
 
@@ -552,21 +648,19 @@ function goToDate(iso) {
 
 function renderDayNav(data) {
   const label = document.getElementById('dayLabel');
+  const labelText = document.getElementById('dayLabelText');
   const isToday = data.date === data.today;
   const yesterday = shiftDate(data.today, -1);
-  label.textContent = isToday ? 'Hoy' : data.date === yesterday ? 'Ayer'
+  labelText.textContent = isToday ? 'Hoy' : data.date === yesterday ? 'Ayer'
     : new Date(`${data.date}T12:00:00`).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '');
   document.getElementById('dayNext').disabled = isToday;
   document.getElementById('dayPrev').onclick = () => goToDate(shiftDate(data.date, -1));
   document.getElementById('dayNext').onclick = () => goToDate(shiftDate(data.date, 1));
-  const picker = document.getElementById('dayPicker');
-  picker.max = data.today;
-  picker.value = data.date;
-  picker.onchange = () => { if (picker.value) goToDate(picker.value); };
-  label.onclick = () => { try { picker.showPicker(); } catch { picker.click(); } };
+  label.onclick = () => openCalendar(data.date, data.today);
 }
 
 async function loadToday() {
+  Object.keys(calCache).forEach((k) => delete calCache[k]);
   const dateLabel = document.getElementById('todayLabel');
 
   try {

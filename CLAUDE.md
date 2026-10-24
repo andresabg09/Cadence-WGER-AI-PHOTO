@@ -256,6 +256,11 @@ se publica a `master` y se valida con UNA sola revision en el servidor
   solo al servidor al abrir el dia (`syncLocalExtras`). Calidad: la foto de trabajo es 1280 px q0.88
   y el recorte sale de ella (420 px al guardar), con zoom/lightbox en el detalle. La barra inferior tapaba/era tapada
   por las filas (`.tab-bar` sin z-index): corregido. Avisos (toast) ahora opacos + caja de error fija.
+  Calendario con fueguitos (25 oct): tocar el dia del diario abre un calendario propio
+  (`openCalendar` en index.html, `GET /api/calendar?month=`); cada dia con registros lleva una llama
+  con su racha (dias seguidos que terminan ese dia; tras un hueco vuelve a 1). Color por racha:
+  1-2 ambar, 3-6 naranja, 7-13 rojo, 14-29 magenta con brillo, 30+ violeta con brillo. La racha que
+  entra al mes se calcula leyendo hacia atras hasta que se rompe (`streak_by_day` en meals.py).
 - **Bloque 3 - Datos personales.** Perfil, Objetivos (Mifflin-St Jeor, guarda goal_* del
   plan), Progreso (racha, peso desde weightentry, logros), Historial.
 - **Bloque 4 - Ajustes y habitos.** Ajustes (hub), Apariencia (toggle ya hecho),

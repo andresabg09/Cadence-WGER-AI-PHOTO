@@ -202,10 +202,12 @@ Cada bloque se construye COMPLETO, se prueba (tests + navegador con wger simulad
 se publica a `master` y se valida con UNA sola revision en el servidor
 (`/cadence/api/diagnostics?deep=1`). No se entrega a medias ni bug por bug.
 
-- **Bloque 0 - Destrabar y verificar (EN CURSO).** Token/Gemini por Entorno, busqueda
-  `ingredientinfo`, errores legibles, `/api/diagnostics`. Pendiente de Andres: crear plan
-  de nutricion en wger, `sync-ingredients-bulk` en el contenedor `web`, implementar.
-  Sale cuando el diagnostico esta todo verde.
+- **Bloque 0 - Destrabar y verificar (HECHO, 24 oct 2026).** `/api/diagnostics?deep=1` todo
+  verde en produccion: token, Gemini, plan (lo crea cadence), diario, busqueda y registro de
+  prueba. Catalogo cargado con `cadence/scripts/load_ingredients.py` (~49 mil alimentos
+  genericos en/es; el comando oficial `sync-ingredients-bulk` es demasiado lento aqui).
+  Pendiente de pulir: ranking de `/api/search` (hoy devuelve las primeras coincidencias de
+  wger sin ordenar por parecido) y aumentar el limite de busqueda antes de rankear.
 - **Bloque 1 - Responsive tablet y escritorio (HECHO).** Breakpoints 600/1024 en
   `static/css/pulse.css`; barra lateral en escritorio via `static/js/shell.js`
   (`<body class="with-shell" data-page="...">`); escritorio: escaneo = subir foto/webcam

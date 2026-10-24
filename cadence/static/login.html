@@ -40,10 +40,11 @@
       </div>
       <label class="field" id="nameField" style="display:none;"><span>NOMBRE</span><input class="input" id="name" autocomplete="name" maxlength="40" placeholder="¿Cómo te llamamos?"></label>
       <label class="field"><span>CORREO</span><input class="input" id="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" placeholder="tu@correo.com"></label>
-      <label class="field"><span>CONTRASEÑA</span><input class="input" id="password" type="password" autocomplete="current-password" placeholder="Mínimo 8 caracteres"></label>
-      <label class="field" id="inviteField" style="display:none;"><span>CÓDIGO DE INVITACIÓN</span><input class="input code-pill" id="invite" autocomplete="off" autocapitalize="characters" placeholder="ABCD-EFGH"></label>
+      <label class="field"><span id="passLabel">CONTRASEÑA</span><input class="input" id="password" type="password" autocomplete="current-password" placeholder="Mínimo 8 caracteres"></label>
+      <label class="field" id="inviteField" style="display:none;"><span id="codeLabel">CÓDIGO DE INVITACIÓN</span><input class="input code-pill" id="invite" autocomplete="off" autocapitalize="characters" placeholder="ABCD-EFGH"></label>
       <button class="btn-primary" id="submit" type="submit" style="margin-top:6px;">Entrar</button>
     </form>
+    <p style="margin:14px 0 0;text-align:center;"><button type="button" class="link-btn" id="resetLink" style="font-size:12.5px;">¿Olvidaste tu contraseña? Tengo un código</button></p>
     <p id="footnote" style="margin:22px 0 0;text-align:center;font-size:11.5px;color:var(--ink-soft);line-height:1.5;"></p>
   </div>
 </div>
@@ -65,15 +66,23 @@ function safeNext() {
 function setMode(next) {
   mode = next;
   const register = mode === 'register';
+  const reset = mode === 'reset';
+  $('tabs').style.display = reset ? 'none' : '';
+  $('resetLink').textContent = reset ? 'Volver a entrar' : '¿Olvidaste tu contraseña? Tengo un código';
+  $('resetLink').style.display = status.first_user ? 'none' : '';
+  $('codeLabel').textContent = reset ? 'CÓDIGO DE RESTABLECIMIENTO' : 'CÓDIGO DE INVITACIÓN';
+  $('passLabel').textContent = reset ? 'NUEVA CONTRASEÑA' : 'CONTRASEÑA';
   $('tabLogin').setAttribute('aria-pressed', String(!register));
   $('tabRegister').setAttribute('aria-pressed', String(register));
   $('nameField').style.display = register ? 'block' : 'none';
-  $('inviteField').style.display = register && status.invite_required && !status.first_user ? 'block' : 'none';
+  $('inviteField').style.display = reset || (register && status.invite_required && !status.first_user) ? 'block' : 'none';
   $('firstNote').style.display = register && status.first_user ? 'block' : 'none';
-  $('password').autocomplete = register ? 'new-password' : 'current-password';
-  $('submit').textContent = register ? 'Crear mi cuenta' : 'Entrar';
+  $('password').autocomplete = register || reset ? 'new-password' : 'current-password';
+  $('submit').textContent = reset ? 'Guardar nueva contraseña' : register ? 'Crear mi cuenta' : 'Entrar';
   $('error').classList.remove('show');
-  $('footnote').textContent = register
+  $('footnote').textContent = reset
+    ? 'El administrador te da el código. Sirve una sola vez y vence en 24 horas.'
+    : register
     ? 'Al crear tu cuenta aceptas que tus registros y fotos se guarden para que puedas verlos otra vez.'
     : '';
 }
@@ -96,9 +105,16 @@ async function init() {
   } catch { /* not signed in: show the form */ }
   if (status.first_user) $('tabLogin').style.display = 'none';
   if (params.get('invite')) $('invite').value = params.get('invite');
+  if (params.get('reset')) {
+    $('invite').value = params.get('reset');
+    if (params.get('email')) $('email').value = params.get('email');
+    setMode('reset');
+    return;
+  }
   setMode(status.first_user || params.get('invite') ? 'register' : 'login');
 }
 
+$('resetLink').addEventListener('click', () => setMode(mode === 'reset' ? 'login' : 'reset'));
 $('tabLogin').addEventListener('click', () => setMode('login'));
 $('tabRegister').addEventListener('click', () => setMode('register'));
 
@@ -106,7 +122,8 @@ $('form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const email = $('email').value.trim();
   const password = $('password').value;
-  if (!email || !password) { showError('Escribe tu correo y tu contraseña.'); return; }
+  if (!email || !password) { showError(mode === 'reset' ? 'Escribe tu correo, el código y tu nueva contraseña.' : 'Escribe tu correo y tu contraseña.'); return; }
+  if (mode === 'reset' && (!$('invite').value.trim() || password.length < 8)) { showError('Escribe el código y una contraseña de al menos 8 caracteres.'); return; }
   if (mode === 'register') {
     if (!$('name').value.trim()) { showError('Escribe tu nombre.'); return; }
     if (password.length < 8) { showError('La contraseña necesita al menos 8 caracteres.'); return; }
@@ -115,7 +132,9 @@ $('form').addEventListener('submit', async (e) => {
   button.disabled = true;
   $('error').classList.remove('show');
   try {
-    const me = mode === 'register'
+    const me = mode === 'reset'
+      ? await apiPost('api/auth/reset', { email, code: $('invite').value.trim(), password })
+      : mode === 'register'
       ? await apiPost('api/auth/register', { email, password, name: $('name').value.trim(), invite: $('invite').value.trim() || null })
       : await apiPost('api/auth/login', { email, password });
     rememberUser(me);

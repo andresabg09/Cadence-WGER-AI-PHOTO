@@ -61,3 +61,10 @@ def test_food_added_by_hand_joins_the_plate_group(monkeypatch):
     meta = store.get_meta(["g1", "g2"])
     assert meta["g1"]["plate_key"] == meta["g2"]["plate_key"] == "1-g1:0"
     assert meta["g2"]["box"] is None  # it is not located in the photo
+
+
+def test_expired_reset_code_is_refused():
+    created = store.create_user("late@example.com", "Late", "x", None, True)
+    uid = (created[0] if isinstance(created, tuple) else created).id
+    store.create_reset(uid, "hash1", "2000-01-01T00:00:00+00:00")
+    assert store.consume_reset(uid, "hash1") is False

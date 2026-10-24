@@ -125,6 +125,14 @@ se configure `cadence/.env` a partir de `cadence/.env.example`.
 **Ruta con slash final obligatoria:** `/cadence/` (con slash). Ya hay un
 `location = /cadence { return 301 /cadence/; }` para el caso sin slash.
 
+**Dos trampas ya resueltas (no reintroducir):**
+- En `config/nginx.conf`, `proxy_pass http://$var/;` (con variable) NO quita el
+  prefijo `/cadence/`: manda todo a `/` del upstream. Se usa `rewrite ^/cadence/(.*)$ /$1 break;`
+  + `proxy_pass http://$cadence_upstream;`.
+- La hora de cada registro se interpreta en `TIMEZONE` (default `America/Panama`),
+  no en el reloj del contenedor (UTC); si no, desayuno cae en "almuerzo" y todo
+  lo posterior a las 7pm cuenta como "manana".
+
 ## Interfaz de camara (requisito de diseno)
 
 `cadence/static/camera.html` implementa guia en tiempo real (no es una

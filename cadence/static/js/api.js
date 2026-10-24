@@ -40,3 +40,9 @@ function showToast(message, kind = 'error') {
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
 }
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : String(str);
+  return div.innerHTML;
+}

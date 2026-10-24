@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>cadence — Buscar alimento</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="static/css/pulse.css">
+<style>
+  .search-box { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid rgba(124,92,255,0.35); border-radius: 15px; padding: 12px 14px; box-shadow: 0 0 0 1px rgba(124,92,255,0.08), 0 0 18px -6px rgba(124,92,255,0.4); }
+  .search-box input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: var(--ink); font: 500 13.5px 'Inter', sans-serif; }
+  .search-box input::placeholder { color: var(--ink-soft); }
+  .section-title { font-size: 13px; font-weight: 700; margin: 0 0 9px; }
+  .chiprow { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+  .chiprow::-webkit-scrollbar { display: none; }
+  .fav-card { flex-shrink: 0; width: 108px; text-align: left; background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 10px; color: var(--ink); cursor: pointer; }
+  .food-row { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 10px 12px; }
+  .food-row .thumb { width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(140deg, #7C5CFF, #2DD4FF); opacity: 0.35; flex-shrink: 0; }
+  .add-btn { width: 28px; height: 28px; border-radius: 9px; border: none; background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; flex-shrink: 0; }
+  .star-btn { width: 28px; height: 28px; border: none; background: none; cursor: pointer; font-size: 15px; color: var(--ink-soft); flex-shrink: 0; }
+  .star-btn.on { color: #FFC83D; }
+  .empty-hint { font-size: 12px; color: var(--ink-soft); padding: 4px 2px; }
+</style>
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+<div class="app">
+  <div style="padding:22px 20px 14px;display:flex;align-items:center;gap:12px;">
+    <a id="backLink" href="index.html" aria-label="Volver" class="icon-btn" style="width:36px;height:36px;border-radius:11px;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
+    </a>
+    <h1 class="disp" style="margin:0;font-size:17px;font-weight:700;">Buscar alimento</h1>
+  </div>
+
+  <div style="padding:0 20px 14px;">
+    <label class="search-box">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="var(--ink-soft)" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="var(--ink-soft)" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="termInput" type="search" placeholder="Buscar en wger…" autocomplete="off" aria-label="Buscar alimento">
+    </label>
+  </div>
+
+  <div class="app-content" style="gap:20px;padding-top:4px;">
+    <div id="resultsBlock" style="display:none;">
+      <h2 class="section-title disp">Resultados</h2>
+      <div id="results" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
+    <div id="favBlock">
+      <h2 class="section-title disp">⭐ Favoritos</h2>
+      <div id="favorites" class="chiprow"></div>
+    </div>
+
+    <div id="recentBlock">
+      <h2 class="section-title disp">🕓 Recientes</h2>
+      <div id="recents" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
+    <button id="customBtn" class="dashed-add" style="justify-content:center;border-radius:16px;padding:14px;font-size:12.5px;font-weight:600;font-family:inherit;">
+      <span style="font-weight:800;color:var(--accent-to);">+</span> Crear alimento personalizado (macros manuales)
+    </button>
+  </div>
+</div>
+
+<script src="static/js/api.js"></script>
+<script src="static/js/theme.js"></script>
+<script>
+const FAV_KEY = 'cadence_favorites';
+const params = new URLSearchParams(location.search);
+if (params.get('from') === 'confirm') document.getElementById('backLink').href = 'confirm.html';
+
+function loadFavorites() {
+  try { return JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); } catch { return []; }
+}
+function saveFavorites(list) {
+  try { localStorage.setItem(FAV_KEY, JSON.stringify(list)); } catch { /* storage unavailable */ }
+}
+function isFavorite(id) {
+  return loadFavorites().some((f) => f.id === id);
+}
+function toggleFavorite(food) {
+  const list = loadFavorites();
+  const idx = list.findIndex((f) => f.id === food.id);
+  if (idx >= 0) list.splice(idx, 1);
+  else list.unshift({ id: food.id, name: food.name, energy_kcal_100g: food.energy_kcal_100g, grams: food.last_amount_grams || 100 });
+  saveFavorites(list.slice(0, 20));
+  renderFavorites();
+  refreshStars();
+}
+
+// Adds the food to the plate being confirmed (or starts a new one) and goes
+// to the confirm screen, where grams can be adjusted before anything is saved.
+function addFood(food) {
+  let result = { components: [] };
+  if (params.get('from') === 'confirm') {
+    try { result = JSON.parse(sessionStorage.getItem('cadence_analyze_result')) || result; } catch { /* start fresh */ }
+  }
+  result.components.push({
+    detected_name: food.name,
+    confidence: null,
+    candidates: [{ id: food.id, name: food.name, score: 1, energy_kcal_100g: food.energy_kcal_100g }],
+    selectedId: food.id,
+    grams: food.last_amount_grams || food.grams || 100,
+  });
+  sessionStorage.setItem('cadence_analyze_result', JSON.stringify(result));
+  window.location.href = 'confirm.html';
+}
+
+function kcalFor(food) {
+  return Math.round((food.energy_kcal_100g * (food.last_amount_grams || food.grams || 100)) / 100);
+}
+
+function foodRow(food, subtitle) {
+  const row = document.createElement('div');
+  row.className = 'food-row';
+  row.innerHTML = `
+    <div class="thumb"></div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(food.name)}</div>
+      <div style="font-size:11px;color:var(--ink-soft);margin-top:1px;">${escapeHtml(subtitle)}</div>
+    </div>
+    <span class="mono" style="font-size:11.5px;color:var(--accent-to);margin-right:2px;">${kcalFor(food)}</span>
+    <button class="star-btn" data-fav="${food.id}" aria-label="Marcar favorito">★</button>
+    <button class="add-btn" aria-label="Agregar ${escapeHtml(food.name)}">+</button>
+  `;
+  row.querySelector('.add-btn').addEventListener('click', () => addFood(food));
+  row.querySelector('.star-btn').addEventListener('click', () => toggleFavorite(food));
+  return row;
+}
+
+function refreshStars() {
+  document.querySelectorAll('.star-btn').forEach((btn) => {
+    btn.classList.toggle('on', isFavorite(Number(btn.dataset.fav)));
+  });
+}
+
+function renderFavorites() {
+  const wrap = document.getElementById('favorites');
+  const favs = loadFavorites();
+  wrap.innerHTML = '';
+  if (!favs.length) {
+    wrap.innerHTML = '<div class="empty-hint">Toca ★ en un alimento para guardarlo aquí.</div>';
+    return;
+  }
+  favs.forEach((food) => {
+    const card = document.createElement('button');
+    card.className = 'fav-card';
+    card.innerHTML = `
+      <div style="width:100%;height:44px;border-radius:10px;background:linear-gradient(140deg,#7C5CFF,#2DD4FF);opacity:0.35;margin-bottom:8px;"></div>
+      <div style="font-size:11.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(food.name)}</div>
+      <div class="mono" style="font-size:10px;color:var(--accent-to);margin-top:2px;">${kcalFor(food)} KCAL</div>
+    `;
+    card.addEventListener('click', () => addFood(food));
+    wrap.appendChild(card);
+  });
+}
+
+async function renderRecents() {
+  const wrap = document.getElementById('recents');
+  try {
+    const recents = await apiGet('api/recent');
+    wrap.innerHTML = '';
+    if (!recents.length) {
+      wrap.innerHTML = '<div class="empty-hint">Aún no has registrado alimentos.</div>';
+      return;
+    }
+    recents.forEach((food) => {
+      wrap.appendChild(foodRow(food, `Registrado ${agoLabel(food.last_logged)} · ${Math.round(food.last_amount_grams)}g`));
+    });
+    refreshStars();
+  } catch (err) {
+    wrap.innerHTML = '';
+    showToast(`No se pudieron cargar los recientes: ${err.message}`);
+  }
+}
+
+function agoLabel(iso) {
+  if (!iso) return '';
+  const days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(`${iso}T00:00:00`)) / 86400000);
+  if (days <= 0) return 'hoy';
+  if (days === 1) return 'ayer';
+  return `hace ${days} días`;
+}
+
+let searchTimer = null;
+let searchSeq = 0;
+document.getElementById('termInput').addEventListener('input', (e) => {
+  const term = e.target.value.trim();
+  clearTimeout(searchTimer);
+  const resultsBlock = document.getElementById('resultsBlock');
+  const idle = term.length < 2;
+  resultsBlock.style.display = idle ? 'none' : 'block';
+  document.getElementById('favBlock').style.display = idle ? 'block' : 'none';
+  document.getElementById('recentBlock').style.display = idle ? 'block' : 'none';
+  if (idle) return;
+
+  searchTimer = setTimeout(async () => {
+    const seq = ++searchSeq;
+    const box = document.getElementById('results');
+    box.innerHTML = '<div class="empty-hint">Buscando…</div>';
+    try {
+      const foods = await apiGet(`api/search?term=${encodeURIComponent(term)}`);
+      if (seq !== searchSeq) return; // a newer query already took over
+      box.innerHTML = '';
+      if (!foods.length) {
+        box.innerHTML = '<div class="empty-hint">Sin resultados en wger. Prueba con otro nombre.</div>';
+        return;
+      }
+      foods.forEach((food) => box.appendChild(foodRow(food, 'por 100 g')));
+      refreshStars();
+    } catch (err) {
+      if (seq !== searchSeq) return;
+      box.innerHTML = '';
+      showToast(`No se pudo buscar: ${err.message}`);
+    }
+  }, 350);
+});
+
+document.getElementById('customBtn').addEventListener('click', () => showToast('Alimento personalizado: próximamente', 'warn'));
+
+renderFavorites();
+renderRecents();
+</script>
+</body>
+</html>

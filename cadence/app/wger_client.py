@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 import httpx
 
@@ -63,10 +63,10 @@ class WgerClient:
         response.raise_for_status()
         return response.json()
 
-    def get_diary_entries(self, plan_id: int, date_from: date, date_to: date) -> list[dict]:
-        """Entries for `plan_id` whose date falls in [date_from, date_to] (inclusive).
+    def get_diary_entries(self, plan_id: int, start: datetime, end: datetime) -> list[dict]:
+        """Entries for `plan_id` logged between two *aware* datetimes.
 
-        wger's /nutritiondiary/ endpoint filters by exact "datetime" range via
+        wger's /nutritiondiary/ endpoint filters by "datetime" range via
         datetime__gte / datetime__lte - TODO verify these exact filter param
         names against the real instance (same caveat as the rest of this
         client: implemented per the known v2 schema, not yet tested live).
@@ -75,10 +75,10 @@ class WgerClient:
             "/api/v2/nutritiondiary/",
             params={
                 "plan": plan_id,
-                "datetime__gte": f"{date_from.isoformat()}T00:00:00",
-                "datetime__lte": f"{date_to.isoformat()}T23:59:59",
+                "datetime__gte": start.isoformat(),
+                "datetime__lte": end.isoformat(),
                 "format": "json",
-                "limit": 200,
+                "limit": 500,
             },
         )
         response.raise_for_status()

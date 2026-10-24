@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     wger_language_id: int = 2  # 2 = English in wger's default fixtures
 
     # Behavior
+    user_name: str = "Andrés"  # shown in the dashboard greeting
+    # IANA zone used to decide "today" and which meal slot an entry falls in.
+    # Without this the container's clock (UTC) is used, which shifts every
+    # entry by the viewer's offset (e.g. a 7am breakfast in Panama lands in
+    # "almuerzo", and anything after 7pm counts as tomorrow).
+    timezone: str = "America/Panama"
     match_candidate_count: int = 3
     default_nutrition_plan_id: int | None = None
 

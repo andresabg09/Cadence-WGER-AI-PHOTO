@@ -18,6 +18,10 @@ usando IA. No modifica el core de wger, solo consume su API REST. Ver
 5. `POST /api/confirm` crea los registros via `POST
    /api/v2/nutritiondiary/` de wger.
 
+Ademas del escaneo, `static/search.html` permite agregar alimentos a mano
+(`GET /api/search`, favoritos en el navegador, recientes via
+`GET /api/recent`) y el resultado pasa por la misma pantalla de confirmacion.
+
 Las calorias **siempre** salen de la base de datos de wger - la IA de
 vision solo identifica, nunca calcula nutricion.
 

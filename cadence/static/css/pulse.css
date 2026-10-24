@@ -1,7 +1,6 @@
 /* cadence — Pulse design system
-   Ported 1:1 from the approved canvas mockups. Dark-only for now; the CSS
-   variables below are the seam for the Claro/Lectura/Sistema modes promised
-   in Ajustes > Apariencia (not wired up yet - see js/theme.js TODO). */
+   Ported 1:1 from the approved canvas mockups. Four modes (oscuro / claro /
+   lectura / sistema) are driven by the variables below; js/theme.js picks one. */
 
 :root,
 :root[data-theme="dark"] {
@@ -16,6 +15,7 @@
   --good: #3DDC84;
   --bad: #FF5C5C;
   --dot-opacity: 0.04;
+  --bar-bg: rgba(15, 15, 20, 0.85);
 }
 
 :root[data-theme="light"] {
@@ -30,6 +30,7 @@
   --good: #2CB86B;
   --bad: #E04C4C;
   --dot-opacity: 0.05;
+  --bar-bg: rgba(255, 255, 255, 0.88);
 }
 
 :root[data-theme="reading"] {
@@ -44,6 +45,7 @@
   --good: #5B8A4A;
   --bad: #B8463F;
   --dot-opacity: 0.05;
+  --bar-bg: rgba(251, 245, 232, 0.9);
 }
 
 /* "Sistema": no explicit data-theme set -> follow the OS/browser preference.
@@ -63,6 +65,7 @@
     --good: #2CB86B;
     --bad: #E04C4C;
     --dot-opacity: 0.05;
+    --bar-bg: rgba(255, 255, 255, 0.88);
   }
 }
 
@@ -165,12 +168,12 @@ button { font-family: inherit; }
 .value-live { animation: valuePulse 6s ease-in-out infinite; }
 
 .macro-row { font-size: 11px; color: var(--ink-soft); font-weight: 600; margin-bottom: 5px; }
-.macro-track { height: 6px; border-radius: 100px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.macro-track { height: 6px; border-radius: 100px; background: rgba(127,127,140,0.18); overflow: hidden; }
 .macro-fill { height: 100%; border-radius: 100px; background: linear-gradient(90deg, var(--accent-from), var(--accent-to)); }
 
 .insight-chip {
   margin-top: 16px;
-  background: rgba(255,255,255,0.04);
+  background: rgba(127,127,140,0.08);
   border: 1px solid var(--card-border);
   border-radius: 16px; padding: 11px 13px;
   display: flex; gap: 9px; align-items: flex-start;
@@ -180,8 +183,8 @@ button { font-family: inherit; }
 
 /* ---- Water bottle ---- */
 .bottle-wrap { width: 34px; height: 50px; position: relative; flex-shrink: 0; overflow: hidden; border-radius: 10px 10px 13px 13px; }
-.bottle-cap { width: 14px; height: 7px; background: rgba(255,255,255,0.32); border-radius: 3px 3px 0 0; position: absolute; top: -5px; left: 50%; transform: translateX(-50%); z-index: 2; }
-.bottle-body { width: 100%; height: 100%; border: 2px solid rgba(255,255,255,0.22); border-radius: 10px 10px 13px 13px; overflow: hidden; position: relative; background: rgba(255,255,255,0.04); }
+.bottle-cap { width: 14px; height: 7px; background: rgba(127,127,140,0.5); border-radius: 3px 3px 0 0; position: absolute; top: -5px; left: 50%; transform: translateX(-50%); z-index: 2; }
+.bottle-body { width: 100%; height: 100%; border: 2px solid rgba(127,127,140,0.4); border-radius: 10px 10px 13px 13px; overflow: hidden; position: relative; background: rgba(127,127,140,0.08); }
 .bottle-fill {
   position: absolute; left: -20%; right: -20%; bottom: 0;
   border-radius: 45% 45% 0 0 / 14px 14px 0 0;
@@ -209,14 +212,16 @@ button { font-family: inherit; }
 /* ---- Meal cards / swipe-to-delete ---- */
 .meal-item-row { display: flex; align-items: center; gap: 11px; }
 .swipe-row { position: relative; overflow: hidden; border-radius: 14px; }
-.swipe-content { display: flex; align-items: center; gap: 11px; background: var(--card); transition: transform 0.25s ease; touch-action: pan-y; }
+.swipe-content { position: relative; z-index: 1; display: flex; align-items: center; gap: 11px; background: var(--card); transition: transform 0.25s ease; touch-action: pan-y; }
 .swipe-content.open { transform: translateX(-56px); }
 .swipe-del {
   position: absolute; top: 0; right: 0; bottom: 0; width: 56px;
   background: linear-gradient(135deg, var(--bad), #D63B3B);
   display: flex; align-items: center; justify-content: center;
   border-radius: 0 14px 14px 0; border: none; color: #fff; cursor: pointer;
+  opacity: 0; transition: opacity 0.2s ease;
 }
+.swipe-row:has(.swipe-content.open) .swipe-del { opacity: 1; }
 
 .ai-badge {
   font-size: 9.5px; background: rgba(124,92,255,0.15); color: var(--accent-from);
@@ -224,7 +229,7 @@ button { font-family: inherit; }
 }
 
 .dashed-add {
-  background: rgba(255,255,255,0.02);
+  background: rgba(127,127,140,0.04);
   border: 1.5px dashed var(--card-border);
   border-radius: 20px; padding: 15px;
   display: flex; align-items: center; gap: 10px;
@@ -234,7 +239,7 @@ button { font-family: inherit; }
 /* ---- Bottom nav ---- */
 .tab-bar {
   position: fixed; left: 0; right: 0; bottom: 0; max-width: 480px; margin: 0 auto;
-  background: rgba(15,15,20,0.85); backdrop-filter: blur(14px);
+  background: var(--bar-bg); backdrop-filter: blur(14px);
   border-top: 1px solid var(--card-border);
   padding: 12px 24px calc(24px + env(safe-area-inset-bottom));
   display: flex; justify-content: space-around; align-items: center;
@@ -284,4 +289,21 @@ button { font-family: inherit; }
 .empty-state {
   background: var(--card); border: 1.5px dashed var(--card-border); border-radius: 22px;
   padding: 28px 20px; text-align: center;
+}
+
+/* ---- Confirm bar (fixed bottom) ---- */
+.confirm-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; max-width: 480px; margin: 0 auto;
+  background: var(--bar-bg); backdrop-filter: blur(16px);
+  border-top: 1px solid var(--card-border);
+  padding: 14px 20px calc(26px + env(safe-area-inset-bottom));
+}
+
+.chip-soft {
+  font-size: 10.5px; border-radius: 100px; padding: 4px 9px; font-weight: 700; cursor: pointer;
+  border: 1px solid var(--card-border); background: rgba(127,127,140,0.1); color: var(--ink-soft);
+}
+.chip-soft.active {
+  border-color: rgba(45,212,255,0.55); color: var(--accent-to);
+  background: linear-gradient(135deg, rgba(124,92,255,0.16), rgba(45,212,255,0.1));
 }

@@ -1,4 +1,5 @@
-from datetime import date, timedelta
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, time, timedelta
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -6,7 +7,15 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .matching import rank_candidates
-from .meals import MEAL_LABELS, MEAL_ORDER, compute_streak, entry_date, meal_key_for_entry
+from .meals import (
+    MEAL_LABELS,
+    MEAL_ORDER,
+    compute_streak,
+    entry_date,
+    entry_datetime,
+    local_now,
+    meal_key_for_entry,
+)
 from .schemas import (
     AnalyzeResponse,
     ComponentMatch,
@@ -17,6 +26,7 @@ from .schemas import (
     MacroTotals,
     MealGroup,
     MealItem,
+    SearchResult,
     TodayResponse,
 )
 from .vision import GeminiVisionClient
@@ -72,6 +82,11 @@ def confirm_page():
     return FileResponse("static/confirm.html")
 
 
+@app.get("/search.html")
+def search_page():
+    return FileResponse("static/search.html")
+
+
 @app.get("/api/today", response_model=TodayResponse)
 def today():
     wger = get_wger_client()
@@ -79,9 +94,11 @@ def today():
         plan_id = settings.default_nutrition_plan_id or wger.get_default_nutrition_plan_id()
         plan = wger.get_nutrition_plan(plan_id)
 
-        today_date = date.today()
-        history_start = today_date - timedelta(days=30)
-        entries = wger.get_diary_entries(plan_id, history_start, today_date)
+        now = local_now()
+        today_date = now.date()
+        history_start = datetime.combine(today_date - timedelta(days=30), time.min, tzinfo=now.tzinfo)
+        day_end = datetime.combine(today_date, time.max, tzinfo=now.tzinfo)
+        entries = wger.get_diary_entries(plan_id, history_start, day_end)
 
         streak_days = compute_streak(entries, today_date)
         today_entries = [e for e in entries if entry_date(e) == today_date]
@@ -159,6 +176,7 @@ def today():
             goal=goal,
             meals=meals,
             streak_days=streak_days,
+            user_name=settings.user_name,
         )
     finally:
         wger.close()
@@ -179,8 +197,11 @@ async def analyze(image: UploadFile):
     try:
         components = []
         for component in detected:
-            raw_matches = wger.search_ingredients(component.name)
-            candidates = rank_candidates(component.name, raw_matches, settings.match_candidate_count)
+            # Search/rank with the English generic name (wger's DB language);
+            # detected_name stays the Spanish label the user sees.
+            term = component.search_name or component.name
+            raw_matches = wger.search_ingredients(term)
+            candidates = rank_candidates(term, raw_matches, settings.match_candidate_count)
             if candidates:
                 # Only the top pick, to keep this endpoint's latency bounded -
                 # other candidates' macros are fetched on demand if the user
@@ -216,6 +237,70 @@ def ingredient_detail(ingredient_id: int):
             carbs_100g=float(data.get("carbohydrates", 0) or 0),
             fat_100g=float(data.get("fat", 0) or 0),
         )
+    finally:
+        wger.close()
+
+
+@app.get("/api/search", response_model=list[SearchResult])
+def search_foods(term: str):
+    """Manual food search (search.html): wger hits + their kcal/100g."""
+    term = term.strip()
+    if len(term) < 2:
+        return []
+    wger = get_wger_client()
+    try:
+        matches = wger.search_ingredients(term, limit=8)
+
+        def with_energy(match: dict) -> SearchResult | None:
+            try:
+                data = wger.get_ingredient(match["id"])
+            except Exception:
+                return None
+            return SearchResult(
+                id=match["id"],
+                name=data.get("name") or match["name"],
+                energy_kcal_100g=float(data.get("energy", 0) or 0),
+            )
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            return [r for r in pool.map(with_energy, matches) if r is not None]
+    finally:
+        wger.close()
+
+
+@app.get("/api/recent", response_model=list[SearchResult])
+def recent_foods():
+    """Distinct foods logged in the last 30 days, newest first."""
+    wger = get_wger_client()
+    try:
+        plan_id = settings.default_nutrition_plan_id or wger.get_default_nutrition_plan_id()
+        now = local_now()
+        start = datetime.combine(now.date() - timedelta(days=30), time.min, tzinfo=now.tzinfo)
+        entries = wger.get_diary_entries(plan_id, start, now)
+        entries.sort(key=lambda e: e.get("datetime", ""), reverse=True)
+
+        seen: dict[int, dict] = {}
+        for entry in entries:
+            seen.setdefault(entry["ingredient"], entry)
+            if len(seen) >= 8:
+                break
+
+        def to_result(entry: dict) -> SearchResult | None:
+            try:
+                data = wger.get_ingredient(entry["ingredient"])
+            except Exception:
+                return None
+            when = entry_datetime(entry)
+            return SearchResult(
+                id=entry["ingredient"],
+                name=data.get("name", "?"),
+                energy_kcal_100g=float(data.get("energy", 0) or 0),
+                last_amount_grams=float(entry["amount"]),
+                last_logged=when.date().isoformat() if when else None,
+            )
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            return [r for r in pool.map(to_result, seen.values()) if r is not None]
     finally:
         wger.close()
 

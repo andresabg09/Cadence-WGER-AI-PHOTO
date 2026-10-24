@@ -83,12 +83,14 @@ let facingMode = 'environment';
 let stream = null;
 
 const video = document.getElementById('video');
+const angleBadge = document.getElementById('angleBadge');
 const angleDot = document.getElementById('angleDot');
 const angleText = document.getElementById('angleText');
 const caption = document.getElementById('caption');
 const captureBtn = document.getElementById('captureBtn');
 
 async function initCamera() {
+  torchOn = false;
   if (stream) stream.getTracks().forEach((t) => t.stop());
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false });
@@ -104,16 +106,17 @@ function handleOrientation(event) {
   const tilt = Math.abs(90 - Math.abs(beta));
   const ok = tilt >= TARGET_MIN && tilt <= TARGET_MAX;
   lastAngleOk = ok;
+  const deg = Math.round(tilt);
   angleDot.style.background = ok ? 'var(--good)' : '#FF8A5B';
+  angleBadge.style.background = ok ? 'rgba(61,220,132,0.16)' : 'rgba(255,255,255,0.1)';
+  angleBadge.style.borderColor = ok ? 'rgba(61,220,132,0.4)' : 'rgba(255,255,255,0.2)';
+  angleText.style.color = ok ? 'var(--good)' : '#fff';
   if (ok) {
-    angleText.textContent = '✓ Ángulo correcto';
-    angleText.style.color = 'var(--good)';
+    angleText.textContent = `${deg}° · ÁNGULO CORRECTO`;
   } else if (tilt < TARGET_MIN) {
-    angleText.textContent = 'Inclina más el teléfono';
-    angleText.style.color = '#fff';
+    angleText.textContent = `${deg}° · INCLINA MÁS`;
   } else {
-    angleText.textContent = 'Baja un poco el teléfono';
-    angleText.style.color = '#fff';
+    angleText.textContent = `${deg}° · BAJA EL ÁNGULO`;
   }
 }
 
@@ -134,6 +137,23 @@ document.getElementById('flipBtn').addEventListener('click', () => {
   initCamera();
 });
 
+let torchOn = false;
+document.getElementById('flashBtn').addEventListener('click', async () => {
+  const track = stream && stream.getVideoTracks()[0];
+  const supportsTorch = track && track.getCapabilities && track.getCapabilities().torch;
+  if (!supportsTorch) {
+    showToast('Este dispositivo no permite controlar el flash', 'warn');
+    return;
+  }
+  try {
+    torchOn = !torchOn;
+    await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+  } catch {
+    torchOn = false;
+    showToast('No se pudo activar el flash', 'warn');
+  }
+});
+
 document.getElementById('modeBarcode').addEventListener('click', () => showToast('Escaneo por código de barras: próximamente', 'warn'));
 
 document.getElementById('fileInput').addEventListener('change', (e) => {
@@ -142,6 +162,10 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
 });
 
 captureBtn.addEventListener('click', () => {
+  if (!video.videoWidth) {
+    showToast('La cámara aún no está lista', 'warn');
+    return;
+  }
   const canvas = document.createElement('canvas');
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -178,13 +202,20 @@ function renderLiveChips(components) {
     chip.className = 'chip-in';
     chip.style.cssText = `animation-delay:${i * 0.12}s;background:rgba(10,10,15,0.75);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.12);border-radius:100px;padding:8px 14px;display:flex;align-items:center;gap:7px;width:fit-content;`;
     const confidence = c.confidence != null ? Math.round(c.confidence * 100) : null;
-    chip.innerHTML = `<span style="font-size:12.5px;font-weight:700;">${c.detected_name}</span>${confidence !== null ? `<span class="mono" style="font-size:11px;color:var(--accent-to);font-weight:700;">${confidence}%</span>` : ''}`;
+    chip.innerHTML = `<span style="font-size:12.5px;font-weight:700;">${escapeHtml(c.detected_name)}</span>${confidence !== null ? `<span class="mono" style="font-size:11px;color:var(--accent-to);font-weight:700;">${confidence}%</span>` : ''}`;
     wrap.appendChild(chip);
   });
 }
 
 initCamera();
-document.body.addEventListener('click', initOrientation, { once: true });
+// iOS 13+ only grants sensor access from a user gesture; everywhere else
+// (Android/Chrome) the listener can start right away, otherwise the badge
+// would sit on "Activa el sensor" until the first tap.
+if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+  document.body.addEventListener('click', initOrientation, { once: true });
+} else {
+  initOrientation();
+}
 </script>
 </body>
 </html>

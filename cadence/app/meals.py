@@ -2,9 +2,14 @@
 time of day, since wger's diary entries don't carry a meal-slot field we can
 rely on across versions. Windows match what's documented to the user in the
 cadence design review; tune via Settings if they don't fit his schedule.
+
+All time-of-day logic runs in `settings.timezone`, never the server's clock:
+wger stores/returns entries as aware datetimes (UTC or its own TIME_ZONE),
+so the hour must be converted before bucketing.
 """
 
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from .config import settings
 
@@ -16,6 +21,14 @@ MEAL_LABELS = {
     "cena": "Cena",
     "otro": "Otro",
 }
+
+
+def local_tz() -> ZoneInfo:
+    return ZoneInfo(settings.timezone)
+
+
+def local_now() -> datetime:
+    return datetime.now(local_tz())
 
 
 def meal_key_for_hour(hour: int) -> str:
@@ -30,21 +43,27 @@ def meal_key_for_hour(hour: int) -> str:
     return "otro"
 
 
-def meal_key_for_entry(entry: dict) -> str:
+def entry_datetime(entry: dict) -> datetime | None:
+    """The entry's timestamp expressed in the user's timezone."""
     raw = entry.get("datetime", "")
     try:
         when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except ValueError:
-        return "otro"
-    return meal_key_for_hour(when.hour)
+    except (ValueError, AttributeError):
+        return None
+    tz = local_tz()
+    if when.tzinfo is None:
+        return when.replace(tzinfo=tz)
+    return when.astimezone(tz)
+
+
+def meal_key_for_entry(entry: dict) -> str:
+    when = entry_datetime(entry)
+    return "otro" if when is None else meal_key_for_hour(when.hour)
 
 
 def entry_date(entry: dict) -> date | None:
-    raw = entry.get("datetime", "")
-    try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
-    except ValueError:
-        return None
+    when = entry_datetime(entry)
+    return None if when is None else when.date()
 
 
 def compute_streak(entries: list[dict], today: date) -> int:

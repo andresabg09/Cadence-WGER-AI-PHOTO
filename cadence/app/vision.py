@@ -19,9 +19,12 @@ Reglas estrictas:
 - Usa nombres genericos de alimento (los que usarias para buscarlo en una
   base de datos nutricional), no nombres de marcas ni platos compuestos.
 - Da un valor de confianza entre 0 y 1 para cada componente.
+- "name" va en espanol (es lo que ve el usuario). "search_name" es el mismo
+  alimento como nombre generico corto en ingles (ej: "grilled chicken breast",
+  "white rice"), porque la base de datos nutricional esta en ingles.
 
 Responde UNICAMENTE con un JSON array, sin texto adicional, con esta forma:
-[{"name": "pollo a la plancha", "confidence": 0.9}, ...]
+[{"name": "pollo a la plancha", "search_name": "grilled chicken breast", "confidence": 0.9}, ...]
 """
 
 
@@ -46,4 +49,11 @@ def _parse_components(raw_text: str) -> list[DetectedComponent]:
     match = re.search(r"\[.*\]", raw_text, re.DOTALL)
     payload = match.group(0) if match else raw_text
     data = json.loads(payload)
-    return [DetectedComponent(name=item["name"], confidence=item.get("confidence")) for item in data]
+    return [
+        DetectedComponent(
+            name=item["name"],
+            search_name=item.get("search_name"),
+            confidence=item.get("confidence"),
+        )
+        for item in data
+    ]

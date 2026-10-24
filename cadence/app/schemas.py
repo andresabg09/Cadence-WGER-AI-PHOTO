@@ -2,7 +2,10 @@ from pydantic import BaseModel
 
 
 class DetectedComponent(BaseModel):
-    name: str
+    name: str  # shown to the user (Spanish)
+    # Generic English food name used to query/rank against wger's ingredient
+    # DB (language 2). Falls back to `name` when the model doesn't provide it.
+    search_name: str | None = None
     confidence: float | None = None
 
 
@@ -57,6 +60,15 @@ class IngredientDetail(BaseModel):
     fat_100g: float
 
 
+class SearchResult(BaseModel):
+    id: int
+    name: str
+    energy_kcal_100g: float
+    # Only for /api/recent: the last amount the user logged of this food.
+    last_amount_grams: float | None = None
+    last_logged: str | None = None
+
+
 class MacroTotals(BaseModel):
     kcal: float = 0
     protein_g: float = 0
@@ -85,3 +97,4 @@ class TodayResponse(BaseModel):
     goal: MacroTotals
     meals: list[MealGroup]
     streak_days: int
+    user_name: str

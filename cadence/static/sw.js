@@ -1,10 +1,12 @@
-// Minimal app-shell cache for offline/instant reloads. Bump CACHE_NAME on
-// any static asset change to force a refresh.
-const CACHE_NAME = 'cadence-shell-v1';
+// Minimal app-shell cache. Network-first so a deploy is visible on the next
+// load (no manual cache bump needed); the cache is only the offline fallback.
+// v2: v1 could hold HTML saved under css/js URLs (see nginx /cadence/ fix).
+const CACHE_NAME = 'cadence-shell-v2';
 const SHELL_FILES = [
   'index.html',
   'scan.html',
   'confirm.html',
+  'search.html',
   'static/css/pulse.css',
   'static/js/api.js',
   'static/js/theme.js',
@@ -37,15 +39,12 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.includes('/api/')) return;
 
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((response) => {
-        if (response.ok && request.url.startsWith(self.location.origin)) {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-        }
-        return response;
-      }).catch(() => cached);
-    })
+    fetch(request).then((response) => {
+      if (response.ok) {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+      }
+      return response;
+    }).catch(() => caches.match(request))
   );
 });

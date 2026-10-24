@@ -22,7 +22,7 @@
   <div class="app-header">
     <div>
       <div class="date" id="todayLabel">&nbsp;</div>
-      <h1 class="disp">Hoy</h1>
+      <h1 class="disp" id="greeting">Hola</h1>
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
       <div class="streak-pill">
@@ -95,6 +95,9 @@
         <h2 class="disp" style="margin:0;font-size:15px;font-weight:700;">Hoy</h2>
         <div style="display:flex;align-items:center;gap:10px;">
           <span class="mono" id="todayKcalLabel" style="font-size:10.5px;color:var(--ink-soft);">0 KCAL</span>
+          <a href="search.html" aria-label="Buscar alimento manualmente" style="width:26px;height:26px;border-radius:9px;background:var(--card);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="var(--ink-soft)" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="var(--ink-soft)" stroke-width="2" stroke-linecap="round"/></svg>
+          </a>
         </div>
       </div>
       <div id="mealsList"></div>
@@ -128,7 +131,8 @@ const MEAL_ICON_BG = {
   cena: 'linear-gradient(140deg, #4a3826, #2e2015)',
   otro: 'linear-gradient(140deg, #555, #333)',
 };
-const ALL_MEAL_KEYS = ['desayuno', 'almuerzo', 'merienda', 'cena'];
+const ALWAYS_SHOWN = ['desayuno', 'almuerzo', 'cena'];
+const ADD_MORE_LABEL = { desayuno: 'al desayuno', almuerzo: 'al almuerzo', merienda: 'a la merienda', cena: 'a la cena' };
 
 document.getElementById('profileBtn').addEventListener('click', () => showToast('Perfil: próximamente', 'warn'));
 document.getElementById('progressBtn').addEventListener('click', () => showToast('Progreso: próximamente', 'warn'));
@@ -204,7 +208,7 @@ function renderInsight(totals, goal) {
 function mealItemRow(item, mealKey) {
   return `
     <div class="swipe-row" data-entry-id="${item.diary_entry_id}">
-      <button class="swipe-del" aria-label="Borrar ${item.name}">
+      <button class="swipe-del" aria-label="Borrar ${escapeHtml(item.name)}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2m-9 0l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
       <div class="swipe-content meal-item-row" style="padding:2px 0;">
@@ -220,10 +224,37 @@ function mealItemRow(item, mealKey) {
   `;
 }
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+function mealCard(meal, key) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.style.display = 'flex';
+  card.style.flexDirection = 'column';
+  card.style.gap = '10px';
+  const addLabel = ADD_MORE_LABEL[key];
+  card.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <span style="font-size:11px;color:var(--ink-soft);font-weight:700;text-transform:uppercase;letter-spacing:0.03em;">${escapeHtml(meal.label)}</span>
+      <span style="font-size:11px;color:var(--ink-soft);font-weight:600;">${Math.round(meal.totals.kcal)} kcal</span>
+    </div>
+    ${meal.items.map((item) => mealItemRow(item, key)).join('')}
+    ${addLabel ? `
+    <a href="search.html" style="display:flex;align-items:center;gap:8px;padding:2px 0 0;color:var(--ink-soft);">
+      <span style="width:22px;height:22px;border-radius:8px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--accent-to);">+</span>
+      <span style="font-size:12px;font-weight:600;">Agregar otro alimento ${addLabel}</span>
+    </a>` : ''}
+  `;
+  return card;
+}
+
+function dashedAdd(label) {
+  const link = document.createElement('a');
+  link.href = 'scan.html';
+  link.className = 'dashed-add';
+  link.innerHTML = `
+    <span style="width:28px;height:28px;border-radius:10px;background:var(--card);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--accent-to);">+</span>
+    <span style="font-size:13px;font-weight:600;">Agregar ${label}</span>
+  `;
+  return link;
 }
 
 function renderMeals(meals) {
@@ -234,51 +265,13 @@ function renderMeals(meals) {
   const container = document.createElement('div');
   container.style.cssText = 'display:flex;flex-direction:column;gap:10px;';
 
-  ALL_MEAL_KEYS.forEach((key) => {
+  // Desayuno / almuerzo / cena always show (card or dashed "agregar", per the
+  // mockup); merienda and otro only appear once something is logged in them.
+  ['desayuno', 'almuerzo', 'merienda', 'cena', 'otro'].forEach((key) => {
     const meal = byKey[key];
-    if (meal) {
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.style.display = 'flex';
-      card.style.flexDirection = 'column';
-      card.style.gap = '10px';
-      card.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:baseline;">
-          <span style="font-size:11px;color:var(--ink-soft);font-weight:700;text-transform:uppercase;letter-spacing:0.03em;">${meal.label}</span>
-          <span style="font-size:11px;color:var(--ink-soft);font-weight:600;">${Math.round(meal.totals.kcal)} kcal</span>
-        </div>
-        ${meal.items.map((item) => mealItemRow(item, key)).join('')}
-      `;
-      container.appendChild(card);
-    } else {
-      const label = { desayuno: 'desayuno', almuerzo: 'almuerzo', merienda: 'merienda', cena: 'cena' }[key];
-      const link = document.createElement('a');
-      link.href = 'scan.html';
-      link.className = 'dashed-add';
-      link.innerHTML = `
-        <span style="width:28px;height:28px;border-radius:10px;background:var(--card);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--accent-to);">+</span>
-        <span style="font-size:13px;font-weight:600;">Agregar ${label}</span>
-      `;
-      container.appendChild(link);
-    }
+    if (meal) container.appendChild(mealCard(meal, key));
+    else if (ALWAYS_SHOWN.includes(key)) container.appendChild(dashedAdd(key));
   });
-
-  const otro = byKey.otro;
-  if (otro) {
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.style.display = 'flex';
-    card.style.flexDirection = 'column';
-    card.style.gap = '10px';
-    card.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <span style="font-size:11px;color:var(--ink-soft);font-weight:700;text-transform:uppercase;letter-spacing:0.03em;">${otro.label}</span>
-        <span style="font-size:11px;color:var(--ink-soft);font-weight:600;">${Math.round(otro.totals.kcal)} kcal</span>
-      </div>
-      ${otro.items.map((item) => mealItemRow(item, 'otro')).join('')}
-    `;
-    container.appendChild(card);
-  }
 
   list.appendChild(container);
   wireSwipeToDelete();
@@ -290,13 +283,16 @@ function wireSwipeToDelete() {
     const delBtn = row.querySelector('.swipe-del');
     let startX = null;
 
-    content.addEventListener('touchstart', (e) => { startX = e.touches[0].clientX; }, { passive: true });
-    content.addEventListener('touchmove', (e) => {
+    content.addEventListener('pointerdown', (e) => { startX = e.clientX; });
+    content.addEventListener('pointermove', (e) => {
       if (startX === null) return;
-      const dx = e.touches[0].clientX - startX;
+      const dx = e.clientX - startX;
       if (dx < -20) content.classList.add('open');
       if (dx > 20) content.classList.remove('open');
-    }, { passive: true });
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach((type) => {
+      content.addEventListener(type, () => { startX = null; });
+    });
 
     delBtn.addEventListener('click', async () => {
       const entryId = row.dataset.entryId;
@@ -315,12 +311,16 @@ let latestToday = null;
 
 async function loadToday() {
   const dateLabel = document.getElementById('todayLabel');
-  dateLabel.textContent = new Date().toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
 
   try {
     const data = await apiGet('api/today');
     latestToday = data;
 
+    // Label from the server's "today" (user's timezone), not the device clock.
+    dateLabel.textContent = new Date(`${data.date}T12:00:00`)
+      .toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'short' })
+      .replace(/\./g, '').replace(',', '').toUpperCase();
+    document.getElementById('greeting').textContent = data.user_name ? `Hola, ${data.user_name}` : 'Hola';
     document.getElementById('streakValue').textContent = data.streak_days;
     document.getElementById('todayKcalLabel').textContent = `${Math.round(data.totals.kcal)} KCAL`;
     renderRing(data.totals, data.goal);

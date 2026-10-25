@@ -1,4 +1,17 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from .foodunits import is_liquid
+
+
+class _Liquid(BaseModel):
+    """Anything with a `name` that can be measured in millilitres. Unless it is said outright, it is guessed from the name."""
+    liquid: bool = False
+
+    @model_validator(mode="after")
+    def _guess_liquid(self):
+        if "liquid" not in self.model_fields_set:
+            self.liquid = is_liquid(getattr(self, "name", ""))
+        return self
 
 
 class DetectedComponent(BaseModel):
@@ -17,9 +30,11 @@ class DetectedComponent(BaseModel):
     estimated_grams: int | None = None
     # Where it is in the photo: [x, y, width, height] as 0-1 fractions.
     box: list[float] | None = None
+    # A soup or a drink: it is measured in millilitres, not grams (the model says so; the name is the fallback).
+    liquid: bool | None = None
 
 
-class IngredientCandidate(BaseModel):
+class IngredientCandidate(_Liquid):
     id: int
     name: str
     image: str | None = None
@@ -32,6 +47,7 @@ class IngredientCandidate(BaseModel):
 
 class ComponentMatch(BaseModel):
     detected_name: str
+    liquid: bool = False
     confidence: float | None = None
     estimated_grams: int | None = None
     box: list[float] | None = None
@@ -47,6 +63,7 @@ class ConfirmItem(BaseModel):
     ingredient_id: int
     amount_grams: float
     detected_name: str | None = None
+    liquid: bool | None = None  # measured in millilitres (what the confirm screen showed); None = decide from the name
 
 
 class ConfirmRequest(BaseModel):
@@ -89,7 +106,7 @@ class IngredientDetail(BaseModel):
     fat_100g: float
 
 
-class SearchResult(BaseModel):
+class SearchResult(_Liquid):
     id: int
     name: str
     energy_kcal_100g: float
@@ -105,7 +122,7 @@ class MacroTotals(BaseModel):
     fat_g: float = 0
 
 
-class MealItem(BaseModel):
+class MealItem(_Liquid):
     # wger's diary ids are UUIDs (text) in current versions, ints in older ones.
     diary_entry_id: str
     ingredient_id: int
@@ -205,6 +222,8 @@ class TodayResponse(BaseModel):
     levels: LevelsOut | None = None
     water_goal_ml: int = 2000
     water_goal_auto: bool = True
+    maintenance_kcal: int | None = None  # what the body spends in a day (None while the profile is incomplete)
+    goal_change_lb_month: float | None = None  # what the scale does a month if every day is like the goal (negative = loses)
     burn: "BurnOut | None" = None
     awards_new: list[AwardBrief] = []  # awards earned by this very request (today only): the app celebrates them
 
@@ -226,6 +245,7 @@ class WaterOut(BaseModel):
 
 class WaterGoalIn(BaseModel):
     ml: int | None = Field(default=None, ge=500, le=8000)  # None = automatic (from the person's weight)
+    step_ml: int | None = None  # size of the person's glass (250 ml or 237 ml = 8 oz): the goal is whole glasses
 
 
 class BulkDelete(BaseModel):
@@ -289,6 +309,7 @@ class FoodIn(BaseModel):
     fat: float = 0
     fibre: float | None = None  # optional; it only improves the nutrition score
     barcode: str | None = None
+    liquid: bool | None = None  # a drink or soup: its amount is shown in millilitres (None = guess from the name)
 
 
 class BarcodeResult(BaseModel):
@@ -358,7 +379,17 @@ class WeightPoint(BaseModel):
     kg: float
 
 
+class PaceOut(BaseModel):
+    """What the last days of eating mean for the scale: an estimate from calories, not from the scale."""
+    days: int  # days with something registered inside the last 7 (a day without records is not counted as zero)
+    avg_kcal: int
+    goal_kcal: int
+    maintenance_kcal: int
+    change_lb_month: float  # negative = the weight goes down at this rhythm
+
+
 class ProgressResponse(BaseModel):
+    pace: PaceOut | None = None
     today: str
     streak_current: int
     streak_best: int
@@ -458,7 +489,7 @@ class ShopEquipIn(BaseModel):
     item: str | None = None
 
 
-class FavoriteItem(BaseModel):
+class FavoriteItem(_Liquid):
     ingredient_id: int
     name: str
     grams: float

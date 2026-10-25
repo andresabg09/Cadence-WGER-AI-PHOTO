@@ -68,6 +68,7 @@ def rank_candidates(
     candidates = []
     for score, item in rank_matches(detected_name, raw_matches, top_n, alt=alt):
         energy = item.get("energy")
+        extra = {} if item.get("liquid") is None else {"liquid": bool(item["liquid"])}  # the person's own foods say it themselves
         candidates.append(
             IngredientCandidate(
                 id=item["id"],
@@ -75,6 +76,7 @@ def rank_candidates(
                 image=item.get("image"),
                 score=round(min(score, 100) / 100, 3),
                 energy_kcal_100g=float(energy) if energy is not None else None,
+                **extra,
             )
         )
     return candidates

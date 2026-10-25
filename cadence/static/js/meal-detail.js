@@ -45,7 +45,7 @@
 
   function openMealDetail(meal, day) {
     const share = { desayuno: 25, almuerzo: 35, merienda: 10, cena: 30, otro: 10 }[meal.key] || 10;
-    const rows = meal.items.map((it) => `<div style="display:flex;align-items:center;gap:12px;"><div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:700;">${esc(it.name)}</div><div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">${Math.round(it.amount_grams)} g</div></div><div class="mono" style="font-size:12.5px;font-weight:700;">${Math.round(it.kcal)} <span style="color:var(--ink-soft);font-weight:600;font-size:10px;">KCAL</span></div></div>`).join('');
+    const rows = meal.items.map((it) => `<div style="display:flex;align-items:center;gap:12px;"><div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:700;">${esc(it.name)}</div><div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">${cadenceUnits.fmtAmount(it.amount_grams, it.liquid)}</div></div><div class="mono" style="font-size:12.5px;font-weight:700;">${Math.round(it.kcal)} <span style="color:var(--ink-soft);font-weight:600;font-size:10px;">KCAL</span></div></div>`).join('');
     const score = meal.score;
     const awards = (meal.awards || []).map((a) => `<div class="hex-cell">${bits.award(a.art, 58)}<span>${esc(a.title)}</span></div>`).join('');
     const sheet = layer(`

@@ -97,21 +97,22 @@
         </div>
         <div style="flex:1;display:flex;flex-direction:column;gap:10px;" id="macroBars"></div>
       </div>
+      <div class="pace-line" id="paceLine" style="display:none;"></div>
       <div class="insight-chip" id="insightChip" style="display:none;">
         <span>✨</span>
         <span><strong>Insight:</strong> <span id="insightText"></span></span>
       </div>
     </div>
 
-    <!-- Water: one glass = 250 ml; tap a glass to fill (or empty) up to it -->
+    <!-- Water: one glass = 250 ml (or 8 oz, the person's choice); tap a glass to fill (or empty) up to it -->
     <div class="card" id="waterCard">
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
         <span class="md-label">AGUA</span>
-        <span class="mono" style="font-size:12px;font-weight:700;color:var(--accent-to);"><span id="waterMl">0</span><span style="color:var(--ink-soft);font-weight:600;font-size:10.5px;"> / <span id="waterGoal">2000</span> ML</span></span>
+        <span class="mono" style="font-size:12px;font-weight:700;color:var(--accent-to);"><span id="waterMl">0</span><span style="color:var(--ink-soft);font-weight:600;font-size:10.5px;"> / <span id="waterGoal">2000</span> <span id="waterUnit">ML</span></span></span>
       </div>
       <div class="glasses" id="glasses" role="group" aria-label="Vasos de agua"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-        <span id="waterHint" style="font-size:11.5px;color:var(--ink-soft);">Cada vaso son 250 ml · toca para llenar</span>
+        <span id="waterHint" style="font-size:11.5px;color:var(--ink-soft);">Cada vaso · toca para llenar</span>
         <button type="button" class="link-btn" id="waterGoalBtn">Cambiar meta</button>
       </div>
     </div>
@@ -208,6 +209,7 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/units.js"></script>
 <script src="static/js/bits.js"></script>
 <script src="static/js/meal-detail.js"></script>
 <script src="static/js/workouts.js"></script>
@@ -216,7 +218,8 @@
 <script src="static/js/shell.js"></script>
 <script src="static/js/install.js"></script>
 <script>
-const WATER_STEP_ML = 250;
+const waterStep = () => cadenceUnits.glassMl(); // a glass: 250 ml, or 8 oz (237 ml), as the person prefers
+const waterGoalOf = (ml) => Math.max(2, Math.round((ml || 2000) / waterStep())) * waterStep(); // the goal in whole glasses
 const MEAL_ICON_BG = {
   desayuno: 'linear-gradient(140deg, #3a2e22, #241c14)',
   almuerzo: 'linear-gradient(140deg, #c97b4a, #8a4e26)',
@@ -264,9 +267,9 @@ function playClass(el, cls, ms) {
 
 function renderWater(data) {
   const ml = data.water_ml || 0;
-  const goal = data.water_goal_ml || 2000;
-  const count = Math.min(16, Math.max(Math.ceil(goal / WATER_STEP_ML), Math.ceil(ml / WATER_STEP_ML)));
-  const nextEmpty = Math.floor(ml / WATER_STEP_ML);
+  const goal = waterGoalOf(data.water_goal_ml);
+  const count = Math.min(16, Math.max(Math.ceil(goal / waterStep()), Math.ceil(ml / waterStep())));
+  const nextEmpty = Math.floor(ml / waterStep());
   const wrap = document.getElementById('glasses');
   // Compared with what the glasses showed before (same day only), so a change plays out and a plain repaint does not.
   const prev = wrap.dataset.day === data.date && wrap.dataset.ml !== undefined ? Number(wrap.dataset.ml) : null;
@@ -275,15 +278,17 @@ function renderWater(data) {
   wrap._data = data;
   const still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const mlEl = document.getElementById('waterMl');
-  mlEl.textContent = ml;
-  document.getElementById('waterGoal').textContent = goal;
+  const shownNum = (v) => String(cadenceUnits.waterNumber(v));
+  mlEl.textContent = shownNum(ml);
+  document.getElementById('waterGoal').textContent = shownNum(goal);
+  document.getElementById('waterUnit').textContent = cadenceUnits.isOz() ? 'OZ' : 'ML';
   // The glasses are built once and then updated in place, so the water can rise and fall instead of being redrawn.
   if (wrap.children.length !== count) {
     wrap.innerHTML = Array.from({ length: count }, (_, i) => `<button type="button" class="glass-btn" data-i="${i}"><span class="glass"><i></i><b>+</b></span><u></u></button>`).join('');
     wrap.querySelectorAll('.glass-btn').forEach((btn) => btn.addEventListener('click', () => tapGlass(wrap._data, Number(btn.dataset.i))));
   }
-  const fills = Array.from({ length: count }, (_, i) => Math.max(0, Math.min(1, (ml - i * WATER_STEP_ML) / WATER_STEP_ML)));
-  const olds = prev === null || still ? null : fills.map((_, i) => Math.max(0, Math.min(1, (prev - i * WATER_STEP_ML) / WATER_STEP_ML)));
+  const fills = Array.from({ length: count }, (_, i) => Math.max(0, Math.min(1, (ml - i * waterStep()) / waterStep())));
+  const olds = prev === null || still ? null : fills.map((_, i) => Math.max(0, Math.min(1, (prev - i * waterStep()) / waterStep())));
   const rising = olds ? fills.filter((f, i) => f > olds[i]).length : 0;
   const gap = waterStagger(rising);
   let k = 0;
@@ -313,21 +318,21 @@ function renderWater(data) {
     setTimeout(() => Array.from(wrap.children).forEach((btn, i) => { btn.style.setProperty('--d', `${i * 45}ms`); playClass(btn, 'cheer', i * 45 + 900); }), land + 480);
   }
   const extra = ml - goal;
-  document.getElementById('waterHint').textContent = extra > 0 ? `+${extra} ml sobre tu meta` : 'Cada vaso son 250 ml · toca para llenar';
+  document.getElementById('waterHint').textContent = extra > 0 ? `+${cadenceUnits.fmtWater(extra)} sobre tu meta` : `Cada vaso son ${cadenceUnits.glassLabel()} · toca para llenar`;
 }
 
 function tapGlass(data, i) {
   const now = data.water_ml || 0;
-  const goal = data.water_goal_ml || 2000;
-  let target = (i + 1) * WATER_STEP_ML;
-  if (now === target) target = i * WATER_STEP_ML; // tapping the last full glass empties it
+  const goal = waterGoalOf(data.water_goal_ml);
+  let target = (i + 1) * waterStep();
+  if (now === target) target = i * waterStep(); // tapping the last full glass empties it
   const delta = target - now;
   if (!delta) return;
   changeWater(data, delta);
   if (!window.sfx) return;
   if (delta < 0) { sfx.play('tick'); return; }
   // The sound lands with the last drop; the goal chord waits for the water to settle.
-  const drops = Math.max(1, Math.ceil(target / WATER_STEP_ML) - Math.ceil(now / WATER_STEP_ML));
+  const drops = Math.max(1, Math.ceil(target / waterStep()) - Math.ceil(now / waterStep()));
   const land = WATER_LAND_MS + (drops - 1) * waterStagger(drops);
   if (now < goal && target >= goal) setTimeout(() => { sfx.play('goal'); showToast('💧 ¡Meta de agua cumplida!', 'ok'); }, land);
   else setTimeout(() => sfx.play('water'), WATER_LAND_MS);
@@ -340,10 +345,10 @@ function openWaterGoal(data) {
   sheet.className = 'entry-sheet';
   sheet.setAttribute('role', 'dialog');
   sheet.setAttribute('aria-label', 'Meta de agua');
-  let goal = data.water_goal_ml || 2000;
+  let goal = waterGoalOf(data.water_goal_ml);
   let auto = !!data.water_goal_auto;
   sheet.innerHTML = `<h3 class="disp">Meta de agua</h3>
-    <p style="margin:6px 0 16px;font-size:12px;color:var(--ink-soft);line-height:1.5;">Por defecto calculamos unos 35 ml por kilo de tu peso. Puedes poner la tuya, en vasos de 250 ml.</p>
+    <p style="margin:6px 0 16px;font-size:12px;color:var(--ink-soft);line-height:1.5;">Por defecto calculamos según tu peso. Puedes poner la tuya, en vasos de ${cadenceUnits.glassLabel()}.</p>
     <div style="display:flex;align-items:center;justify-content:center;gap:16px;">
       <button class="step-btn remove" id="gMinus" aria-label="Menos">−</button>
       <div style="text-align:center;min-width:120px;"><div class="mono" id="gVal" style="font-size:26px;font-weight:700;"></div><div id="gSub" style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;"></div></div>
@@ -355,13 +360,13 @@ function openWaterGoal(data) {
   pushOverlay(() => { scrim.remove(); sheet.remove(); });
   scrim.addEventListener('click', () => dismissOverlay());
   const $ = (id) => sheet.querySelector(`#${id}`);
-  const paint = () => { $('gVal').textContent = `${goal} ml`; $('gSub').textContent = `${goal / WATER_STEP_ML} vasos${auto ? ' · automática' : ''}`; };
+  const paint = () => { $('gVal').textContent = cadenceUnits.fmtWater(goal); $('gSub').textContent = `${goal / waterStep()} vasos${auto ? ' · automática' : ''}`; };
   paint();
-  $('gMinus').addEventListener('click', () => { goal = Math.max(500, goal - WATER_STEP_ML); auto = false; paint(); });
-  $('gPlus').addEventListener('click', () => { goal = Math.min(8000, goal + WATER_STEP_ML); auto = false; paint(); });
+  $('gMinus').addEventListener('click', () => { goal = Math.max(2 * waterStep(), goal - waterStep()); auto = false; paint(); });
+  $('gPlus').addEventListener('click', () => { goal = Math.min(8000, goal + waterStep()); auto = false; paint(); });
   const save = async (ml) => {
     try {
-      const out = await apiPut('api/water/goal', { ml });
+      const out = await apiPut('api/water/goal', { ml, step_ml: waterStep() });
       dismissOverlay(() => { data.water_goal_ml = out.goal_ml; data.water_goal_auto = ml === null; renderWater(data); });
     } catch (err) { const e = $('gErr'); e.textContent = err.message || 'No se pudo guardar'; e.classList.add('show'); }
   };
@@ -407,6 +412,17 @@ function renderRing(data) {
   document.getElementById('kcalCaption').textContent = caption;
   document.getElementById('modeLeft').setAttribute('aria-selected', String(kcalMode === 'left'));
   document.getElementById('modeBurn').setAttribute('aria-selected', String(kcalMode === 'burn'));
+}
+
+// What the calories mean for the scale, in the person's own units: the point of the whole screen.
+function renderPace(data) {
+  const el = document.getElementById('paceLine');
+  const change = data.goal_change_lb_month;
+  if (change == null) { el.style.display = 'none'; return; }
+  const amount = cadenceUnits.aboutChange(change);
+  el.textContent = Math.abs(change) < 0.5 ? 'Con esta meta mantienes tu peso'
+    : change < 0 ? `Si todos tus días son así, bajas ${amount} al mes` : `Si todos tus días son así, subes ${amount} al mes`;
+  el.style.display = 'block';
 }
 
 function renderInsight(data) {
@@ -470,7 +486,7 @@ function mealItemRow(item, mealKey) {
         </div>
         <div style="flex:1;">
           <div style="font-size:13px;font-weight:700;">${escapeHtml(item.name)}${(item.note || readNotes()[item.diary_entry_id]) ? '<span class="note-dot" title="Tiene una observación">📝</span>' : ''}</div>
-          <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${Math.round(item.amount_grams)} g · ${Math.round(item.kcal)} kcal</div>
+          <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${cadenceUnits.fmtAmount(item.amount_grams, item.liquid)} · ${Math.round(item.kcal)} kcal</div>
         </div>
         <button class="row-del" aria-label="Borrar ${escapeHtml(item.name)}">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2m-9 0l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -980,7 +996,7 @@ function openEntryDetail(entryId) {
   if (photoEl) photoEl.addEventListener('click', () => openLightbox(plate ? plate.photo : crop, plate ? plate.box : null));
 
   const renderNumbers = () => {
-    $('sGrams').textContent = `${Math.round(grams)} g`;
+    $('sGrams').textContent = cadenceUnits.fmtAmount(grams, item.liquid);
     $('sKcal').textContent = Math.round(perGram(item.kcal) * grams);
     $('sProt').textContent = (perGram(item.protein_g) * grams).toFixed(1);
     $('sCarb').textContent = (perGram(item.carbs_g) * grams).toFixed(1);
@@ -994,8 +1010,9 @@ function openEntryDetail(entryId) {
   renderNumbers();
   renderMeals();
 
-  $('sMinus').addEventListener('click', () => { grams = Math.max(5, grams - portionStep(grams, -1)); renderNumbers(); });
-  $('sPlus').addEventListener('click', () => { grams = Math.min(2000, grams + portionStep(grams, 1)); renderNumbers(); });
+  const stepOf = (dir) => (item.liquid ? cadenceUnits.liquidStep(portionStep(grams, dir)) : portionStep(grams, dir));
+  $('sMinus').addEventListener('click', () => { grams = Math.max(5, grams - stepOf(-1)); renderNumbers(); });
+  $('sPlus').addEventListener('click', () => { grams = Math.min(2000, grams + stepOf(1)); renderNumbers(); });
   scrim.addEventListener('click', () => dismissOverlay());
 
   $('sDelete').addEventListener('click', async () => {
@@ -1014,7 +1031,7 @@ function openEntryDetail(entryId) {
     btn.disabled = true;
     $('sError').classList.remove('show');
     const changes = {};
-    if (Math.round(grams) !== Math.round(item.amount_grams)) changes.amount_grams = Math.round(grams);
+    if (Math.round(grams) !== Math.round(item.amount_grams)) changes.amount_grams = Math.round(grams); // grams (or ml: 1 ml = 1 g)
     if (mealKey !== found.mealKey) changes.meal = mealKey;
     try {
       const note = $('sNote').value;
@@ -1039,6 +1056,7 @@ document.addEventListener('click', (e) => {
 
 let latestToday = null;
 const syncedDays = new Set();
+window.addEventListener('cadence-units', () => { if (latestToday) paintToday(latestToday, true); }); // units arrived after the first paint (no celebrations again)
 
 // Moves what this device still holds (older notes/photos) up to the server, once per day shown.
 function syncExtrasOnce(data) {
@@ -1422,6 +1440,7 @@ function paintToday(data, stale) {
   document.getElementById('streakValue').textContent = data.streak_days;
   document.getElementById('todayKcalLabel').textContent = `${Math.round(data.totals.kcal)} KCAL`;
   renderRing(data);
+  renderPace(data);
   renderMacroBars(data.totals, data.goal);
   renderInsight(data);
   renderMeals(data.meals);

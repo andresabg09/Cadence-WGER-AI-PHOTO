@@ -46,7 +46,7 @@
         <h3 class="disp" style="font-size:22px;text-align:center;margin:0;">${esc(activity.label)}</h3>
         <div style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink-soft);"><span style="color:var(--ember);">${icon('flame', 17)}</span>
           <b class="mono" id="woKcal" style="color:var(--ink);"></b><span>kcal</span><span>·</span><span class="mono">${String(activity.kcal_per_min).replace('.', ',')} kcal / min</span></div>
-        <div style="font-size:11.5px;color:var(--ink-soft);text-align:center;line-height:1.5;">Estimación con ${cache.weight_known ? `tu peso (${Math.round(cache.weight_kg)} kg)` : 'un peso de 70 kg: registra el tuyo en Perfil para afinarla'} y el esfuerzo de la actividad. No cambia tu meta del día.</div></div>
+        <div style="font-size:11.5px;color:var(--ink-soft);text-align:center;line-height:1.5;">Estimación con ${cache.weight_known ? `tu peso (${cadenceUnits.fmtWeight(cache.weight_kg, 0)})` : 'un peso de 70 kg: registra el tuyo en Perfil para afinarla'} y el esfuerzo de la actividad. No cambia tu meta del día.</div></div>
       <div class="wo-chips" id="woChips" role="group" aria-label="Duración"></div>
       <div id="woCustom" style="display:none;"><label class="field"><span>MINUTOS</span><div class="input-unit"><input class="input" id="woMin" type="number" inputmode="numeric" min="5" max="600" step="5" value="${minutes}"><i>min</i></div></label></div>
       <label class="field"><span>NOTA (OPCIONAL)</span><input class="input" id="woNote" maxlength="80" placeholder="Ej.: pecho y tríceps" value="${esc(workout && workout.note ? workout.note : '')}" autocomplete="off"></label>

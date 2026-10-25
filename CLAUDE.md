@@ -383,7 +383,30 @@ fotos de stock, tienda de monedas con dinero.
   ordenadas por cercania a lo que falta. Cuenta para `ANALYZE_DAILY_LIMIT` (admin libre); cache 30 min por persona/dia/comida/tramo.
   Sin fotos de stock: mosaico de color con la inicial. Fotos para las ideas ("comunidad"): idea futura, NO hecha. `apiGet` ahora usa
   `cache: 'no-store'` (al volver con Atras el navegador repetia la respuesta vieja del diario). Sin verificar con Gemini real.
-- **Bloque 13 - Calorias explicadas, libras al mes y unidades (PROPUESTO 25 oct 2026; diseno en el canvas, pagina Pruebas, tableros U1-U14; NO IMPLEMENTAR hasta que Andres diga "go").** Pedido de Andres: en Panama mucha gente no entiende las calorias; hablar en libras/kg y explicar. (1) Unidades por persona (peso kg/lb, estatura cm/pies+pulgadas, agua ml/oz con vaso = 8 oz ~237 ml): TODO se sigue guardando en metrico y solo cambia como se ve; la preferencia vive en el servidor (`users`), no en localStorage; modulo unico de formato en el navegador; Ajustes -> Unidades. (2) Meta por RITMO: "cuantas libras al mes" (suave 2 / recomendado 4 / rapido 6) -> calorias = gasto - libras*3500/30 (1 lb de grasa ~ 3.500 kcal, 7.700 por kg), con limites: piso 1.200 mujer / 1.500 hombre / 1.350 otro, maximo ~1 % del peso por semana, menores de 18 sin deficit, peso bajo no baja (las guardas de `nutrition.py` se mantienen); ajuste manual de kcal queda como opcion. Para ganar musculo: ~+250 kcal, proteina 2 g/kg, fuerza 3-4 dias, y se dice claramente que la bascula SUBE. (3) Primer uso de 9 pasos, una pregunta por pantalla con barra de progreso, pantalla "Las calorias en 20 segundos", pantalla "Tu plan" con proyeccion a 1/2/3 meses y "Mueve y mira" (kcal -> libras al mes). (4) Dentro de la app: Objetivos por libras al mes, "ritmo de la semana" en Progreso (promedio de kcal -> libras al mes, solo estimacion) y una frase de ritmo en Inicio. Todo marcado como estimacion; el peso real manda. Tamano L.
+- **Bloque 13 - Calorias explicadas, libras al mes y unidades (HECHO, 25 oct 2026; aprobado por Andres, disenos U1-U14 del canvas).**
+  (1) UNIDADES por persona (`users.units` JSON; `me.units` = {weight kg|lb, height cm|ft, liquid ml|oz, chosen}; `PUT /api/units`): TODO se guarda
+  y calcula en metrico, solo cambia como se VE. Navegador: `static/js/units.js` (`cadenceUnits`: `fmtWeight`, `fmtHeight`, `fmtAmount(g, liquid)`,
+  `fmtWater`, `fmtChange`/`aboutChange` = "unas 4 lb"/"cerca de 1 kg" en mitades, `glassMl()` = 250 ml o 8 oz = 237 ml, `liquidStep`) con copia en
+  localStorage `cadence_units` (el servidor manda; `ensureSession` la actualiza y lanza el evento `cadence-units` para repintar) y
+  `static/js/units-ui.js` (selector de unidades: primer uso y Ajustes -> Unidades). Sin elegir, todo se ve como antes (metrico); el primer uso
+  ofrece lb / pies / oz ya marcadas. Los SOLIDOS siempre van en gramos; los LIQUIDOS (sopas, bebidas) en ml u oz segun la persona: 1 ml = 1 g.
+  `app/foodunits.py` (`is_liquid`: marca dicha > palabras del nombre, con excepciones tipo "leche condensada"); el modelo de vision devuelve
+  `liquid` por componente; se guarda al confirmar (`ConfirmItem.liquid` -> `entry_meta.liquid`); alimentos propios con interruptor
+  (`custom_foods.liquid`). `MealItem/SearchResult/IngredientCandidate/FavoriteItem.liquid` salen en la API. Agua: vaso = 250 ml u 8 oz, la meta
+  son vasos completos (`PUT /api/water/goal` acepta `step_ml`).
+  (2) META POR RITMO: `nutrition.compute_targets(..., pace_lb_month)`: kcal = gasto -/+ libras*3500/30 (`KCAL_PER_LB`), con limites
+  (`max_pace_lb_month`: perdida <= 1 % del peso por semana y nunca bajo el minimo de kcal; menores de 18 y peso bajo no bajan; subir <= 0,5 %
+  por semana) y `Targets.pace_lb_month/max_pace_lb_month/projection_kg` (1, 2 y 3 meses). `ProfileIn/GoalsIn.pace_lb_month`; `users.pace_lb`
+  (None = calorias a mano o regla antigua); `TargetsOut.change_lb_month` (con signo: lo que hace la bascula al mes). `/api/today` devuelve
+  `maintenance_kcal` y `goal_change_lb_month`; `/api/progress` devuelve `pace` (promedio de los ultimos 7 dias completos con registro, minimo
+  3 -> libras/mes estimadas). Todo se muestra como ESTIMACION.
+  (3) PRIMER USO nuevo en `onboarding.html` (una pregunta por pantalla, barra de progreso, pantalla-mensaje en degradado, "La caloria en 20
+  segundos", "Tu plan" con proyeccion y "Mueve y mira"). (4) BIENVENIDA UNICA para quien ya existia: `onboarding.html?mode=update`;
+  `users.welcome_v2` (la migracion deja en 0 a todos los existentes; las cuentas nuevas nacen en 1) -> `me.needs_welcome`; `ensureSession`
+  redirige; no repite lo ya contestado (novedades, unidades, caloria, su meta actual traducida a libras con la opcion de dejarla o elegir ritmo,
+  plan); `POST /api/welcome/done` la apaga para siempre; si se deja a medias vuelve a salir hasta terminarla. Quien no termino el primer uso
+  hace el flujo completo. Dentro de la app: Objetivos por libras al mes (`goals.html`), tarjeta "Esta semana" en Progreso, frase de ritmo en
+  Inicio, agua/porciones/peso/estatura en las unidades de la persona. Pruebas: `tests/test_units_pace.py`.
 - Orden sugerido: 8, 9, 11, 10, 12. Cada bloque se publica completo y por separado.
 
 ## Velocidad (25 oct 2026; mantener)

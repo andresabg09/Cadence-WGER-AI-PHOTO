@@ -53,7 +53,7 @@
 
     <div class="stat-row">
       <div class="stat"><b id="statStreak" style="color:#FF8A5B;">–</b><span>RACHA</span></div>
-      <div class="stat"><b id="statWeight">–</b><span>PESO KG</span></div>
+      <div class="stat"><b id="statWeight">–</b><span id="statWeightLabel">PESO KG</span></div>
       <div class="stat"><b id="statKcal" style="color:var(--accent-to);">–</b><span>META KCAL</span></div>
     </div>
 
@@ -76,6 +76,7 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/units.js"></script>
 <script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
 <script>if (window.sfx) sfx.enter('enterProfile');</script>
@@ -112,10 +113,11 @@ function render() {
   try { if (me.avatar_v) localStorage.setItem('cadence_avatar_v', String(me.avatar_v)); else localStorage.removeItem('cadence_avatar_v'); } catch { /* no storage */ }
   $('userName').textContent = me.name;
   $('userEmail').textContent = me.email;
-  $('statWeight').textContent = p.weight_kg != null ? Number(p.weight_kg).toFixed(1) : '–';
+  $('statWeight').textContent = p.weight_kg != null ? Number(cadenceUnits.weightValue(p.weight_kg).toFixed(1)) : '–';
+  $('statWeightLabel').textContent = `PESO ${cadenceUnits.weightLabel().toUpperCase()}`;
   $('statKcal').textContent = me.targets ? me.targets.kcal : '–';
   $('goalHint').textContent = p.goal ? GOAL_LABEL[p.goal].toUpperCase() : '';
-  $('weightHint').textContent = p.target_weight_kg ? `META ${p.target_weight_kg} KG` : '';
+  $('weightHint').textContent = p.target_weight_kg ? `META ${cadenceUnits.fmtWeight(p.target_weight_kg).toUpperCase()}` : '';
 }
 
 async function loadStreak() {
@@ -182,12 +184,12 @@ $('editName').addEventListener('click', () => openSheet(`
 $('weightRow').addEventListener('click', () => openSheet(`
   <h3 class="disp" style="margin:0 0 4px;font-size:17px;">Registrar mi peso</h3>
   <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);">Se guarda con la fecha de hoy.</p>
-  <div class="input-unit"><input class="input" id="kg" type="number" inputmode="decimal" min="30" max="300" step="0.1" value="${me.profile.weight_kg || ''}" placeholder="70.0"><i>kg</i></div>
+  <div class="input-unit"><input class="input" id="kg" type="number" inputmode="decimal" min="1" max="700" step="0.1" value="${me.profile.weight_kg ? Number(cadenceUnits.weightValue(me.profile.weight_kg).toFixed(1)) : ''}" placeholder="${cadenceUnits.isLb() ? '154.0' : '70.0'}"><i>${cadenceUnits.weightLabel()}</i></div>
   <div class="form-error" id="sErr" style="margin-top:10px;"></div>
   <div class="sheet-actions"><button class="btn-primary" id="sSave">Guardar peso</button></div>`, (sheet, close) => {
   sheet.querySelector('#sSave').addEventListener('click', async () => {
     try {
-      me = await apiPost('api/weight', { kg: Number(sheet.querySelector('#kg').value) });
+      me = await apiPost('api/weight', { kg: Math.round(cadenceUnits.weightToKg(Number(sheet.querySelector('#kg').value)) * 100) / 100 });
       if (window.sfx) sfx.play('save');
       close(render);
     } catch (err) { const e = sheet.querySelector('#sErr'); e.textContent = err.message; e.classList.add('show'); }

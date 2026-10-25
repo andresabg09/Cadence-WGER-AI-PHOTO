@@ -7,7 +7,9 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from . import auth, nutrition, security, store
+import json
+
+from . import auth, foodunits, nutrition, security, store
 from .config import settings
 from .meals import local_now
 
@@ -47,9 +49,18 @@ class ProfileIn(BaseModel):
     goal: str
     target_weight_kg: float | None = Field(default=None, ge=30, le=300)
     kcal: float | None = Field(default=None, ge=800, le=6000)  # the user nudged the calculated calories
+    # Pounds per month the person wants to move in the direction of the goal: the calories come from it.
+    pace_lb_month: float | None = Field(default=None, ge=0, le=30)
+
+
+class UnitsIn(BaseModel):
+    weight: str = "kg"
+    height: str = "cm"
+    liquid: str = "ml"
 
 
 class GoalsIn(BaseModel):
+    pace_lb_month: float | None = Field(default=None, ge=0, le=30)
     goal: str | None = None
     target_weight_kg: float | None = Field(default=None, ge=30, le=300)
     kcal: float | None = Field(default=None, ge=800, le=6000)
@@ -74,6 +85,17 @@ class TargetsOut(BaseModel):
     fat_g: int
     maintenance_kcal: int | None = None
     note: str | None = None
+    pace_lb_month: float | None = None  # pounds per month towards the goal these calories give (an estimate)
+    max_pace_lb_month: float | None = None  # the fastest pace that is safe for this person
+    projection_kg: list[float] | None = None  # expected weight after 1, 2 and 3 months
+    change_lb_month: float | None = None  # signed: what the scale does a month eating this (negative = loses)
+
+
+class UnitsOut(BaseModel):
+    weight: str = "kg"
+    height: str = "cm"
+    liquid: str = "ml"
+    chosen: bool = False  # False = never picked: shown in metric as before; the welcome offers the choice
 
 
 class ProfileOut(BaseModel):
@@ -98,6 +120,9 @@ class MeOut(BaseModel):
     avatar_v: int | None = None  # version of the profile picture (None = no picture); GET /api/avatar?v=...
     frame: str | None = None  # the profile-picture frame bought with coins and worn now
     themes: list[str] = []  # colour themes bought with coins (each device picks which one to use)
+    units: UnitsOut = UnitsOut()
+    pace_lb_month: float | None = None  # the pace the goal was set by (None = calories chosen by hand)
+    needs_welcome: bool = False  # signed up before pounds-per-month and units: sees the one-time "what changed" welcome
 
 
 # ------------------------------------------------------------------ helpers
@@ -106,14 +131,38 @@ def _today() -> date:
     return local_now().date()
 
 
+def _units_of(user: store.User) -> UnitsOut:
+    try:
+        raw = json.loads(user.units) if user.units else None
+    except ValueError:
+        raw = None
+    if not isinstance(raw, dict):
+        return UnitsOut()
+    weight = raw.get("weight") if raw.get("weight") in foodunits.WEIGHT_UNITS else "kg"
+    height = raw.get("height") if raw.get("height") in foodunits.HEIGHT_UNITS else "cm"
+    liquid = raw.get("liquid") if raw.get("liquid") in foodunits.LIQUID_UNITS else "ml"
+    return UnitsOut(weight=weight, height=height, liquid=liquid, chosen=True)
+
+
+def maintenance_for(user: store.User) -> float | None:
+    """What this person's body spends in a day, from their saved profile (None while the profile is incomplete)."""
+    weight = store.latest_weight(user.id)
+    if not (user.sex and user.birthdate and user.height_cm and user.activity and weight):
+        return None
+    return nutrition.maintenance_kcal(user.sex, date.fromisoformat(user.birthdate), user.height_cm, weight, user.activity, _today())
+
+
 def me_out(user: store.User) -> MeOut:
     age = None
     if user.birthdate:
         age = nutrition.age_on(date.fromisoformat(user.birthdate), _today())
     targets = None
     if user.goal_kcal:
+        maintenance = maintenance_for(user)
         targets = TargetsOut(kcal=round(user.goal_kcal), protein_g=round(user.goal_protein or 0),
-                             carbs_g=round(user.goal_carbs or 0), fat_g=round(user.goal_fat or 0))
+                             carbs_g=round(user.goal_carbs or 0), fat_g=round(user.goal_fat or 0),
+                             maintenance_kcal=round(maintenance / 10) * 10 if maintenance else None,
+                             change_lb_month=round(nutrition.weight_change_lb_month(maintenance, user.goal_kcal), 1) if maintenance else None)
     return MeOut(
         id=user.id, email=user.email, name=user.name, is_admin=user.is_admin, onboarded=user.onboarded,
         profile=ProfileOut(sex=user.sex, birthdate=user.birthdate, age=age, height_cm=user.height_cm,
@@ -123,6 +172,8 @@ def me_out(user: store.User) -> MeOut:
         avatar_v=store.avatar_version(user.id),
         frame=store.equipped_items(user.id).get("frame"),
         themes=sorted(k for k in store.owned_items(user.id) if k.startswith("tema_")),
+        units=_units_of(user), pace_lb_month=user.pace_lb,
+        needs_welcome=bool(user.onboarded and not user.welcome_v2),
     )
 
 
@@ -139,7 +190,14 @@ def _validate_profile(body: ProfileIn) -> None:
 
 
 def _targets(body: ProfileIn) -> nutrition.Targets:
-    return nutrition.compute_targets(body.sex, body.birthdate, body.height_cm, body.weight_kg, body.activity, body.goal, _today())
+    return nutrition.compute_targets(body.sex, body.birthdate, body.height_cm, body.weight_kg, body.activity, body.goal, _today(),
+                                     body.pace_lb_month)
+
+
+def _targets_out(computed: nutrition.Targets) -> TargetsOut:
+    out = TargetsOut(**{k: v for k, v in computed.__dict__.items()})
+    out.change_lb_month = round(nutrition.weight_change_lb_month(computed.maintenance_kcal, computed.kcal), 1)
+    return out
 
 
 # ------------------------------------------------------------------ auth
@@ -224,9 +282,13 @@ def preview_plan(body: ProfileIn, user: store.User = Depends(auth.current_user))
     computed = _targets(body)
     if body.kcal:  # the user nudged the calories: same protein per kg, the rest re-split
         protein, carbs, fat = nutrition.macros_for_kcal(body.kcal, body.weight_kg, body.goal)
+        change = nutrition.weight_change_lb_month(computed.maintenance_kcal, body.kcal)
+        along = -change if body.goal == "lose" else change if body.goal in ("gain", "muscle") else 0.0
         computed = nutrition.Targets(kcal=round(body.kcal), protein_g=protein, carbs_g=carbs, fat_g=fat,
-                                     maintenance_kcal=computed.maintenance_kcal, note=computed.note)
-    return TargetsOut(**computed.__dict__)
+                                     maintenance_kcal=computed.maintenance_kcal, note=computed.note,
+                                     pace_lb_month=round(max(0.0, along), 1), max_pace_lb_month=computed.max_pace_lb_month,
+                                     projection_kg=[round(body.weight_kg + change / nutrition.LB_PER_KG * m, 1) for m in (1, 2, 3)])
+    return _targets_out(computed)
 
 
 @router.put("/api/profile", response_model=MeOut)
@@ -243,7 +305,10 @@ def save_profile(body: ProfileIn, user: store.User = Depends(auth.current_user))
         sex=body.sex, birthdate=body.birthdate.isoformat(), height_cm=body.height_cm, activity=body.activity,
         goal=body.goal, target_weight_kg=body.target_weight_kg, goal_kcal=kcal, goal_protein=protein,
         goal_carbs=carbs, goal_fat=fat, onboarded=True,
+        pace_lb=None if body.kcal else computed.pace_lb_month if body.pace_lb_month is not None else None,
     )
+    if not user.onboarded:  # finishing the full first-use flow: nothing "new" left to explain
+        fields["welcome_v2"] = True
     if body.name:
         fields["name"] = body.name.strip()
     store.update_user(user.id, **fields)
@@ -264,13 +329,22 @@ def save_goals(body: GoalsIn, user: store.User = Depends(auth.current_user)):
         computed = nutrition.compute_targets(user.sex, date.fromisoformat(user.birthdate), user.height_cm, weight,
                                              user.activity, goal, _today())
         kcal, protein, carbs, fat = computed.kcal, computed.protein_g, computed.carbs_g, computed.fat_g
+    pace = user.pace_lb if goal == user.goal else None
+    if body.goal and body.goal != user.goal:
+        pace = None
+    if body.pace_lb_month is not None:  # the goal by pace: calories come from it, within what is safe
+        computed = nutrition.compute_targets(user.sex, date.fromisoformat(user.birthdate), user.height_cm, weight,
+                                             user.activity, goal, _today(), body.pace_lb_month)
+        kcal, protein, carbs, fat = computed.kcal, computed.protein_g, computed.carbs_g, computed.fat_g
+        pace = computed.pace_lb_month
     if body.kcal is not None:
         kcal = body.kcal
         protein, carbs, fat = nutrition.macros_for_kcal(kcal, weight, goal)
+        pace = None  # calories chosen by hand
     if body.protein_g is not None: protein = body.protein_g
     if body.carbs_g is not None: carbs = body.carbs_g
     if body.fat_g is not None: fat = body.fat_g
-    fields = dict(goal=goal, goal_kcal=kcal, goal_protein=protein, goal_carbs=carbs, goal_fat=fat)
+    fields = dict(goal=goal, goal_kcal=kcal, goal_protein=protein, goal_carbs=carbs, goal_fat=fat, pace_lb=pace)
     if body.target_weight_kg is not None:
         fields["target_weight_kg"] = body.target_weight_kg
     store.update_user(user.id, **fields)
@@ -283,6 +357,22 @@ def rename(body: dict, user: store.User = Depends(auth.current_user)):
     if not 1 <= len(name) <= 40:
         raise HTTPException(422, "Escribe un nombre de hasta 40 caracteres")
     store.update_user(user.id, name=name)
+    return me_out(store.get_user(user.id))
+
+
+@router.put("/api/units", response_model=MeOut)
+def save_units(body: UnitsIn, user: store.User = Depends(auth.current_user)):
+    """How this person wants to SEE measures. Data stays metric: this only changes the display."""
+    if body.weight not in foodunits.WEIGHT_UNITS or body.height not in foodunits.HEIGHT_UNITS or body.liquid not in foodunits.LIQUID_UNITS:
+        raise HTTPException(422, "Unidad no válida")
+    store.update_user(user.id, units=json.dumps({"weight": body.weight, "height": body.height, "liquid": body.liquid}))
+    return me_out(store.get_user(user.id))
+
+
+@router.post("/api/welcome/done", response_model=MeOut)
+def welcome_done(user: store.User = Depends(auth.current_user)):
+    """The one-time "what changed" welcome was finished: it never shows again."""
+    store.update_user(user.id, welcome_v2=True)
     return me_out(store.get_user(user.id))
 
 

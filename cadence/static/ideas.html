@@ -52,6 +52,7 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/units.js"></script>
 <script src="static/js/bits.js"></script>
 <script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
@@ -91,7 +92,7 @@ function paintMeals() {
   }));
 }
 
-function itemsLine(items) { return items.map((i) => `${bits.esc(i.name)} ${Math.round(i.grams)} g`).join(' · '); }
+function itemsLine(items) { return items.map((i) => `${bits.esc(i.name)} ${cadenceUnits.fmtAmount(i.grams, i.liquid)}`).join(' · '); }
 
 function paintFavorites(list) {
   $('favCard').style.display = list.length ? '' : 'none';
@@ -129,7 +130,7 @@ function paintIdeas(d) {
 async function add(btn, items, kcal, protein) {
   btn.disabled = true;
   try {
-    await apiPost('api/confirm', { meal, items: items.map((i) => ({ ingredient_id: i.ingredient_id, amount_grams: i.grams })) });
+    await apiPost('api/confirm', { meal, items: items.map((i) => ({ ingredient_id: i.ingredient_id, amount_grams: i.grams, liquid: !!i.liquid })) });
     swrClear();
     if (window.sfx) sfx.play('save');
     btn.textContent = 'Agregado ✓';

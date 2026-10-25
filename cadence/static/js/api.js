@@ -115,9 +115,16 @@ document.addEventListener('DOMContentLoaded', () => { paintAvatars(); setTimeout
 async function ensureSession({ needOnboarded = true } = {}) {
   const me = await apiGet('api/auth/me');
   rememberUser(me);
+  // The server's choice is the truth; this device keeps a copy. If it differs from what was painted, pages repaint.
+  if (window.cadenceUnits && me.units && cadenceUnits.set(me.units)) window.dispatchEvent(new Event('cadence-units'));
   if (needOnboarded && !me.onboarded) {
     window.location.replace('onboarding.html');
     throw new Error('Falta completar tu perfil');
+  }
+  // Signed up before units and pounds-per-month existed: one single "what changed" welcome, then never again.
+  if (needOnboarded && me.needs_welcome) {
+    window.location.replace('onboarding.html?mode=update');
+    throw new Error('Hay novedades que explicarte');
   }
   return me;
 }

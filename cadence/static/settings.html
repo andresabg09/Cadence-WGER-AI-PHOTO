@@ -38,6 +38,7 @@
       <div class="section-title">APP</div>
       <div class="menu-card">
         <button class="menu-row" id="installRow"><span class="ico" style="background:rgba(61,220,132,0.12);">📲</span><span class="label">Instalar app</span><span class="hint" id="installHint"></span><span class="chev">›</span></button>
+        <button class="menu-row" id="unitsRow"><span class="ico" style="background:rgba(45,212,255,0.12);">📏</span><span class="label">Unidades</span><span class="hint" id="unitsHint"></span><span class="chev">›</span></button>
         <button class="menu-row" id="themeRow"><span class="ico" style="background:rgba(255,138,91,0.12);">🎨</span><span class="label">Apariencia</span><span class="hint" id="themeHint"></span><span class="chev">›</span></button>
         <div class="menu-row" style="cursor: default;"><span class="ico" style="background:rgba(124,92,255,0.14);">🔊</span><span class="label">Sonidos</span><label class="switch"><input type="checkbox" id="soundOn" aria-label="Sonidos"><i></i></label></div>
         <div class="menu-row vol-row" id="volRow"><span class="ico" style="background:transparent;">🔉</span><input type="range" id="soundVol" min="0" max="100" step="5" aria-label="Volumen de los sonidos"><span class="hint" id="volHint"></span></div>
@@ -75,11 +76,13 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/units.js"></script>
 <script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
 <script>if (window.sfx) sfx.enter('enterSettings');</script>
 <script src="static/js/shell.js"></script>
 <script src="static/js/install.js"></script>
+<script src="static/js/units-ui.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 let me = null;
@@ -118,7 +121,10 @@ function render() {
   $('themeHint').textContent = LABELS[getStoredTheme()].toUpperCase();
   $('installHint').textContent = window.cadenceInstall && window.cadenceInstall.isInstalled() ? 'INSTALADA ✓' : '';
   $('adminBox').style.display = me.is_admin ? 'block' : 'none';
+  const u = cadenceUnits.get();
+  $('unitsHint').textContent = `${u.weight === 'lb' ? 'LIBRAS' : 'KG'} · ${u.height === 'ft' ? 'PIES' : 'CM'} · ${u.liquid === 'oz' ? 'ONZAS' : 'ML'}`;
 }
+$('unitsRow').addEventListener('click', () => cadenceUnitsUI.openSheet(() => render()));
 
 // ---- password ----
 $('passwordRow').addEventListener('click', () => openSheet(`

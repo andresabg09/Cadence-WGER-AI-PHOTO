@@ -31,7 +31,7 @@ def test_note_and_media_roundtrip_and_cleanup(monkeypatch):
     assert http.post("/api/entry-media", json=body).json() == {"saved": 1}
 
     meta = store.get_meta(["e1", "zz"])
-    assert meta["e1"] == {"note": "con poca sal", "has_crop": True, "plate_key": "1-e1:0", "box": [0.1, 0.2, 0.3, 0.4]}
+    assert meta["e1"] == {"note": "con poca sal", "has_crop": True, "plate_key": "1-e1:0", "box": [0.1, 0.2, 0.3, 0.4], "liquid": None}
     assert "zz" not in meta
     assert http.get("/api/media/crop/e1").status_code == 200
     assert http.get("/api/media/plate/1-e1:0").headers["content-type"] == "image/jpeg"

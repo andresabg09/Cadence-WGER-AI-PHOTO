@@ -22,6 +22,7 @@ function openFoodSheet(initial, onSaved) {
       <label class="field"><span>CARBOHIDRATOS</span><div class="input-unit"><input class="input" id="fCarb" type="number" inputmode="decimal" min="0" max="100" step="any" value="${num(start.carbs)}"><i>g</i></div></label>
       <label class="field"><span>GRASA</span><div class="input-unit"><input class="input" id="fFat" type="number" inputmode="decimal" min="0" max="100" step="any" value="${num(start.fat)}"><i>g</i></div></label>
       <label class="field" style="grid-column:1 / -1;"><span>FIBRA <em style="font-style:normal;font-weight:600;opacity:.7;">(opcional: mejora tu puntuación)</em></span><div class="input-unit"><input class="input" id="fFibre" type="number" inputmode="decimal" min="0" max="100" step="any" value="${num(start.fibre)}"><i>g</i></div></label>
+      <label style="grid-column:1 / -1;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;cursor:pointer;"><input type="checkbox" id="fLiquid" style="width:18px;height:18px;accent-color:var(--accent-from);"${start.liquid ? ' checked' : ''}><span>Es una bebida o una sopa: se mide en ${cadenceUnits.volumeLabel()}</span></label>
     </div>
     ${start.barcode ? `<div style="font-size:11px;color:var(--ink-soft);margin-top:6px;">Código: <span class="mono">${escapeHtml(start.barcode)}</span></div>` : ''}
     <div class="form-error" id="fErr" style="margin-top:10px;"></div>
@@ -43,6 +44,7 @@ function openFoodSheet(initial, onSaved) {
       fat: Number($('fFat').value || 0),
       fibre: $('fFibre').value === '' ? null : Number($('fFibre').value),
       barcode: start.barcode || null,
+      liquid: $('fLiquid').checked ? true : null, // unchecked: decided from the name ("sopa", "jugo"...)
     };
     if (!body.name) { err.textContent = 'Ponle un nombre al alimento.'; err.classList.add('show'); return; }
     if (!$('fKcal').value || Number.isNaN(body.kcal)) { err.textContent = 'Escribe las calorías por 100 g.'; err.classList.add('show'); return; }

@@ -688,6 +688,76 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
         wger.close()
 
 
+def diary_snapshot(user: store.User) -> list[str]:
+    """What the person has eaten, in plain lines for the chat assistant. Read-only: unlike /api/today it records nothing (no awards)."""
+    now = local_now()
+    today_date = now.date()
+    wger = get_wger_client()
+    try:
+        plan_id = plan_for(wger, user, create=False)
+        start = datetime.combine(today_date - timedelta(days=6), time.min, tzinfo=now.tzinfo)
+        entries = user_entries(wger, user, plan_id, start, datetime.combine(today_date, time.max, tzinfo=now.tzinfo))
+        cache: dict[int, dict] = {}
+
+        def info(ingredient_id: int) -> dict:
+            if ingredient_id not in cache:
+                try:
+                    cache[ingredient_id] = ingredient_info(wger, user, ingredient_id)
+                except Exception:  # noqa: BLE001
+                    cache[ingredient_id] = {"name": "(alimento no disponible)"}
+            return cache[ingredient_id]
+
+        wanted = {e["ingredient"] for e in entries}
+        if len(wanted) > 1:
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                list(pool.map(info, wanted))
+        days: dict[date_type, dict] = {}
+        for entry in entries:
+            day = entry_date(entry)
+            if day is None:
+                continue
+            food = info(entry["ingredient"])
+            ratio = float(entry["amount"]) / 100.0
+            row = days.setdefault(day, {"kcal": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "meals": {}})
+            kcal = float(food.get("energy", 0) or 0) * ratio
+            row["kcal"] += kcal
+            row["protein"] += float(food.get("protein", 0) or 0) * ratio
+            row["carbs"] += float(food.get("carbohydrates", 0) or 0) * ratio
+            row["fat"] += float(food.get("fat", 0) or 0) * ratio
+            if day == today_date:
+                meal = MEAL_LABELS[meal_key_for_entry(entry)]
+                row["meals"].setdefault(meal, []).append(f"{food.get('name', '?')} {round(float(entry['amount']))} g ({round(kcal)} kcal)")
+    finally:
+        wger.close()
+
+    goal_kcal = user.goal_kcal or settings.fallback_goal_kcal
+    lines = [f"- Hoy es {today_date.isoformat()} (hora de {settings.timezone})."]
+    today_row = days.get(today_date)
+    if today_row:
+        lines.append(
+            f"- HOY ha registrado {round(today_row['kcal'])} kcal de una meta de {round(goal_kcal)} "
+            f"(le quedan {round(goal_kcal - today_row['kcal'])}); proteína {round(today_row['protein'])} g de {round(user.goal_protein or settings.fallback_goal_protein_g)}, "
+            f"carbohidratos {round(today_row['carbs'])} g, grasa {round(today_row['fat'])} g."
+        )
+        for meal in MEAL_LABELS.values():
+            if meal in today_row["meals"]:
+                lines.append(f"  · {meal}: " + "; ".join(today_row["meals"][meal]))
+    else:
+        lines.append(f"- HOY todavía no ha registrado comida (meta {round(goal_kcal)} kcal).")
+    past = sorted((d, r) for d, r in days.items() if d != today_date)
+    if past:
+        lines.append("- Días anteriores de esta semana (kcal registradas): " + ", ".join(f"{d.isoformat()} {round(r['kcal'])}" for d, r in past))
+    today_s = today_date.isoformat()
+    lines.append(f"- Agua de hoy: {store.water_ml(user.id, today_s)} ml de {water_goal_for(user)[0]} ml.")
+    workouts = store.workouts_between(user.id, today_s, today_s)
+    if workouts:
+        lines.append("- Entrenamientos de hoy: " + "; ".join(f"{w['kind']} {w['minutes']} min (~{round(w['kcal'])} kcal quemadas, estimado)" for w in workouts))
+    weights = store.weights_since(user.id, (today_date - timedelta(days=30)).isoformat())
+    if weights:
+        lines.append("- Pesos de los últimos 30 días (kg): " + ", ".join(f"{w['day']} {w['kg']}" for w in weights[-8:]))
+    return lines
+
+
 def diary_days(wger: WgerClient, user: store.User, plan_id: int | str | None, now: datetime, start: date_type,
                end: date_type) -> tuple[dict[date_type, int], set[date_type]]:
     """(entries per day, days that count for the streak) between two dates."""

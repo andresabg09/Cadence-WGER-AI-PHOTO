@@ -379,6 +379,21 @@ def test_the_assistant_knows_your_numbers_and_nobody_elses(wger, gemini):
     assert admin.post("/api/assistant", json={"history": []}).status_code == 422
 
 
+def test_the_assistant_sees_what_you_ate_today_and_only_yours(wger, gemini):
+    admin, ana = new_client(), new_client()
+    register(admin, "admin@example.com", name="Andrés Pérez")
+    register(ana, "ana@example.com", admin.post("/api/admin/invites", json={}).json()["code"], name="Ana Gómez")
+    admin.put("/api/profile", json=NEW)
+    admin.post("/api/confirm", json={"items": [{"ingredient_id": 5, "amount_grams": 200}], "meal": "almuerzo"})  # Arroz 130 kcal/100 g
+    stub = gemini("Llevas 260 kcal.", "Aún nada.")
+    ask = {"history": [{"role": "user", "text": "¿Cuántas calorías llevo hoy?"}]}
+    admin.post("/api/assistant", json=ask)
+    system = stub.calls[0]["system"]
+    assert "HOY ha registrado 260 kcal" in system and "Arroz 200 g (260 kcal)" in system
+    ana.post("/api/assistant", json=ask)
+    assert "HOY todavía no ha registrado comida" in stub.calls[1]["system"] and "Arroz" not in stub.calls[1]["system"]
+
+
 def test_the_assistant_fails_softly(wger, gemini):
     http = new_client()
     register(http, "a@example.com")

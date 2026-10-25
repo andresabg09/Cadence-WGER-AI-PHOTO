@@ -2,6 +2,7 @@
 // It answers from a written knowledge base plus their data. It cannot change anything and it is not medical advice.
 (function () {
   const SUGGESTIONS = [
+    '¿Cuántas calorías llevo hoy?',
     '¿Por qué mi meta es esta?',
     '¿Tengo que quemar calorías para ganar músculo?',
     '¿Qué tan exacto es este cálculo?',
@@ -50,7 +51,7 @@
       msgs.scrollTop = msgs.scrollHeight;
       return el;
     };
-    add('bot', 'Hola. Pregúntame cómo se calculan tus calorías, qué significa tu meta o cómo usar cadence. Te respondo con tus propios números.');
+    add('bot', 'Hola. Veo lo que has registrado hoy y esta semana, tu agua, tus entrenos y tu peso. Pregúntame cuántas calorías llevas, por qué tu meta es la que es o cómo usar cadence.');
 
     async function ask(text) {
       const t = text.trim();

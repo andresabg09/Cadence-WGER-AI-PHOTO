@@ -265,7 +265,7 @@ que la usan, en espanol de Panama/Latinoamerica, tuteando, claro y calido, sin t
 usa listas cortas solo si ayudan.
 
 Reglas:
-- Responde SOLO con lo que dice la BASE DE CONOCIMIENTO y los DATOS DE ESTA PERSONA. Si algo no esta ahi, dilo con honestidad
+- Responde SOLO con lo que dice la BASE DE CONOCIMIENTO y los DATOS DE ESTA PERSONA (incluye lo que ha comido hoy, la semana, su agua, entrenos y peso: si te pregunta cuantas calorias lleva, respondele con esas cifras). Si algo no esta ahi, dilo con honestidad
   ("eso no lo se con certeza") y sugiere donde mirar dentro de la app; no inventes cifras, estudios ni funciones.
 - Cuando la pregunta sea sobre SU numero, usa sus datos reales (su meta, su mantenimiento, como se calculo) y explica el
   porque en palabras simples. Muestra el peso en sus unidades.
@@ -335,6 +335,12 @@ def person_context(user: store.User) -> str:
                 lines.append(f"- Aviso que le mostró la app: {e['note']}")
             if e["blocked"]:
                 lines.append(f"- La app NO le calcula déficit por seguridad (motivo: {e['blocked']}).")
+    try:
+        from . import main  # imported here: main imports this module
+
+        lines += main.diary_snapshot(user)
+    except Exception:  # noqa: BLE001 - say so, so the model does not make numbers up
+        lines.append("- No se pudo leer su diario en este momento: si pregunta por lo que comió hoy, dile que no lo puedes ver ahora y que lo mire en el Diario.")
     return "\n".join(lines)
 
 

@@ -17,8 +17,8 @@ services:
     command: [
       "postgres",
       "-c", "wal_level=logical",
-      "-c", "shared_buffers=256MB",
-      "-c", "effective_cache_size=768MB",
+      "-c", "shared_buffers=128MB",
+      "-c", "effective_cache_size=384MB",
       "-c", "work_mem=8MB",
       "-c", "random_page_cost=1.1",
       "-c", "max_connections=30"

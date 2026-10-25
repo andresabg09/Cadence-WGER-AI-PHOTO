@@ -460,6 +460,12 @@ fotos de stock, tienda de monedas con dinero.
   `CELERY_WORKER_CONCURRENCY=1` (el worker solo atiende descargas puntuales del codigo de barras). NO reactivarlas: el catalogo se carga con
   `cadence/scripts/load_ingredients.py`. Si sigue lento: `free -h`, `uptime` y `docker stats --no-stream` en el servidor; el siguiente paso son
   limites de memoria por contenedor (no se pusieron a ciegas: wger necesita memoria al arrancar).
+  Ronda 2 (25 oct): el chequeo de salud de celery (`celery -A wger inspect ping` cada 10 s) arrancaba toda la app de wger cada vez = rafagas de CPU;
+  ahora es un chequeo barato (y web/nginx/cadence a 30 s). Despues, celery_worker y celery_beat pasaron a `profiles: ["celery"]` (NO arrancan)
+  con `USE_CELERY=False`: cada uno cargaba la app completa de wger (cientos de MB) para no hacer nada. Postgres `shared_buffers` 128 MB y redis
+  `maxmemory 128mb`. Los contenedores celery de un despliegue anterior NO se borran solos (compose no quita huerfanos): hay que pararlos una
+  vez (`docker ps --format "{{.Names}}" | grep celery` y `docker stop` / `docker rm`). Para reactivarlo: `COMPOSE_PROFILES=celery` y
+  `USE_CELERY=True`. En redis.conf NO se pueden poner comentarios en la misma linea que un valor.
 - Orden sugerido: 8, 9, 11, 10, 12. Cada bloque se publica completo y por separado.
 
 ## Velocidad (25 oct 2026; mantener)

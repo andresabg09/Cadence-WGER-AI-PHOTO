@@ -76,7 +76,10 @@ services:
     # hog all the available memory. Remove or change according to your needs.
     #mem_limit: 5gb
 
+  # celery (worker y beat) NO arranca por defecto: cada uno carga la app completa de wger en memoria (cientos de MB) y cadence no
+  # lo usa (sin tareas programadas, USE_CELERY=False en prod.env). Para volver a encenderlo: COMPOSE_PROFILES=celery y USE_CELERY=True.
   celery_worker:
+    profiles: ["celery"]
     image: docker.io/wger/server:latest
     logging:
       driver: json-file
@@ -106,6 +109,7 @@ services:
     restart: unless-stopped
 
   celery_beat:
+    profiles: ["celery"]
     image: docker.io/wger/server:latest
     logging:
       driver: json-file

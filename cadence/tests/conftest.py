@@ -29,6 +29,8 @@ def fresh_caches():
     from app import main, wger_client
     main._entries_cache.clear()
     main._entries_gen.clear()
+    from app import calibration
+    calibration.CACHE.clear()
     wger_client._ingredients.clear()
     yield
 

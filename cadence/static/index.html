@@ -98,6 +98,7 @@
         <div style="flex:1;display:flex;flex-direction:column;gap:10px;" id="macroBars"></div>
       </div>
       <div class="pace-line" id="paceLine" style="display:none;"></div>
+      <a class="pace-line" id="calBanner" href="goals.html" style="display:none;color:var(--accent-to);font-weight:700;text-decoration:none;"></a>
       <div class="insight-chip" id="insightChip" style="display:none;">
         <span>✨</span>
         <span><strong>Insight:</strong> <span id="insightText"></span></span>
@@ -397,7 +398,12 @@ function renderMacroBars(totals, goal) {
 let kcalMode = (() => { try { return localStorage.getItem('cadence_kcal_mode') === 'burn' ? 'burn' : 'left'; } catch { return 'left'; } })();
 
 function renderRing(data) {
-  const { totals, goal, burn } = data;
+  const { totals, goal } = data;
+  // "Por quemar" is a way to look at overeating while losing weight; for the other goals (gaining, keeping) there is nothing to burn.
+  const burnAllowed = data.goal_type === 'lose';
+  if (!burnAllowed) kcalMode = 'left';
+  document.querySelector('.hero-card .seg-toggle').style.display = burnAllowed ? '' : 'none';
+  const burn = burnAllowed ? data.burn : null;
   const circumference = 2 * Math.PI * 47; // ~295.3
   let ratio; let big; let caption;
   if (kcalMode === 'burn' && burn) {
@@ -414,6 +420,20 @@ function renderRing(data) {
   document.getElementById('modeBurn').setAttribute('aria-selected', String(kcalMode === 'burn'));
 }
 
+// After a few weeks of weights and food, cadence may have learnt something about the person's body: a link to Objetivos
+// (nothing changes without their yes). Asked at most once per page load, and only for today.
+let calHintAsked = false;
+function loadCalibrationHint(data) {
+  const el = document.getElementById('calBanner');
+  if (calHintAsked || data.date !== data.today) return;
+  calHintAsked = true;
+  apiGet('api/calibration').then((c) => {
+    if (!c.suggestion) return;
+    el.textContent = 'Tus datos sugieren ajustar tu meta · Ver';
+    el.style.display = 'block';
+  }).catch(() => {});
+}
+
 // What the calories mean for the scale, in the person's own units: the point of the whole screen.
 function renderPace(data) {
   const el = document.getElementById('paceLine');
@@ -426,7 +446,8 @@ function renderPace(data) {
 }
 
 function renderInsight(data) {
-  const { totals, goal, burn } = data;
+  const { totals, goal } = data;
+  const burn = data.goal_type === 'lose' ? data.burn : null;
   const chip = document.getElementById('insightChip');
   const text = document.getElementById('insightText');
   if (kcalMode === 'burn' && burn) {
@@ -1441,6 +1462,7 @@ function paintToday(data, stale) {
   document.getElementById('todayKcalLabel').textContent = `${Math.round(data.totals.kcal)} KCAL`;
   renderRing(data);
   renderPace(data);
+  loadCalibrationHint(data);
   renderMacroBars(data.totals, data.goal);
   renderInsight(data);
   renderMeals(data.meals);

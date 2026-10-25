@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import accounts, auth, foodunits, gamify, nutrition, reminders, scoring, store
+from . import accounts, auth, calibration, coach, foodunits, gamify, nutrition, reminders, scoring, store
 from .config import settings
 from .diagnostics import run_diagnostics
 from .progress import achievements as build_achievements, day_totals, streak_runs
@@ -101,6 +101,7 @@ logger = logging.getLogger("cadence")
 app = FastAPI(title="cadence", version="0.1.0")
 app.include_router(accounts.router)
 app.include_router(reminders.router)
+app.include_router(coach.router)
 
 
 @app.on_event("startup")
@@ -193,6 +194,7 @@ def invalidate_entries(user_id: int) -> None:
     """Call after every change to a person's diary: their cached reads are dropped."""
     with _entries_lock:
         _entries_gen[user_id] = _entries_gen.get(user_id, 0) + 1
+    calibration.CACHE.pop(user_id, None)  # what their own food says about their body changes with every entry
 
 
 def user_entries(wger: WgerClient, user: store.User, plan_id: int | str | None, start: datetime, end: datetime) -> list[dict]:
@@ -679,6 +681,7 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
             water_goal_auto=water_goal_for(user)[1],
             maintenance_kcal=_maintenance_round(user),
             goal_change_lb_month=_goal_change(user, goal.kcal),
+            goal_type=None if accounts.health_of(user).get("ed_risk") else user.goal,  # no "burn it off" framing for someone the screening flagged
             burn=_burn(totals.kcal, goal.kcal, store.workouts_between(user.id, shown_date.isoformat(), shown_date.isoformat()), store.latest_weight(user.id)),
         )
     finally:
@@ -864,6 +867,71 @@ def progress(user: store.User = Depends(current_user)):
             target_weight_kg=user.target_weight_kg, achievements=medals, unlocked=sum(m.unlocked for m in medals))
     finally:
         wger.close()
+
+
+# ------------------------------------------------------------------ calibration: what their own weight and food say
+CALIBRATION_TTL = 300  # seconds: it reads a month of diary from wger
+
+
+def _calibration_for(user: store.User, fresh: bool = False) -> dict:
+    """The calibration result and, if it is worth one, the suggestion to offer (None otherwise)."""
+    hit = calibration.CACHE.get(user.id)
+    if hit and not fresh and monotonic() - hit[0] < CALIBRATION_TTL:
+        return hit[1]
+    now = local_now()
+    today_ = now.date()
+    health = accounts.health_of(user)
+    base = accounts.maintenance_for(user, formula_only=True)
+    if not (user.onboarded and user.goal_kcal and base):
+        out = {"ready": False, "reason": "profile", "valid_days": 0, "weigh_ins": 0, "suggestion": None}
+    elif health.get("pregnancy") or health.get("lactation"):
+        out = {"ready": False, "reason": "health", "valid_days": 0, "weigh_ins": 0, "suggestion": None}  # the weight changes for other reasons
+    else:
+        start = today_ - timedelta(days=calibration.WINDOW_DAYS)
+        wger = get_wger_client()
+        try:
+            plan_id = plan_for(wger, user, create=False)
+            entries = user_entries(wger, user, plan_id, datetime.combine(start, time.min, tzinfo=now.tzinfo),
+                                   datetime.combine(today_ - timedelta(days=1), time.max, tzinfo=now.tzinfo))
+            totals = day_totals(entries, lambda ingredient_id: ingredient_info(wger, user, ingredient_id))
+        finally:
+            wger.close()
+        intake = {d.isoformat(): t["kcal"] for d, t in totals.items()}
+        weights = {w["day"]: w["kg"] for w in store.weights_since(user.id, start.isoformat())}
+        current = user.tee_factor or 1.0
+        out = calibration.calibrate(intake, weights, base, user.goal_kcal, current, today_)
+        snoozed = bool(user.calib_next and user.calib_next > today_.isoformat())
+        floor = nutrition._KCAL_FLOOR.get(user.sex, 1350)
+        out["suggestion"] = None if snoozed else calibration.suggestion(out, current, base, user.goal_kcal, floor)
+        out["formula_tee"] = round(base * current)
+        calibration.CACHE[user.id] = (monotonic(), out)  # only the answers that cost a read of the diary are remembered
+    return out
+
+
+@app.get("/api/calibration")
+def calibration_status(user: store.User = Depends(current_user)):
+    return _calibration_for(user)
+
+
+@app.post("/api/calibration/apply")
+def calibration_apply(user: store.User = Depends(current_user)):
+    """The person accepted the suggestion: the expenditure factor and the goal move by the (small) step it offered."""
+    suggestion = _calibration_for(user, fresh=True).get("suggestion")
+    if not suggestion:
+        raise HTTPException(409, "Ya no hay un ajuste que sugerir")
+    protein, fat = user.goal_protein or 0, user.goal_fat or 0
+    carbs = max(0, round((suggestion["goal_kcal"] - protein * 4 - fat * 9) / 4))  # protein and fat stay; carbs take the change
+    store.update_user(user.id, tee_factor=suggestion["factor"], goal_kcal=suggestion["goal_kcal"], goal_carbs=carbs,
+                      calib_next=calibration.next_day(local_now().date()))
+    calibration.CACHE.pop(user.id, None)
+    return accounts.me_out(store.get_user(user.id))
+
+
+@app.post("/api/calibration/dismiss")
+def calibration_dismiss(user: store.User = Depends(current_user)):
+    store.update_user(user.id, calib_next=calibration.next_day(local_now().date()))
+    calibration.CACHE.pop(user.id, None)
+    return {"status": "ok"}
 
 
 # ------------------------------------------------------------------ awards, challenges and the coin shop

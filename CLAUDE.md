@@ -407,6 +407,59 @@ fotos de stock, tienda de monedas con dinero.
   plan); `POST /api/welcome/done` la apaga para siempre; si se deja a medias vuelve a salir hasta terminarla. Quien no termino el primer uso
   hace el flujo completo. Dentro de la app: Objetivos por libras al mes (`goals.html`), tarjeta "Esta semana" en Progreso, frase de ritmo en
   Inicio, agua/porciones/peso/estatura en las unidades de la persona. Pruebas: `tests/test_units_pace.py`.
+- **Bloque 14 - Calorias calibradas (HECHO, 25 oct 2026; aprobado por Andres tras un informe de investigacion propio que se verifico contra las fuentes).**
+  Motivo: las metas salian de 3 niveles de actividad (1,2 / 1,55 / 1,725) y de porcentajes fijos, sin base individual ni limites por cuerpo;
+  nadie puede garantizar una cifra "certificada", asi que el motor ahora (a) pregunta HECHOS, (b) muestra RANGO, (c) se corrige con el peso y
+  la comida de cada persona y (d) tiene reglas de seguridad en codigo. Todo en `app/nutrition.py` (docstring con las fuentes):
+  reposo = Mifflin-St Jeor (Katch-McArdle si hay % de grasa); dia a dia = `LIFESTYLE` very_low 1,30 / low 1,40 / light 1,50 / moderate 1,60 /
+  heavy 1,75 (SIN ejercicio; bandas FAO/OMS/UNU 2004; con pasos mandan: <4k, <7k, <10k, <12,5k); ejercicio planificado se suma NETO
+  ((MET-1) x reposo/min, nunca doble); total <= 2,4 x reposo. Rangos de gasto +-10 % (6 % ya calibrado). Bajar: tope 0,5 / 0,75 / 1 % del
+  peso por semana segun IMC (<25 / 25-30 / >=30) y deficit <= 20 / 25 / 30 % del gasto (10 % desde 65 anos), piso 1.200 / 1.500 / 1.350 kcal;
+  ritmo recomendado = 75 % del maximo. Musculo: superavit por experiencia (principiante 12 %, intermedio 8 %, avanzado 4 %, tope 20 % y
+  0,5 %/sem; Iraki 2019; los escalones son decision de diseno); "subir de peso" sin fuerza = 10 %. Proteina 2,0 (bajar y musculo) / 1,4
+  (mantener, 1,6 si entrena 3+ dias) / 1,6 (subir) g/kg, sobre el peso de IMC 25 si IMC >= 30, min 1,2 desde 65, 0,8 con enfermedad renal.
+  Proyeccion: regla de Hall (el gasto baja 22 kcal por kg perdido) dia a dia, con rango; la regla de 3.500 kcal/lb solo vale como atajo del
+  primer mes. Para musculo el cambio de peso sale de la tabla de ritmos por experiencia, NO de kcal/densidad.
+  SEGURIDAD (no se salta ni con kcal escritas a mano, `kcal_override`): sin deficit para menores, IMC < 18,5, embarazo/lactancia (extra IOM:
+  +340 / +452 kcal 2.o/3.er trimestre, +330 / +400 lactancia), diabetes, enfermedad renal o riesgo de TCA. Cuestionario SCOFF (5 preguntas,
+  `POST /api/screening`): >= 2 "si" = `health.ed_risk`; SOLO se guarda el resultado y la fecha, no las respuestas; se puede repetir a los 30 dias
+  (409 antes); con ed_risk no sale el interruptor "Por quemar". "Por quemar" solo aparece con objetivo bajar (`TodayResponse.goal_type`).
+  Entrada de datos: `users.lifestyle/steps/training(JSON)/lift_exp/body_fat/health(JSON)/tee_factor/calc_done/calib_next`; `accounts.plan_kwargs`
+  los lleva a `compute_targets`; las cuentas antiguas conservan su estimacion de 3 niveles (`breakdown.legacy`) hasta rehacer el cuestionario.
+  GUARDAR EL PERFIL NO REGISTRA UN PESO si el peso no cambio (si no, se inventaban pesajes y se ensuciaba la calibracion).
+  CALIBRACION (`app/calibration.py`, `GET /api/calibration`, `POST /api/calibration/apply|dismiss`): gasto real = ingesta media - pendiente
+  del peso x densidad (7.700 perdiendo, 5.500 ganando: supuesto); pendiente por REGRESION de los pesos (la media movil exponencial atrasa y
+  subestima); solo cuentan dias con >= 60 % de la meta y >= 1.000 kcal (olvidar anotar hace ver un gasto MENOR, por eso lo que baja esta
+  limitado a 0,90 del factor y lo que sube a 1,15); minimo 10 dias, 4 pesos en 12+ dias; peso de los datos 21 % a 10 dias, 100 % a 21; un
+  paso mueve la meta <= 150 kcal; NADA cambia sin que la persona acepte; "Ahora no" calla 14 dias. No se calibra con embarazo/lactancia.
+  ENTREVISTA CON IA (`app/coach.py`, `static/js/activity.js`): chat o voz (`js/recorder.js`, WAV 16 kHz) en que Gemini SOLO convierte lo que la
+  persona cuenta en respuestas estructuradas (nivel, pasos, ejercicios con claves de `ACTIVITIES`, experiencia); el servidor las valida
+  (`validate_activity`: nivel inventado = no sirve, pasos mandan sobre la impresion, minutos/dias acotados) y el calculo es codigo fijo: LA IA
+  NUNCA CALCULA CALORIAS. Maximo 6 preguntas (despues se le exige terminar); si falla o no entiende, se pasa al formulario de opciones (siempre
+  disponible, tambien para quien prefiere responder asi). Lo que escribe/dice la persona es dato, no instruccion (prompt lo dice y no hay
+  herramientas que ejecutar). Limite `CHAT_DAILY_LIMIT` (60 mensajes/dia, admin libre; columna `usage.chats`). `/api/diagnostics?deep=1` prueba
+  la entrevista con un caso fijo (cajera que entrena pesas).
+  ASISTENTE "Pregunta a cadence" (`POST /api/assistant`, `js/assistant.js`, en Objetivos, Ajustes y la bienvenida): NO es un RAG; la base de
+  conocimiento es un archivo (`app/kb/cadence.md`, ~8k caracteres) que va entera en el prompt junto a los numeros reales de la persona
+  (`person_context`: nunca correo ni datos de otras). Los numeros fijos del texto salen del codigo (`{{PLACEHOLDER}}` en el .md, resueltos en
+  `knowledge_base()`; hay prueba): AL CAMBIAR UNA CONSTANTE DE nutrition.py REVISAR EL .md. No cambia datos, no da consejo medico.
+  REVISION UNICA OBLIGATORIA para quienes ya existian: `users.calc_done` (la migracion deja 0 a todos; las cuentas nuevas nacen en 1) ->
+  `me.needs_review`; `ensureSession` redirige a `onboarding.html?mode=update`; si ademas falta la bienvenida v2 es UNA sola pasada. Pasos:
+  novedades, (unidades), (la caloria), dia a dia (entrevista), cuidado (embarazo/lactancia/diabetes/rinon/plan de un profesional), SCOFF si baja
+  de peso, comparar (su meta de hoy LEIDA CON SU DIA A DIA REAL: puede dejar de ser un deficit) y elegir usar la nueva o dejar la que tenia
+  (`keep_goal`), ritmo, plan. Una vez terminada no vuelve. Primer uso nuevo: igual pero sin comparar. Objetivos: "Mi dia a dia" (editar sin tocar
+  la meta), "Por que este numero" (`GET /api/plan/explain`: pasos con sus datos, rango y fuentes), tarjeta de calibracion, ritmos Suave /
+  Recomendado / Rapido que salen del limite seguro que da el servidor. Pruebas: `tests/test_block14.py`.
+  PENDIENTE / NO VERIFICADO: Gemini real en la entrevista (solo se probo con respuestas simuladas; el diagnostico profundo lo comprueba) y en
+  voz desde un telefono; las ecuaciones IOM/NASEM completas y las cifras por nivel de actividad del informe NO se usaron (no verificadas); los
+  escalones de superavit intermedio/avanzado, los puntos dentro de cada banda de dia a dia y la densidad de 5.500 al ganar son decisiones de
+  diseno, no datos publicados; tablero del canvas de este bloque sin hacer.
+- **Infra (25 oct 2026): consumo del servidor.** `config/prod.env` tenia encendidas las tareas SEMANALES de wger (sincronizar ejercicios,
+  imagenes, videos, el volcado completo de ingredientes de wger.de y recalentar el cache de ejercicios) y celery con 4 procesos: cargaban CPU,
+  disco y memoria del servidor que comparte Odoo. Apagadas (`SYNC_*_CELERY=False`, `CACHE_API_EXERCISES_CELERY=False`) y
+  `CELERY_WORKER_CONCURRENCY=1` (el worker solo atiende descargas puntuales del codigo de barras). NO reactivarlas: el catalogo se carga con
+  `cadence/scripts/load_ingredients.py`. Si sigue lento: `free -h`, `uptime` y `docker stats --no-stream` en el servidor; el siguiente paso son
+  limites de memoria por contenedor (no se pusieron a ciegas: wger necesita memoria al arrancar).
 - Orden sugerido: 8, 9, 11, 10, 12. Cada bloque se publica completo y por separado.
 
 ## Velocidad (25 oct 2026; mantener)

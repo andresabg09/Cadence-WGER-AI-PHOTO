@@ -117,6 +117,28 @@ class GeminiVisionClient:
         response = self._client.models.generate_content(model=self._model, contents=[prompt])
         return _parse_ideas(response.text or "[]")
 
+    def _turns(self, turns: list[dict], audio: tuple[bytes, str] | None) -> list:
+        """The conversation as Gemini wants it. `audio` is the person's latest message, spoken."""
+        contents = [types.Content(role="model" if t["role"] == "assistant" else "user", parts=[types.Part.from_text(text=t["text"])])
+                    for t in turns if t.get("text")]
+        if audio:
+            contents.append(types.Content(role="user", parts=[types.Part.from_bytes(data=audio[0], mime_type=audio[1])]))
+        return contents or [types.Content(role="user", parts=[types.Part.from_text(text="Empieza.")])]
+
+    def chat_json(self, system: str, turns: list[dict], audio: tuple[bytes, str] | None = None) -> str:
+        """One turn of a conversation whose answer is JSON (the activity interview). Raw text back: the caller validates it."""
+        response = self._client.models.generate_content(
+            model=self._model, contents=self._turns(turns, audio),
+            config=types.GenerateContentConfig(system_instruction=system, temperature=0.3, response_mime_type="application/json"))
+        return response.text or ""
+
+    def chat_text(self, system: str, turns: list[dict]) -> str:
+        """One turn of a conversation whose answer is plain text (the assistant)."""
+        response = self._client.models.generate_content(
+            model=self._model, contents=self._turns(turns, None),
+            config=types.GenerateContentConfig(system_instruction=system, temperature=0.4))
+        return response.text or ""
+
     def identify_from_audio(self, audio_bytes: bytes, mime_type: str) -> list[DetectedComponent]:
         response = self._client.models.generate_content(
             model=self._model,

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 import json
 
-from . import auth, foodunits, nutrition, security, store
+from . import auth, calibration, foodunits, nutrition, security, store
 from .config import settings
 from .meals import local_now
 
@@ -39,18 +39,44 @@ class PasswordIn(BaseModel):
     new: str = Field(min_length=8, max_length=128)
 
 
+class TrainingIn(BaseModel):
+    kind: str = "otro"  # a key of nutrition.ACTIVITIES
+    minutes: int = Field(ge=5, le=240)  # minutes really moving, per session
+    days: float = Field(ge=0.5, le=7)  # sessions per week
+
+
+class HealthIn(BaseModel):
+    pregnancy: int = Field(default=0, ge=0, le=3)  # trimester (0 = no)
+    lactation: int = Field(default=0, ge=0, le=2)  # 1 = first six months, 2 = months 7 to 12
+    diabetes: bool = False
+    kidney: bool = False
+    professional: bool = False  # already follows a plan from a doctor or dietitian
+
+
+class HealthOut(HealthIn):
+    ed_risk: bool = False  # the quick screening suggested a talk with a professional (the answers are never stored)
+
+
 class ProfileIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=40)
     sex: str
     birthdate: date
     height_cm: float = Field(ge=100, le=250)
     weight_kg: float = Field(ge=30, le=300)
-    activity: str
+    activity: str | None = None  # the old three-level answer; the interview's `lifestyle` replaces it
     goal: str
     target_weight_kg: float | None = Field(default=None, ge=30, le=300)
     kcal: float | None = Field(default=None, ge=800, le=6000)  # the user nudged the calculated calories
     # Pounds per month the person wants to move in the direction of the goal: the calories come from it.
     pace_lb_month: float | None = Field(default=None, ge=0, le=30)
+    # Block 14: how much they move (from the interview or the form), what they train, experience and health.
+    lifestyle: str | None = None
+    steps: int | None = Field(default=None, ge=0, le=40000)
+    training: list[TrainingIn] | None = None
+    lift_exp: str | None = None
+    body_fat_pct: float | None = Field(default=None, ge=3, le=60)
+    health: HealthIn | None = None
+    keep_goal: bool = False  # the one-time review: save the new answers but leave the goal they already had
 
 
 class UnitsIn(BaseModel):
@@ -89,6 +115,12 @@ class TargetsOut(BaseModel):
     max_pace_lb_month: float | None = None  # the fastest pace that is safe for this person
     projection_kg: list[float] | None = None  # expected weight after 1, 2 and 3 months
     change_lb_month: float | None = None  # signed: what the scale does a month eating this (negative = loses)
+    recommended_pace_lb_month: float | None = None
+    projection_low_kg: list[float] | None = None  # lowest / highest weight the estimate allows
+    projection_high_kg: list[float] | None = None
+    maintenance_low: int | None = None  # the expenditure is an estimate: this is the range it probably sits in
+    maintenance_high: int | None = None
+    blocked: str | None = None  # why a deficit was not given
 
 
 class UnitsOut(BaseModel):
@@ -107,6 +139,11 @@ class ProfileOut(BaseModel):
     activity: str | None = None
     goal: str | None = None
     target_weight_kg: float | None = None
+    lifestyle: str | None = None
+    steps: int | None = None
+    training: list[TrainingIn] = []
+    lift_exp: str | None = None
+    body_fat_pct: float | None = None
 
 
 class MeOut(BaseModel):
@@ -123,6 +160,9 @@ class MeOut(BaseModel):
     units: UnitsOut = UnitsOut()
     pace_lb_month: float | None = None  # the pace the goal was set by (None = calories chosen by hand)
     needs_welcome: bool = False  # signed up before pounds-per-month and units: sees the one-time "what changed" welcome
+    needs_review: bool = False  # signed up before the interview: redoes how much they move, once, to recheck the calories
+    health: HealthOut = HealthOut()
+    tee_factor: float | None = None  # learnt from their own weight and food (None / 1 = the formula alone)
 
 
 # ------------------------------------------------------------------ helpers
@@ -144,12 +184,37 @@ def _units_of(user: store.User) -> UnitsOut:
     return UnitsOut(weight=weight, height=height, liquid=liquid, chosen=True)
 
 
-def maintenance_for(user: store.User) -> float | None:
+def _json(raw, default):
+    try:
+        value = json.loads(raw) if raw else default
+    except ValueError:
+        return default
+    return value if isinstance(value, type(default)) else default
+
+
+def health_of(user: store.User) -> dict:
+    return _json(user.health, {})
+
+
+def training_of(user: store.User) -> list[dict]:
+    return nutrition.clean_training(_json(user.training, []))
+
+
+def plan_kwargs(user: store.User) -> dict:
+    """What compute_targets needs, from what the person saved (the interview's answers, or the old three-level one)."""
+    return dict(lifestyle=user.lifestyle, training=training_of(user), lift_exp=user.lift_exp, body_fat_pct=user.body_fat,
+                health=health_of(user), tee_factor=user.tee_factor or 1.0)
+
+
+def maintenance_for(user: store.User, formula_only: bool = False) -> float | None:
     """What this person's body spends in a day, from their saved profile (None while the profile is incomplete)."""
     weight = store.latest_weight(user.id)
-    if not (user.sex and user.birthdate and user.height_cm and user.activity and weight):
+    if not (user.sex and user.birthdate and user.height_cm and (user.lifestyle or user.activity) and weight):
         return None
-    return nutrition.maintenance_kcal(user.sex, date.fromisoformat(user.birthdate), user.height_cm, weight, user.activity, _today())
+    return nutrition.maintenance_estimate(
+        user.sex, date.fromisoformat(user.birthdate), user.height_cm, weight, _today(), lifestyle=user.lifestyle,
+        training=training_of(user), body_fat_pct=user.body_fat, tee_factor=1.0 if formula_only else (user.tee_factor or 1.0),
+        activity=user.activity)
 
 
 def me_out(user: store.User) -> MeOut:
@@ -167,21 +232,29 @@ def me_out(user: store.User) -> MeOut:
         id=user.id, email=user.email, name=user.name, is_admin=user.is_admin, onboarded=user.onboarded,
         profile=ProfileOut(sex=user.sex, birthdate=user.birthdate, age=age, height_cm=user.height_cm,
                            weight_kg=store.latest_weight(user.id), activity=user.activity, goal=user.goal,
-                           target_weight_kg=user.target_weight_kg),
+                           target_weight_kg=user.target_weight_kg, lifestyle=user.lifestyle, steps=user.steps,
+                           training=[TrainingIn(**t) for t in training_of(user)], lift_exp=user.lift_exp, body_fat_pct=user.body_fat),
         targets=targets,
         avatar_v=store.avatar_version(user.id),
         frame=store.equipped_items(user.id).get("frame"),
         themes=sorted(k for k in store.owned_items(user.id) if k.startswith("tema_")),
         units=_units_of(user), pace_lb_month=user.pace_lb,
         needs_welcome=bool(user.onboarded and not user.welcome_v2),
+        needs_review=bool(user.onboarded and not user.calc_done),
+        health=HealthOut(**{k: v for k, v in health_of(user).items() if k in HealthOut.model_fields}),
+        tee_factor=user.tee_factor,
     )
 
 
 def _validate_profile(body: ProfileIn) -> None:
     if body.sex not in nutrition.SEXES:
         raise HTTPException(422, "Elige una opción de sexo")
-    if body.activity not in nutrition.ACTIVITY:
-        raise HTTPException(422, "Elige tu nivel de actividad")
+    if body.lifestyle is not None and body.lifestyle not in nutrition.LIFESTYLE:
+        raise HTTPException(422, "Elige cómo es tu día a día")
+    if body.lifestyle is None and body.steps is None and body.activity not in nutrition.ACTIVITY:
+        raise HTTPException(422, "Cuéntanos cómo es tu día a día")
+    if body.lift_exp is not None and body.lift_exp not in nutrition.LIFTING:
+        raise HTTPException(422, "Elige tu experiencia entrenando")
     if body.goal not in nutrition.GOALS:
         raise HTTPException(422, "Elige tu objetivo")
     age = nutrition.age_on(body.birthdate, _today())
@@ -189,15 +262,34 @@ def _validate_profile(body: ProfileIn) -> None:
         raise HTTPException(422, "cadence es para personas de 13 años o más" if age < 13 else "Revisa tu fecha de nacimiento")
 
 
-def _targets(body: ProfileIn) -> nutrition.Targets:
-    return nutrition.compute_targets(body.sex, body.birthdate, body.height_cm, body.weight_kg, body.activity, body.goal, _today(),
-                                     body.pace_lb_month)
+def _new_answers(body: ProfileIn) -> bool:
+    """True when the request carries the interview's answers (lifestyle or steps), not only the old three-level one."""
+    return body.lifestyle is not None or body.steps is not None
+
+
+def _answers(body: ProfileIn, user: store.User) -> dict:
+    """The saved values for the answers of this request (what to store), merged with what is already known."""
+    if not _new_answers(body):
+        return dict(lifestyle=user.lifestyle, steps=user.steps, training=training_of(user), lift_exp=user.lift_exp,
+                    body_fat_pct=user.body_fat, health=health_of(user))
+    lifestyle = nutrition.lifestyle_from_steps(body.steps) if body.steps is not None else body.lifestyle
+    stored = health_of(user)
+    health = {**(body.health.model_dump() if body.health else {}), "ed_risk": bool(stored.get("ed_risk")), "ed_at": stored.get("ed_at")}
+    return dict(lifestyle=lifestyle, steps=body.steps, training=nutrition.clean_training([t.model_dump() for t in body.training or []]),
+                lift_exp=body.lift_exp if body.goal in ("muscle", "gain") or body.lift_exp else None, body_fat_pct=body.body_fat_pct, health=health)
+
+
+def _targets(body: ProfileIn, user: store.User) -> nutrition.Targets:
+    a = _answers(body, user)
+    return nutrition.compute_targets(
+        body.sex, body.birthdate, body.height_cm, body.weight_kg, body.activity, body.goal, _today(), body.pace_lb_month,
+        lifestyle=a["lifestyle"], training=a["training"], lift_exp=a["lift_exp"], body_fat_pct=a["body_fat_pct"], health=a["health"],
+        tee_factor=(user.tee_factor or 1.0) if user.calc_done else 1.0, kcal_override=body.kcal)
 
 
 def _targets_out(computed: nutrition.Targets) -> TargetsOut:
-    out = TargetsOut(**{k: v for k, v in computed.__dict__.items()})
-    out.change_lb_month = round(nutrition.weight_change_lb_month(computed.maintenance_kcal, computed.kcal), 1)
-    return out
+    fields = TargetsOut.model_fields
+    return TargetsOut(**{k: v for k, v in computed.__dict__.items() if k in fields})
 
 
 # ------------------------------------------------------------------ auth
@@ -279,40 +371,44 @@ def change_password(body: PasswordIn, request: Request, response: Response, user
 @router.post("/api/plan/preview", response_model=TargetsOut)
 def preview_plan(body: ProfileIn, user: store.User = Depends(auth.current_user)):
     _validate_profile(body)
-    computed = _targets(body)
-    if body.kcal:  # the user nudged the calories: same protein per kg, the rest re-split
-        protein, carbs, fat = nutrition.macros_for_kcal(body.kcal, body.weight_kg, body.goal)
-        change = nutrition.weight_change_lb_month(computed.maintenance_kcal, body.kcal)
-        along = -change if body.goal == "lose" else change if body.goal in ("gain", "muscle") else 0.0
-        computed = nutrition.Targets(kcal=round(body.kcal), protein_g=protein, carbs_g=carbs, fat_g=fat,
-                                     maintenance_kcal=computed.maintenance_kcal, note=computed.note,
-                                     pace_lb_month=round(max(0.0, along), 1), max_pace_lb_month=computed.max_pace_lb_month,
-                                     projection_kg=[round(body.weight_kg + change / nutrition.LB_PER_KG * m, 1) for m in (1, 2, 3)])
-    return _targets_out(computed)
+    return _targets_out(_targets(body, user))
 
 
 @router.put("/api/profile", response_model=MeOut)
 def save_profile(body: ProfileIn, user: store.User = Depends(auth.current_user)):
-    """First-run questionnaire and later edits: stores the data and the calculated plan."""
+    """First-run questionnaire and later edits: stores the data and the calculated plan.
+
+    With `keep_goal` (the one-time review of an existing account) the new answers about how much they move are saved and
+    the goal they already had stays as it is."""
     _validate_profile(body)
-    computed = _targets(body)
-    kcal = body.kcal or computed.kcal
-    if body.kcal:
-        protein, carbs, fat = nutrition.macros_for_kcal(body.kcal, body.weight_kg, body.goal)
-    else:
-        protein, carbs, fat = computed.protein_g, computed.carbs_g, computed.fat_g
+    computed = _targets(body, user)
     fields = dict(
-        sex=body.sex, birthdate=body.birthdate.isoformat(), height_cm=body.height_cm, activity=body.activity,
-        goal=body.goal, target_weight_kg=body.target_weight_kg, goal_kcal=kcal, goal_protein=protein,
-        goal_carbs=carbs, goal_fat=fat, onboarded=True,
-        pace_lb=None if body.kcal else computed.pace_lb_month if body.pace_lb_month is not None else None,
+        sex=body.sex, birthdate=body.birthdate.isoformat(), height_cm=body.height_cm, onboarded=True,
+        target_weight_kg=body.target_weight_kg,
     )
+    if not (body.keep_goal and user.onboarded):
+        fields.update(goal=body.goal, goal_kcal=computed.kcal, goal_protein=computed.protein_g, goal_carbs=computed.carbs_g,
+                      goal_fat=computed.fat_g, pace_lb=None if body.kcal else computed.pace_lb_month)  # the pace the calculation used (calories chosen by hand have none)
+    if _new_answers(body):
+        a = _answers(body, user)
+        resting = computed.breakdown["resting_kcal"] or 1
+        changed = (a["lifestyle"], a["training"], a["body_fat_pct"]) != (user.lifestyle, training_of(user), user.body_fat)
+        fields.update(lifestyle=a["lifestyle"], steps=a["steps"], training=json.dumps(a["training"]), lift_exp=a["lift_exp"],
+                      body_fat=a["body_fat_pct"], health=json.dumps(a["health"]), calc_done=True,
+                      activity=nutrition.lifestyle_label_legacy(computed.breakdown["maintenance"] / resting))
+        if changed:
+            fields["tee_factor"] = None  # what the old answers taught us does not carry over to new ones
+    else:
+        fields["activity"] = body.activity
     if not user.onboarded:  # finishing the full first-use flow: nothing "new" left to explain
         fields["welcome_v2"] = True
     if body.name:
         fields["name"] = body.name.strip()
     store.update_user(user.id, **fields)
-    store.set_weight(user.id, _today().isoformat(), body.weight_kg)
+    calibration.CACHE.pop(user.id, None)
+    latest = store.latest_weight(user.id)
+    if latest is None or abs(latest - body.weight_kg) > 0.04:  # saving answers is not weighing yourself: no invented weigh-in
+        store.set_weight(user.id, _today().isoformat(), body.weight_kg)
     return me_out(store.get_user(user.id))
 
 
@@ -324,22 +420,26 @@ def save_goals(body: GoalsIn, user: store.User = Depends(auth.current_user)):
     if goal not in nutrition.GOALS:
         raise HTTPException(422, "Objetivo no válido")
     weight = store.latest_weight(user.id) or 70
+    born = date.fromisoformat(user.birthdate)
+    kwargs = plan_kwargs(user)
+
+    def compute(pace=None, kcal=None):
+        return nutrition.compute_targets(user.sex, born, user.height_cm, weight, user.activity, goal, _today(), pace,
+                                         kcal_override=kcal, **kwargs)
+
     kcal, protein, carbs, fat = user.goal_kcal, user.goal_protein, user.goal_carbs, user.goal_fat
-    if body.goal and body.goal != user.goal:  # a new goal means a new calculation
-        computed = nutrition.compute_targets(user.sex, date.fromisoformat(user.birthdate), user.height_cm, weight,
-                                             user.activity, goal, _today())
-        kcal, protein, carbs, fat = computed.kcal, computed.protein_g, computed.carbs_g, computed.fat_g
     pace = user.pace_lb if goal == user.goal else None
-    if body.goal and body.goal != user.goal:
-        pace = None
+    if body.goal and body.goal != user.goal:  # a new goal means a new calculation
+        computed = compute()
+        kcal, protein, carbs, fat = computed.kcal, computed.protein_g, computed.carbs_g, computed.fat_g
+        pace = computed.pace_lb_month if goal in ("lose", "muscle", "gain") else None
     if body.pace_lb_month is not None:  # the goal by pace: calories come from it, within what is safe
-        computed = nutrition.compute_targets(user.sex, date.fromisoformat(user.birthdate), user.height_cm, weight,
-                                             user.activity, goal, _today(), body.pace_lb_month)
+        computed = compute(body.pace_lb_month)
         kcal, protein, carbs, fat = computed.kcal, computed.protein_g, computed.carbs_g, computed.fat_g
         pace = computed.pace_lb_month
     if body.kcal is not None:
-        kcal = body.kcal
-        protein, carbs, fat = nutrition.macros_for_kcal(kcal, weight, goal)
+        computed = compute(kcal=body.kcal)
+        kcal, protein, carbs, fat = computed.kcal, computed.protein_g, computed.carbs_g, computed.fat_g
         pace = None  # calories chosen by hand
     if body.protein_g is not None: protein = body.protein_g
     if body.carbs_g is not None: carbs = body.carbs_g
@@ -348,7 +448,61 @@ def save_goals(body: GoalsIn, user: store.User = Depends(auth.current_user)):
     if body.target_weight_kg is not None:
         fields["target_weight_kg"] = body.target_weight_kg
     store.update_user(user.id, **fields)
+    calibration.CACHE.pop(user.id, None)
     return me_out(store.get_user(user.id))
+
+
+SOURCES = [
+    {"title": "Mifflin-St Jeor y su exactitud: Frankenfield 2005, J Am Diet Assoc",
+     "url": "https://pure.psu.edu/en/publications/comparison-of-predictive-equations-for-resting-metabolic-rate-in-/"},
+    {"title": "Niveles de actividad física (PAL): FAO/OMS/UNU 2004 e IOM 2005", "url": "https://www.nationalacademies.org/read/26818/chapter/7"},
+    {"title": "Superávit y ritmo para ganar músculo: Iraki 2019, Sports", "url": "https://pubmed.ncbi.nlm.nih.gov/31247944/"},
+    {"title": "Cuánto cambia el peso de verdad: Hall 2011, Lancet", "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3127505"},
+    {"title": "Proteína y ejercicio: posición de la ISSN 2017", "url": "https://pubmed.ncbi.nlm.nih.gov/28642676/"},
+]
+
+
+def explain_for(user: store.User) -> dict:
+    """How the saved goal was built, step by step, for the "why this number" screen."""
+    if not (user.onboarded and user.birthdate and user.goal):
+        raise HTTPException(409, "Completa primero tu perfil")
+    weight = store.latest_weight(user.id) or 70
+    computed = nutrition.compute_targets(user.sex, date.fromisoformat(user.birthdate), user.height_cm, weight, user.activity, user.goal,
+                                         _today(), user.pace_lb, kcal_override=user.goal_kcal, **plan_kwargs(user))
+    return {"breakdown": computed.breakdown, "kcal": round(user.goal_kcal or computed.kcal), "protein_g": round(user.goal_protein or computed.protein_g),
+            "maintenance_low": computed.maintenance_low, "maintenance_high": computed.maintenance_high, "blocked": computed.blocked,
+            "note": computed.note, "calibrated": bool(user.tee_factor and user.tee_factor != 1.0), "sources": SOURCES,
+            "by_hand": user.pace_lb is None and user.goal in ("lose", "muscle", "gain")}
+
+
+@router.get("/api/plan/explain")
+def plan_explain(user: store.User = Depends(auth.current_user)):
+    return explain_for(user)
+
+
+class ScreeningIn(BaseModel):
+    answers: list[bool] = Field(min_length=5, max_length=5)
+
+
+SCREENING_RETRY_DAYS = 30
+
+
+@router.post("/api/screening")
+def screening(body: ScreeningIn, user: store.User = Depends(auth.current_user)):
+    """The five SCOFF questions (Morgan 1999) before choosing to lose weight. Two or more "yes" suggest talking to a
+    professional: cadence then gives no deficit. It is a screening, not a diagnosis, and ONLY the result is kept.
+    A positive result stays for 30 days; after that they can answer again (the questionnaire misjudges some people)."""
+    health = health_of(user)
+    if health.get("ed_risk") and health.get("ed_at"):
+        wait = SCREENING_RETRY_DAYS - (_today() - date.fromisoformat(health["ed_at"])).days
+        if wait > 0:
+            raise HTTPException(409, f"Podrás volver a responderlo en {wait} días. Mientras tanto, si lo necesitas, habla con un médico o nutricionista.")
+    flag = sum(body.answers) >= 2
+    health["ed_risk"] = flag
+    health["ed_at"] = _today().isoformat()
+    store.update_user(user.id, health=json.dumps(health))
+    calibration.CACHE.pop(user.id, None)
+    return {"ed_risk": flag}
 
 
 @router.put("/api/name", response_model=MeOut)
@@ -425,6 +579,7 @@ def log_weight(body: WeightIn, user: store.User = Depends(auth.current_user)):
     if day > _today():
         raise HTTPException(422, "No se puede registrar un peso en el futuro")
     store.set_weight(user.id, day.isoformat(), body.kg)
+    calibration.CACHE.pop(user.id, None)
     return me_out(store.get_user(user.id))
 
 

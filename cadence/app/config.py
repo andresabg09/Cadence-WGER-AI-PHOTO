@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     admin_email: str = ""
     open_registration: bool = False
     analyze_daily_limit: int = 40  # photo analyses per person per day (the administrator is exempt); 0 = no limit
+    chat_daily_limit: int = 60  # messages to the interview and the assistant per person per day (administrator exempt); 0 = no limit
 
     # Behavior
     user_name: str = "Andrés"  # shown in the dashboard greeting

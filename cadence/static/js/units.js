@@ -37,7 +37,7 @@
     // "unas 4 lb": it is an estimate, so it is said in halves, never as 3.87
     fmtChange: (lb) => `${trim(Math.max(0.5, Math.round(Math.abs(U.paceValue(lb)) * 2) / 2), 1)} ${U.weightLabel()}`,
     // "unas 4 lb" / "cerca de 1 kg": how a monthly change is said in a sentence
-    aboutChange(lb) { const v = Math.max(0.5, Math.round(Math.abs(U.paceValue(lb)) * 2) / 2); return `${v <= 1 ? 'cerca de' : 'unas'} ${trim(v, 1)} ${U.weightLabel()}`; },
+    aboutChange(lb) { const v = Math.max(0.5, Math.round(Math.abs(U.paceValue(lb)) * 2) / 2); return `${v <= 1 ? 'cerca de' : U.isLb() ? 'unas' : 'unos'} ${trim(v, 1)} ${U.weightLabel()}`; },
     // Height
     isFt: () => current.height === 'ft',
     heightParts(cm) { const inches = Math.round(cm / CM_PER_IN); return { ft: Math.floor(inches / 12), inch: inches % 12 }; },

@@ -74,12 +74,19 @@
   </div>
 
   <div class="app-content" style="display:flex;flex-direction:column;gap:16px;padding-bottom:60px;">
+    <div id="calBox"></div>
     <div class="meal-pick" id="goalPick" role="group" aria-label="Objetivo"></div>
 
     <div class="weight-cards">
       <div class="weight-card"><div class="t">PESO ACTUAL</div><div class="mono" style="font-size:21px;font-weight:700;"><span id="curWeight">–</span><span style="font-size:12px;color:var(--ink-soft);" id="curUnit"> kg</span></div></div>
       <label class="weight-card goal"><div class="t">META</div><div style="display:flex;align-items:baseline;gap:4px;"><input id="targetWeight" type="number" inputmode="decimal" min="1" max="700" step="0.1" placeholder="—"><span style="font-size:12px;color:var(--ink-soft);" id="tgtUnit">kg</span></div></label>
     </div>
+
+    <div class="hl-card" id="dayCard" style="display:flex;align-items:center;gap:12px;">
+      <div style="flex:1;min-width:0;"><div style="font-size:10.5px;color:var(--ink-soft);font-weight:700;letter-spacing:0.06em;">MI DÍA A DÍA</div><div id="dayText" style="font-size:13.5px;line-height:1.45;margin-top:4px;"></div></div>
+      <button type="button" class="btn-quiet" id="dayEdit">Cambiar</button>
+    </div>
+    <div class="pace-note warn" id="blockNote" style="display:none;margin-top:0;"></div>
 
     <div class="pace-card" id="paceCard">
       <div class="t" id="paceTitle">MI RITMO</div>
@@ -105,7 +112,8 @@
       <div class="nudge" id="nudge"><button type="button" id="less" aria-label="Menos calorías">−</button><span style="font-size:11.5px;color:var(--ink-soft);">Calorías a mano, de 50 en 50</span><button type="button" id="more" aria-label="Más calorías">+</button></div>
     </div>
 
-    <button class="menu-row menu-card" id="howBtn" style="border-radius:18px;"><span class="label">Cómo se calcula<br><small style="color:var(--ink-soft);font-weight:500;font-size:12px;">Qué es una caloría y de dónde sale cada número</small></span><span class="chev">›</span></button>
+    <button class="menu-row menu-card" id="howBtn" style="border-radius:18px;"><span class="label">Por qué este número<br><small style="color:var(--ink-soft);font-weight:500;font-size:12px;">Paso a paso, con tus datos y las fuentes</small></span><span class="chev">›</span></button>
+    <button class="menu-row menu-card" id="askBtn" style="border-radius:18px;"><span class="label">Pregúntale a cadence<br><small style="color:var(--ink-soft);font-weight:500;font-size:12px;">Resuelve tus dudas con tus propios números</small></span><span class="chev">›</span></button>
     <button class="menu-row menu-card" id="manualBtn" style="border-radius:18px;"><span class="label">Prefiero fijar las calorías yo<br><small style="color:var(--ink-soft);font-weight:500;font-size:12px;">Ajuste manual de las calorías y los macros</small></span><span class="chev" id="manualChev">›</span></button>
     <div class="macro-edit" id="macroEdit">
       <label class="field"><span>PROTEÍNA g</span><input class="input" id="eP" type="number" inputmode="numeric" min="0" max="500"></label>
@@ -120,6 +128,9 @@
 
 <script src="static/js/api.js"></script>
 <script src="static/js/units.js"></script>
+<script src="static/js/recorder.js"></script>
+<script src="static/js/activity.js"></script>
+<script src="static/js/assistant.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/shell.js"></script>
 <script>
@@ -134,12 +145,18 @@ let mode = 'keep';       // keep: what is saved now | pace: calculated from the 
 let plan = null;         // the last calculation (maintenance, projection, notes)
 let macrosDirty = false; // the person typed macros by hand
 
-// Pace in the person's own unit: pounds (steps of 1) or kilograms (steps of 0.5), per month.
-const paceStep = () => (U.isLb() ? 1 : 0.5);
-const paceDefault = () => U.paceToLb(U.isLb() ? (goal === 'lose' ? 4 : 2) : (goal === 'lose' ? 2 : 1)); // lb per month: what we recommend
+// Pace in the person's own unit: pounds (steps of 0.5) or kilograms (steps of 0.25), per month.
+let recPace = null;      // the server's recommended pace for this body and goal (lb a month)
+const paceStep = () => (U.isLb() ? 0.5 : 0.25);
+const roundPace = (v) => Math.max(paceStep(), Math.round(v / paceStep()) * paceStep());
+const paceDefault = () => (recPace != null ? recPace : 0);
+// Gentle / recommended / fastest SAFE pace for this body: the limit comes from the server.
 const paceChoices = () => {
-  if (U.isLb()) return goal === 'lose' ? [['Suave', 2], ['Recomendado', 4], ['Rápido', 6]] : [['Suave', 1], ['Recomendado', 2], ['Rápido', 3]];
-  return goal === 'lose' ? [['Suave', 1], ['Recomendado', 2], ['Rápido', 3]] : [['Suave', 0.5], ['Recomendado', 1], ['Rápido', 1.5]];
+  const max = plan && plan.max_pace_lb_month;
+  if (!max) return [];
+  const rec = recPace != null ? recPace : max * 0.75;
+  const list = [['Suave', rec * 0.5], ['Recomendado', rec], ['Rápido', max]].map(([label, lb]) => [label, Number(roundPace(U.paceValue(lb)).toFixed(2))]);
+  return list.filter(([, v], i) => list.findIndex(([, w]) => w === v) === i);
 };
 const showError = (message) => { $('error').textContent = message || ''; $('error').classList.toggle('show', Boolean(message)); };
 const paceText = (valueUnit) => `${Number(valueUnit.toFixed(1))} ${U.weightLabel()}`;
@@ -154,8 +171,12 @@ function fill(t) {
 }
 
 function paint() {
-  const moving = goal === 'lose' || goal === 'gain' || goal === 'muscle';
+  const blocked = Boolean(plan && plan.blocked);
+  const moving = (goal === 'lose' || goal === 'gain' || goal === 'muscle') && !blocked;
   $('paceCard').style.display = moving ? 'block' : 'none';
+  $('blockNote').style.display = blocked ? 'block' : 'none';
+  if (blocked) $('blockNote').textContent = plan.note || '';
+  paintDay();
   $('paceTitle').textContent = goal === 'lose' ? '¿CUÁNTO QUIERES BAJAR?' : '¿CUÁNTO QUIERES SUBIR?';
   const value = U.paceValue(paceLb);
   $('paceNum').textContent = Number(value.toFixed(1));
@@ -166,16 +187,18 @@ function paint() {
   const p = me.profile;
   const maintenance = plan && plan.maintenance_kcal;
   const change = plan && plan.change_lb_month;
+  const span = plan && plan.maintenance_low ? ` (entre ${plan.maintenance_low.toLocaleString('es')} y ${plan.maintenance_high.toLocaleString('es')}: es una estimación)` : '';
   $('kcalLine').textContent = maintenance
-    ? `Tu cuerpo gasta unas ${maintenance.toLocaleString('es')} kcal al día. ${Math.abs(change) < 0.5 ? 'Con esto mantienes tu peso.' : change < 0 ? `Con esto bajas ${U.aboutChange(change)} al mes.` : `Con esto subes ${U.aboutChange(change)} al mes.`}`
+    ? `Tu cuerpo gasta unas ${maintenance.toLocaleString('es')} kcal al día${span}. ${Math.abs(change) < 0.5 ? 'Con esto mantienes tu peso.' : change < 0 ? `Con esto bajas ${U.aboutChange(change)} al mes.` : `Con esto subes ${U.aboutChange(change)} al mes.`}`
     : '';
   const w = p.weight_kg;
   const proj = plan && plan.projection_kg;
-  $('proj').innerHTML = w && proj && Math.abs(change) >= 0.5
-    ? [['en 1 mes', proj[0]], ['en 2 meses', proj[1]], ['en 3 meses', proj[2]]].map(([l, kg]) => `<div><b>${U.fmtWeight(kg)}</b><span>${l}</span></div>`).join('') : '';
+  const lo = plan && plan.projection_low_kg, hi = plan && plan.projection_high_kg;
+  $('proj').innerHTML = w && proj && Math.abs(change) >= 0.5 && !blocked
+    ? [['en 1 mes', 0], ['en 2 meses', 1], ['en 3 meses', 2]].map(([l, i]) => `<div><b>${U.fmtWeight(proj[i])}</b><span>${l}${lo && hi ? `<br>${U.fmtWeight(Math.min(lo[i], hi[i]))} – ${U.fmtWeight(Math.max(lo[i], hi[i]))}` : ''}</span></div>`).join('') : '';
   const note = $('paceNote');
-  if (plan && plan.note) { note.textContent = plan.note; note.className = 'pace-note warn'; note.style.display = 'block'; }
-  else if (moving && mode === 'pace' && plan && plan.max_pace_lb_month) { note.textContent = 'Es un ritmo seguro para tu peso y tu estatura.'; note.className = 'pace-note ok'; note.style.display = 'block'; }
+  if (plan && plan.note && !blocked) { note.textContent = plan.note; note.className = 'pace-note warn'; note.style.display = 'block'; }
+  else if (moving && mode === 'pace' && plan && plan.max_pace_lb_month) { note.textContent = 'Es un ritmo seguro para tu peso y tu estatura. Las proyecciones son estimaciones: el peso real que registres manda.'; note.className = 'pace-note ok'; note.style.display = 'block'; }
   else note.style.display = 'none';
   $('curWeight').textContent = w != null ? Number(U.weightValue(w).toFixed(1)) : '–';
 }
@@ -188,11 +211,15 @@ function renderGoals() {
 async function recalc(extra = {}, { silent = false } = {}) {
   const p = me.profile;
   try {
+    const h = me.health || {};
     const t = await apiPost('api/plan/preview', {
       sex: p.sex, birthdate: p.birthdate, height_cm: p.height_cm, weight_kg: p.weight_kg || 70,
-      activity: p.activity, goal, ...extra,
+      activity: p.activity, lifestyle: p.lifestyle, steps: p.steps, training: p.training || [], lift_exp: p.lift_exp, body_fat_pct: p.body_fat_pct,
+      health: { pregnancy: h.pregnancy || 0, lactation: h.lactation || 0, diabetes: Boolean(h.diabetes), kidney: Boolean(h.kidney), professional: Boolean(h.professional) },
+      goal, ...extra,
     });
     plan = t;
+    if (t.recommended_pace_lb_month != null) recPace = t.recommended_pace_lb_month;
     if (silent) { paint(); return; } // only to learn the limits and the projection: what is saved stays as it is
     fill(t);
     if (extra.pace_lb_month !== undefined && t.pace_lb_month != null) paceLb = t.pace_lb_month; // what was safe, if it was cut
@@ -209,10 +236,12 @@ function setPace(lb) {
   recalc({ pace_lb_month: paceLb });
 }
 
-function changeGoal(next) {
+async function changeGoal(next) {
   goal = next;
   renderGoals();
-  if (goal === 'maintain') { mode = 'pace'; paceLb = 0; recalc({ pace_lb_month: 0 }); paint(); return; }
+  if (goal === 'maintain') { mode = 'pace'; paceLb = 0; await recalc({ pace_lb_month: 0 }); return; }
+  await recalc({}, { silent: true }); // learns the recommended pace and the safe limit for this goal
+  if (plan && plan.blocked) { mode = 'pace'; paceLb = 0; await recalc({ pace_lb_month: 0 }); return; }
   setPace(paceDefault());
 }
 
@@ -231,27 +260,113 @@ $('backLink').addEventListener('click', (e) => {
   if (history.length > 1 && document.referrer.startsWith(window.location.origin)) { e.preventDefault(); history.back(); }
 });
 
-// "Cómo se calcula": a short sheet with the person's own numbers.
-$('howBtn').addEventListener('click', () => {
+// "Mi día a día": what they told us about how they move. Changing it saves the answers (not the goal) and recalculates.
+const LEVEL_TITLES = {};
+apiGet('api/lifestyle').then((d) => d.levels.forEach((l) => { LEVEL_TITLES[l.key] = l.title; paintDay(); })).catch(() => {});
+const KIND_LABELS = {};
+function paintDay() {
+  const p = me && me.profile;
+  if (!p) return;
+  const t = (p.training || []).map((x) => `${x.kind}`);
+  const level = p.lifestyle ? (LEVEL_TITLES[p.lifestyle] || '') : 'Todavía no nos cuentas cómo es tu día';
+  const train = p.training && p.training.length ? `${p.training.length} ${p.training.length === 1 ? 'ejercicio planificado' : 'ejercicios planificados'}` : 'Sin ejercicio planificado';
+  const lift = (goal === 'muscle' || goal === 'gain') && !p.lift_exp ? '<br><span style="color:#C98A2B;">Cuéntanos cuánto llevas entrenando fuerza: define tu ritmo.</span>' : '';
+  $('dayText').innerHTML = `${escapeHtml(level)}<br><span style="color:var(--ink-soft);">${train}${p.steps ? ` · ${p.steps.toLocaleString('es')} pasos` : ''}</span>${lift}`;
+}
+$('dayEdit').addEventListener('click', () => {
+  const scrim = document.createElement('div');
+  scrim.className = 'sheet-scrim';
+  const sheet = document.createElement('div');
+  sheet.className = 'entry-sheet as-sheet';
+  sheet.setAttribute('role', 'dialog');
+  sheet.innerHTML = `<h3 class="disp" style="margin:0 0 4px;">Mi día a día</h3>
+    <p class="ac-hint" style="margin:0 0 14px;">Cuéntanos con hechos cómo te mueves. Lo usamos para calcular lo que gasta tu cuerpo.</p>
+    <div id="dayBox"></div>
+    <div class="form-error" id="dayErr" style="margin-top:10px;"></div>
+    <div class="sheet-actions"><button class="btn-quiet" id="dayCancel">Cancelar</button><button class="btn-primary" id="daySave">Guardar</button></div>`;
+  document.body.append(scrim, sheet);
+  pushOverlay(() => { scrim.remove(); sheet.remove(); });
+  scrim.addEventListener('click', () => dismissOverlay());
+  sheet.querySelector('#dayCancel').addEventListener('click', () => dismissOverlay());
+  let ctl = null;
+  const p = me.profile;
+  cadenceActivity.mount(sheet.querySelector('#dayBox'), { chat: true, goal: () => goal, startWith: p.lifestyle ? 'form' : 'chat',
+    value: { lifestyle: p.lifestyle, steps: p.steps, training: p.training, lift_exp: p.lift_exp, body_fat_pct: p.body_fat_pct } }).then((c) => { ctl = c; });
+  sheet.querySelector('#daySave').addEventListener('click', async () => {
+    const err = sheet.querySelector('#dayErr');
+    const problem = ctl ? ctl.problem() : 'Un momento…';
+    if (problem) { err.textContent = problem; err.classList.add('show'); return; }
+    const a = ctl.read(); const h = me.health || {};
+    try {
+      me = await apiPut('api/profile', { sex: p.sex, birthdate: p.birthdate, height_cm: p.height_cm, weight_kg: p.weight_kg || 70, goal: me.profile.goal,
+        target_weight_kg: p.target_weight_kg || undefined, ...a,
+        health: { pregnancy: h.pregnancy || 0, lactation: h.lactation || 0, diabetes: Boolean(h.diabetes), kidney: Boolean(h.kidney), professional: Boolean(h.professional) }, keep_goal: true });
+      rememberUser(me); swrClear();
+      dismissOverlay(() => { showToast('Guardado: recalculamos tu plan', 'ok'); recalc(mode === 'pace' ? { pace_lb_month: paceLb } : { kcal: kcal }, { silent: false }); loadCalibration(); });
+    } catch (e) { err.textContent = e.message || 'No se pudo guardar'; err.classList.add('show'); }
+  });
+});
+
+// "Por qué este número": the steps with the person's own data, and where they come from.
+$('howBtn').addEventListener('click', async () => {
   const scrim = document.createElement('div');
   scrim.className = 'sheet-scrim';
   const sheet = document.createElement('div');
   sheet.className = 'entry-sheet';
   sheet.setAttribute('role', 'dialog');
-  const m = plan && plan.maintenance_kcal;
-  sheet.innerHTML = `<h3 class="disp">Cómo se calcula</h3>
-    <div style="display:flex;flex-direction:column;gap:12px;margin-top:12px;font-size:13px;line-height:1.5;color:var(--ink-soft);">
-      <p style="margin:0;"><b style="color:var(--ink);">La caloría</b> es la unidad con la que se mide la energía de la comida. Tu cuerpo gasta energía todo el día${m ? `: en tu caso, unas ${m.toLocaleString('es')} calorías` : ''}, aunque estés quieto.</p>
-      <p style="margin:0;"><b style="color:var(--ink);">Si comes menos de lo que gastas</b>, tu cuerpo usa la grasa guardada. Una libra de grasa guarda unas 3.500 calorías: por eso comer 500 menos cada día baja casi una libra por semana.</p>
-      <p style="margin:0;"><b style="color:var(--ink);">Tu meta</b> sale de esa cuenta: lo que gastas, menos (o más) lo que hace falta para el ritmo que elegiste. Nunca bajamos de 1.200 calorías (mujer) o 1.500 (hombre) ni más de un 1 % de tu peso por semana.</p>
-      <p style="margin:0;">Es una estimación: cada cuerpo responde distinto y con el tiempo el ritmo baja un poco. Tu peso real, el que registras, manda.</p>
-    </div>
-    <div class="sheet-actions"><button class="btn-primary" id="howClose">Entendido</button></div>`;
+  sheet.innerHTML = '<h3 class="disp">Por qué este número</h3><p class="ac-hint" style="margin-top:12px;">Un momento…</p>';
   document.body.append(scrim, sheet);
   pushOverlay(() => { scrim.remove(); sheet.remove(); });
   scrim.addEventListener('click', () => dismissOverlay());
-  sheet.querySelector('#howClose').addEventListener('click', () => dismissOverlay());
+  let e;
+  try { e = await apiGet('api/plan/explain'); } catch (err) { sheet.innerHTML = `<h3 class="disp">Por qué este número</h3><p class="ac-hint" style="margin-top:12px;">${escapeHtml(err.message || 'No se pudo cargar')}</p><div class="sheet-actions"><button class="btn-primary" id="whyClose">Cerrar</button></div>`; sheet.querySelector('#whyClose').addEventListener('click', () => dismissOverlay()); return; }
+  const b = e.breakdown;
+  const n = (v) => Number(v).toLocaleString('es');
+  const sign = (v) => (v > 0 ? `+${n(v)}` : n(v));
+  const steps = [];
+  steps.push([`Tu cuerpo en reposo<br><small>${b.resting_method === 'katch' ? 'Katch-McArdle, con tu % de grasa' : 'Fórmula Mifflin-St Jeor: sexo, edad, estatura y peso'}</small>`, `${n(b.resting_kcal)} kcal`]);
+  steps.push([`Tu día a día${b.lifestyle && LEVEL_TITLES[b.lifestyle] ? `<br><small>${escapeHtml(LEVEL_TITLES[b.lifestyle])}</small>` : b.legacy ? '<br><small>Tu respuesta anterior de actividad</small>' : ''}`, `× ${String(b.pal).replace('.', ',')}`]);
+  if (!b.legacy) steps.push([`Tu ejercicio planificado<br><small>Solo lo que gastas de más que sentado (no se cuenta dos veces)</small>`, `${sign(b.exercise_kcal)} kcal`]);
+  if (b.tee_factor && b.tee_factor !== 1) steps.push([`Ajuste con tus propios datos<br><small>Lo que tu peso y tu comida enseñaron sobre tu cuerpo</small>`, `× ${String(b.tee_factor).replace('.', ',')}`]);
+  steps.push([`Lo que gasta tu cuerpo<br><small>Entre ${n(e.maintenance_low)} y ${n(e.maintenance_high)}: las fórmulas aciertan con un margen de ±${e.calibrated ? 6 : 10} %</small>`, `${n(b.maintenance)} kcal`]);
+  const goalWord = { lose: 'Para bajar de peso', muscle: 'Para ganar músculo', gain: 'Para subir de peso', maintain: 'Para mantener tu peso' }[me.profile.goal];
+  steps.push([`${goalWord}${e.by_hand ? '<br><small>Calorías fijadas a mano</small>' : b.lift_exp && me.profile.goal === 'muscle' ? `<br><small>Por tu experiencia (${{ beginner: 'principiante', intermediate: 'intermedio', advanced: 'avanzado' }[b.lift_exp]}), no más de un 20 %</small>` : ''}`, `${sign(b.adjust_kcal)} kcal (${sign(b.adjust_pct).replace('.', ',')} %)`]);
+  if (b.extra_kcal) steps.push(['Extra por embarazo o lactancia<br><small>Según las guías (IOM)</small>', `+${n(b.extra_kcal)} kcal`]);
+  steps.push([`<b>Tu meta de hoy</b>`, `<b>${n(e.kcal)} kcal</b>`]);
+  const lines = [];
+  if (e.note) lines.push(e.note);
+  lines.push(`Proteína: ${String(b.protein_per_kg).replace('.', ',')} g por kilo${b.protein_basis_kg !== me.profile.weight_kg ? ` (contados sobre ${U.fmtWeight(b.protein_basis_kg)}, un peso saludable para tu estatura)` : ''}. Grasa: cerca del 27 % de las calorías. Carbohidratos: el resto.`);
+  lines.push(`Límites de seguridad: nunca menos de ${n(b.floor)} kcal, y el ritmo de bajada tiene un máximo según tu peso y tu estatura.`);
+  sheet.innerHTML = `<h3 class="disp">Por qué este número</h3>
+    <div style="margin-top:10px;">${steps.map(([l, v]) => `<div class="why-step"><span>${l}</span><b>${v}</b></div>`).join('')}</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">${lines.map((l) => `<p class="ac-hint">${escapeHtml(l)}</p>`).join('')}</div>
+    <p class="ac-hint" style="margin-top:12px;"><b style="color:var(--ink);">Es una estimación, no una receta médica.</b> Nadie puede saber con exactitud cuánto gasta tu cuerpo sin medirlo. Por eso cadence compara con tu peso real y te propone ajustes.</p>
+    <details style="margin-top:10px;"><summary class="ac-hint" style="cursor:pointer;">De dónde sale</summary>
+      <ul style="margin:8px 0 0;padding-left:18px;">${e.sources.map((s2) => `<li class="ac-hint">${s2.url ? `<a href="${s2.url}" target="_blank" rel="noopener" style="color:var(--accent-to);">${escapeHtml(s2.title)}</a>` : escapeHtml(s2.title)}</li>`).join('')}</ul></details>
+    <div class="sheet-actions"><button class="btn-quiet" id="whyAsk">Preguntar a cadence</button><button class="btn-primary" id="whyClose">Entendido</button></div>`;
+  sheet.querySelector('#whyClose').addEventListener('click', () => dismissOverlay());
+  sheet.querySelector('#whyAsk').addEventListener('click', () => dismissOverlay(() => cadenceAssistant.open({ prompt: '¿Por qué mi meta es esta?' })));
 });
+$('askBtn').addEventListener('click', () => cadenceAssistant.open());
+
+// "Con tus datos": after a few weeks of weights and food, what their own body says. Only changes if they accept.
+async function loadCalibration() {
+  try {
+    const c = await apiGet('api/calibration');
+    const s = c.suggestion;
+    if (!s) { $('calBox').innerHTML = ''; return; }
+    const up = s.change_kcal > 0;
+    $('calBox').innerHTML = `<div class="cal-card"><b class="big">Tus datos dicen otra cosa</b>
+      <p>Con tus pesos y tus comidas de las últimas semanas, tu cuerpo parece gastar unas <b style="color:var(--ink);">${Number(c.observed_tee).toLocaleString('es')} kcal</b> (la fórmula decía ${Number(c.formula_tee).toLocaleString('es')}).
+      Te proponemos ${up ? 'subir' : 'bajar'} tu meta de <b style="color:var(--ink);">${Number(me.targets.kcal).toLocaleString('es')}</b> a <b style="color:var(--ink);">${Number(s.goal_kcal).toLocaleString('es')} kcal</b> (${s.change_kcal > 0 ? '+' : ''}${s.change_kcal}), un paso pequeño. Solo cambia si tú aceptas.</p>
+      <div class="cal-actions"><button type="button" class="btn-primary" id="calYes">Ajustar mi meta</button><button type="button" class="btn-quiet" id="calNo">Ahora no</button></div></div>`;
+    $('calYes').addEventListener('click', async () => {
+      try { me = await apiPost('api/calibration/apply', {}); rememberUser(me); swrClear(); if (window.sfx) sfx.play('save'); showToast('Meta ajustada con tus datos', 'ok'); setTimeout(() => window.location.reload(), 700); }
+      catch (err) { showError(err.message); }
+    });
+    $('calNo').addEventListener('click', async () => { try { await apiPost('api/calibration/dismiss', {}); } catch { /* it asks again later */ } $('calBox').innerHTML = ''; });
+  } catch { $('calBox').innerHTML = ''; }
+}
 
 $('save').addEventListener('click', async () => {
   showError('');
@@ -292,6 +407,8 @@ $('save').addEventListener('click', async () => {
     paint();
     recalc(mode === 'pace' ? { pace_lb_month: paceLb } : { kcal: t.kcal }, { silent: true }); // learns the safe limit and the projection
   } else changeGoal(goal || 'lose');
+  loadCalibration();
+  paintDay();
 })();
 </script>
 </body>

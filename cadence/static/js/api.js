@@ -121,8 +121,8 @@ async function ensureSession({ needOnboarded = true } = {}) {
     window.location.replace('onboarding.html');
     throw new Error('Falta completar tu perfil');
   }
-  // Signed up before units and pounds-per-month existed: one single "what changed" welcome, then never again.
-  if (needOnboarded && me.needs_welcome) {
+  // Signed up before units, pounds-per-month and the day-to-day interview existed: one single welcome / review, then never again.
+  if (needOnboarded && (me.needs_welcome || me.needs_review)) {
     window.location.replace('onboarding.html?mode=update');
     throw new Error('Hay novedades que explicarte');
   }

@@ -28,9 +28,9 @@ def test_liquids_are_guessed_from_the_name_and_solids_stay_in_grams():
 
 def test_pace_sets_the_calories_and_never_goes_past_what_is_safe():
     born, today = date(1991, 3, 14), date(2026, 10, 25)
-    base = nutrition.compute_targets("male", born, 175, 75, "moderate", "lose", today, 4)
-    assert base.pace_lb_month == 4.0 and base.kcal == pytest.approx(base.maintenance_kcal - 4 * 3500 / 30, abs=20)
-    assert base.projection_kg[0] == pytest.approx(75 - 4 / nutrition.LB_PER_KG, abs=0.1) and base.projection_kg[2] < base.projection_kg[0]
+    base = nutrition.compute_targets("male", born, 175, 75, "moderate", "lose", today, 3)  # BMI 24.5: up to 0.5 % a week (3.5 lb a month)
+    assert base.pace_lb_month == pytest.approx(3.0, abs=0.1) and base.kcal == pytest.approx(base.maintenance_kcal - 3 * 3500 / 30, abs=20)
+    assert base.projection_kg[0] == pytest.approx(75 - 3 / nutrition.LB_PER_KG, abs=0.15) and base.projection_kg[2] < base.projection_kg[0]
     fast = nutrition.compute_targets("male", born, 175, 75, "moderate", "lose", today, 25)
     assert fast.pace_lb_month == fast.max_pace_lb_month <= 7.2 and fast.kcal >= 1500 and "más seguro" in fast.note
     low = nutrition.compute_targets("female", born, 160, 52, "low", "lose", today, 6)  # little room above the minimum

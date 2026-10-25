@@ -63,6 +63,26 @@ def run_diagnostics(wger: WgerClient | None, deep: bool = False) -> dict:
         _run(checks, "Gemini responde",
              "Revisa GEMINI_API_KEY y GEMINI_MODEL (nombre vigente en ai.google.dev/gemini-api/docs/models).", gemini)
 
+        def interview() -> str:
+            """A made-up person goes through the interview prompt in one message: the reading must be valid and sensible."""
+            from . import coach
+            from .vision import GeminiVisionClient
+
+            said = ("Soy cajera de un supermercado, paso de pie unas 8 horas y camino unos 20 minutos para llegar al trabajo. "
+                    "Entreno pesas 3 veces por semana, 45 minutos cada vez, desde hace 6 meses. No cuento mis pasos.")
+            client = GeminiVisionClient(settings.gemini_api_key, settings.gemini_model)
+            raw = client.chat_json(coach._interview_system("muscle", coach.MAX_USER_TURNS), [{"role": "user", "text": said}])  # noqa: SLF001
+            data = coach.parse_json_object(raw)
+            _require(data is not None and bool(data.get("done")), "la IA no termino la entrevista con un caso completo")
+            activity = coach.validate_activity(data.get("activity"))
+            _require(activity is not None, "la lectura de la IA no es valida")
+            _require(activity.lifestyle in ("light", "moderate"), f"nivel inesperado para una cajera de pie: {activity.lifestyle}")
+            _require(any(t.kind == "pesas" for t in activity.training), "no entendio que entrena pesas")
+            return f"entiende un caso de prueba (nivel {activity.lifestyle}, {len(activity.training)} entrenamiento)"
+
+        _run(checks, "Entrevista de actividad entiende un caso de prueba",
+             "Gemini no devolvio una lectura valida de la entrevista: copiame este mensaje completo y ajusto el prompt.", interview)
+
     return {"ok": all(c["ok"] for c in checks), "checks": checks}
 
 

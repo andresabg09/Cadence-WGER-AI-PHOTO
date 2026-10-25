@@ -108,6 +108,19 @@ def _connect() -> sqlite3.Connection:
         ("users", "welcome_v2", "INTEGER NOT NULL DEFAULT 0"),
         ("entry_meta", "liquid", "INTEGER"),  # 1 = measured in millilitres (the model or the person said so)
         ("custom_foods", "liquid", "INTEGER"),
+        # Block 14: how much the person moves (lifestyle level, optional steps, planned exercise as JSON), strength-training
+        # experience, optional body fat, health flags (JSON), the calibration factor learnt from their own weight and food,
+        # and whether they did the one-time review of their calories (0 for everyone who existed when this appeared).
+        ("users", "lifestyle", "TEXT"),
+        ("users", "steps", "INTEGER"),
+        ("users", "training", "TEXT"),
+        ("users", "lift_exp", "TEXT"),
+        ("users", "body_fat", "REAL"),
+        ("users", "health", "TEXT"),
+        ("users", "tee_factor", "REAL"),
+        ("users", "calc_done", "INTEGER NOT NULL DEFAULT 0"),
+        ("users", "calib_next", "TEXT"),
+        ("usage", "chats", "INTEGER NOT NULL DEFAULT 0"),  # messages to the interview / assistant today
     ):
         columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in columns:
@@ -249,22 +262,34 @@ class User:
     units: str | None = None
     pace_lb: float | None = None
     welcome_v2: bool = True
+    lifestyle: str | None = None  # very_low | low | light | moderate | heavy: daily life WITHOUT planned exercise
+    steps: int | None = None  # average steps of a normal day, if the person knows them
+    training: str | None = None  # JSON [{kind, minutes, days}]
+    lift_exp: str | None = None  # beginner | intermediate | advanced (strength training experience)
+    body_fat: float | None = None
+    health: str | None = None  # JSON flags: pregnancy, lactation, diabetes, kidney, professional, ed_risk
+    tee_factor: float | None = None  # what their own weight and food taught us about their expenditure (1 = the formula)
+    calc_done: bool = True
+    calib_next: str | None = None  # day from which a new calibration suggestion may appear
 
 
 _USER_COLUMNS = ("id, email, name, is_admin, plan_id, sex, birthdate, height_cm, activity, goal, target_weight_kg, "
-                 "goal_kcal, goal_protein, goal_carbs, goal_fat, onboarded, created_at, units, pace_lb, welcome_v2")
+                 "goal_kcal, goal_protein, goal_carbs, goal_fat, onboarded, created_at, units, pace_lb, welcome_v2, "
+                 "lifestyle, steps, training, lift_exp, body_fat, health, tee_factor, calc_done, calib_next")
+_COLUMN_LIST = [c.strip() for c in _USER_COLUMNS.split(",")]
+_BOOL_COLUMNS = [_COLUMN_LIST.index(name) for name in ("is_admin", "onboarded", "welcome_v2", "calc_done")]
 _PROFILE_FIELDS = {"name", "sex", "birthdate", "height_cm", "activity", "goal", "target_weight_kg", "goal_kcal",
                    "goal_protein", "goal_carbs", "goal_fat", "onboarded", "plan_id", "password_hash", "units", "pace_lb",
-                   "welcome_v2"}
+                   "welcome_v2", "lifestyle", "steps", "training", "lift_exp", "body_fat", "health", "tee_factor",
+                   "calc_done", "calib_next"}
 
 
 def _user(row) -> User | None:
     if row is None:
         return None
     values = list(row)
-    values[3] = bool(values[3])
-    values[15] = bool(values[15])
-    values[-1] = bool(values[-1])
+    for i in _BOOL_COLUMNS:
+        values[i] = bool(values[i])
     return User(*values)
 
 
@@ -305,7 +330,7 @@ def create_user(email: str, name: str, password_hash: str, invite: str | None, a
                     conn.execute("ROLLBACK")
                     return None, "bad_invite"
             cursor = conn.execute(
-                "INSERT INTO users (email, name, password_hash, is_admin, created_at, welcome_v2) VALUES (?, ?, ?, ?, ?, 1)",
+                "INSERT INTO users (email, name, password_hash, is_admin, created_at, welcome_v2, calc_done) VALUES (?, ?, ?, ?, ?, 1, 1)",
                 (email, name, password_hash, 1 if first else 0, _now()),
             )
             user_id = cursor.lastrowid
@@ -567,17 +592,20 @@ def latest_weight(user_id: int) -> float | None:
     return row[0] if row else None
 
 
-def bump_usage(user_id: int, day: str, limit: int) -> bool:
-    """Count one photo analysis for the day; False (and no count) when the daily limit is used up."""
+def bump_usage(user_id: int, day: str, limit: int, kind: str = "analyses") -> bool:
+    """Count one use of the AI for the day (`analyses`: photos, voice, ideas; `chats`: interview and assistant messages);
+    False (and no count) when that day's limit is used up."""
+    if kind not in ("analyses", "chats"):
+        raise ValueError(kind)
     with closing(_connect()) as conn:
         conn.isolation_level = None
         conn.execute("BEGIN IMMEDIATE")
         conn.execute("INSERT OR IGNORE INTO usage (user_id, day, analyses) VALUES (?, ?, 0)", (user_id, day))
-        used = conn.execute("SELECT analyses FROM usage WHERE user_id = ? AND day = ?", (user_id, day)).fetchone()[0]
+        used = conn.execute(f"SELECT {kind} FROM usage WHERE user_id = ? AND day = ?", (user_id, day)).fetchone()[0]
         if limit and used >= limit:
             conn.execute("ROLLBACK")
             return False
-        conn.execute("UPDATE usage SET analyses = analyses + 1 WHERE user_id = ? AND day = ?", (user_id, day))
+        conn.execute(f"UPDATE usage SET {kind} = {kind} + 1 WHERE user_id = ? AND day = ?", (user_id, day))
         conn.execute("COMMIT")
         return True
 

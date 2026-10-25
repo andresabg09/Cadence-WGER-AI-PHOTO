@@ -224,6 +224,7 @@ class TodayResponse(BaseModel):
     water_goal_auto: bool = True
     maintenance_kcal: int | None = None  # what the body spends in a day (None while the profile is incomplete)
     goal_change_lb_month: float | None = None  # what the scale does a month if every day is like the goal (negative = loses)
+    goal_type: str | None = None  # lose | maintain | gain | muscle: "Por quemar" only makes sense when losing
     burn: "BurnOut | None" = None
     awards_new: list[AwardBrief] = []  # awards earned by this very request (today only): the app celebrates them
 

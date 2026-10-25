@@ -109,6 +109,9 @@
 <script src="static/js/api.js"></script>
 <script src="static/js/units.js"></script>
 <script src="static/js/units-ui.js"></script>
+<script src="static/js/recorder.js"></script>
+<script src="static/js/activity.js"></script>
+<script src="static/js/assistant.js"></script>
 <script src="static/js/constellation.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/datepicker.js"></script>
@@ -118,7 +121,9 @@ const U = cadenceUnits;
 let sky = null;
 // Two ways in: the full first-use flow, or (mode=update) the one-time "what changed" welcome for people who were already here.
 const MODE = new URLSearchParams(window.location.search).get('mode') === 'update' ? 'update' : 'full';
-const data = { sex: null, birthdate: '', height_cm: '', weight_kg: '', activity: null, goal: null };
+const data = { sex: null, birthdate: '', height_cm: '', weight_kg: '', goal: null, health: { pregnancy: 0, lactation: 0, diabetes: false, kidney: false, professional: false, none: false }, scoff: [null, null, null, null, null], scoffDone: false, edRisk: false };
+let act = null;        // the answers about how much they move (from the interview or the options), read from js/activity.js
+let actCtl = null;     // the mounted interview / form
 let step = 0;
 let me = null;
 let plan = null;       // what the server calculated for the answers so far
@@ -128,25 +133,28 @@ let unitsPick = null;  // what the units step shows
 let keepCurrent = true; // update mode: leave the saved goal as it is
 let exploreKcal = null;
 let paceTouched = false; // false: the recommended pace follows the units and the goal
+let recPace = null;    // the server's recommended pace (lb a month) for these answers
+let planNow = null;    // what their CURRENT goal means once the new answers are taken into account (review only)
 
-const SECTION = { intro: 'Bienvenida', units: 'Empezamos', goal: 'Objetivos', about: 'Sobre ti', body: 'Sobre ti', activity: 'Sobre ti',
-  promise: 'Tu plan', pace: 'Tu plan', calorie: 'Tu plan', plan: 'Tu plan', explore: 'Tu plan', changed: 'Novedades', current: 'Tu plan' };
+const SECTION = { intro: 'Bienvenida', units: 'Empezamos', goal: 'Objetivos', about: 'Sobre ti', body: 'Sobre ti', activity: 'Tu día a día', health: 'Cuidado',
+  scoff: 'Cuidado', promise: 'Tu plan', pace: 'Tu plan', calorie: 'Tu plan', plan: 'Tu plan', explore: 'Tu plan', changed: 'Novedades', compare: 'Tu meta' };
 const TONED = new Set(['promise', 'changed']); // gradient message screens
 
+// Where a deficit is not given (so there is nothing to pace): decided by the server, mirrored here only to skip a useless screen.
+const noDeficit = () => data.edRisk || data.health.pregnancy > 0 || data.health.lactation > 0 || data.health.diabetes || data.health.kidney;
+// Asked once; the screen stays in the list after the answer so the kind message can be read. Already flagged earlier: not asked again.
+const asksScoff = () => goalNow() === 'lose' && (data.scoffDone || !(data.edRisk || (me && me.health && me.health.ed_risk)));
+const movesAtAll = () => goalNow() && goalNow() !== 'maintain' && !(goalNow() === 'lose' && noDeficit());
 function steps() {
   if (MODE === 'update') {
-    const moves = me && me.profile.goal && me.profile.goal !== 'maintain';
-    return ['changed', 'units', 'calorie', 'current', ...(moves && !keepCurrent ? ['pace'] : []), 'plan'];
+    return ['changed', ...(me && me.units && !me.units.chosen ? ['units'] : []), ...(me && me.needs_welcome ? ['calorie'] : []), 'activity', 'health',
+      ...(asksScoff() ? ['scoff'] : []), 'compare', ...(movesAtAll() && !keepCurrent ? ['pace'] : []), 'plan'];
   }
-  return ['intro', 'units', 'goal', 'about', 'body', 'activity', 'promise', ...(data.goal === 'maintain' ? [] : ['pace']), 'calorie', 'plan'];
+  return ['intro', 'units', 'goal', 'about', 'body', 'activity', 'health', ...(asksScoff() ? ['scoff'] : []), 'promise',
+    ...(movesAtAll() ? ['pace'] : []), 'calorie', 'plan'];
 }
 const name = () => { const list = steps(); return step === -1 ? 'explore' : list[Math.min(step, list.length - 1)]; };
 
-const ACTIVITY = [
-  ['low', 'Poco activo', 'Trabajo sentado, casi no camino ni hago ejercicio.'],
-  ['moderate', 'Moderado', 'Camino bastante o entreno 3 a 5 días por semana.'],
-  ['high', 'Muy activo', 'Trabajo de pie o entreno casi todos los días.'],
-];
 const GOALS = [
   ['lose', 'Bajar de peso', 'Comer un poco menos de lo que gastas.'],
   ['maintain', 'Mantener mi peso', 'Comer justo lo que gastas.'],
@@ -158,12 +166,23 @@ const unitWord = () => (U.isLb() ? 'libras' : 'kilos');
 const first = (n) => escapeHtml((n || '').split(' ')[0]);
 
 // Pace in the person's unit: pounds (steps of 1) or kilos (steps of 0.5) per month.
-const paceStep = () => (U.isLb() ? 1 : 0.5);
-const paceDefault = () => U.paceToLb(U.isLb() ? (goalNow() === 'lose' ? 4 : 2) : (goalNow() === 'lose' ? 2 : 1)); // the recommended pace, in pounds per month
+const paceStep = () => (U.isLb() ? 0.5 : 0.25);
+const roundPace = (v) => Math.max(paceStep(), Math.round(v / paceStep()) * paceStep());
+const paceDefault = () => (recPace != null ? recPace : U.paceToLb(U.isLb() ? 2 : 1)); // the recommended pace, in pounds per month
+// Gentle / recommended / fastest SAFE pace for this body (the server knows the limit), in the person's unit.
 const paceChoices = () => {
-  if (U.isLb()) return goalNow() === 'lose' ? [['Suave', 2], ['Recomendado', 4], ['Rápido', 6]] : [['Suave', 1], ['Recomendado', 2], ['Rápido', 3]];
-  return goalNow() === 'lose' ? [['Suave', 1], ['Recomendado', 2], ['Rápido', 3]] : [['Suave', 0.5], ['Recomendado', 1], ['Rápido', 1.5]];
+  const max = plan && plan.max_pace_lb_month;
+  const rec = recPace != null ? recPace : paceDefault();
+  if (!max) return [];
+  const list = [['Suave', rec * 0.5], ['Recomendado', rec], ['Rápido', max]].map(([label, lb]) => [label, Number(roundPace(U.paceValue(lb)).toFixed(2))]);
+  return list.filter(([, v], i) => list.findIndex(([, w]) => w === v) === i);
 };
+// The same slowing-down rule as the server (the body spends 22 kcal less per kg lost): next months move the scale a bit less.
+function projectKg(w0, maint, intake, months) {
+  let w = w0; const out = [];
+  for (let d = 1; d <= months[months.length - 1] * 30; d += 1) { w += (intake - (maint + 22 * (w - w0))) / 7700; if (months.includes(d / 30)) out.push(w); }
+  return out;
+}
 
 function maxBirthdate() { const d = new Date(); d.setFullYear(d.getFullYear() - 13); return d.toISOString().slice(0, 10); }
 function showError(message) { $('error').textContent = message || ''; $('error').classList.toggle('show', Boolean(message)); }
@@ -199,15 +218,26 @@ const VIEWS = {
         <p class="ob-sub" style="margin:0;">Toma una foto de tu plato: la IA reconoce cada alimento y cadence calcula las calorías. Primero, unas preguntas rápidas para saber cuánto necesitas tú.</p>
       </div>
     </div>`,
-  changed: () => `
+  changed: () => me.needs_welcome ? `
     <div class="tone-wrap">
       <small>Hola, ${first(me.name)}</small>
       <h1 class="disp">cadence ahora te habla en tus medidas.</h1>
-      <p>Mejoramos cómo ves tus números para que sepas, sin hacer cuentas, qué pasa con tu peso:</p>
+      <p>Mejoramos cómo ves tus números y cómo calculamos cuánto necesitas:</p>
       <ul>
         <li><span><b>Tus unidades:</b> libras o kilos, pies o centímetros, onzas o mililitros.</span></li>
         <li><span><b>Tu meta en libras:</b> te decimos cuánto cambia tu peso cada mes con lo que comes.</span></li>
-        <li><span><b>Las calorías, explicadas:</b> en 20 segundos y sin tecnicismos.</span></li>
+        <li><span><b>Tu día a día real:</b> te preguntamos por hechos (cuánto caminas, qué entrenas) para calcular mejor lo que gasta tu cuerpo.</span></li>
+        <li><span><b>Pregúntale a cadence:</b> un asistente que te explica cada número.</span></li>
+      </ul>
+    </div>` : `
+    <div class="tone-wrap">
+      <small>Hola, ${first(me.name)}</small>
+      <h1 class="disp">Revisemos tus calorías con tu día a día real.</h1>
+      <p>Mejoramos cómo las calculamos. Solo esta vez, cuéntanos cómo es tu día y vemos si tu meta sigue bien:</p>
+      <ul>
+        <li><span><b>Hechos, no etiquetas:</b> cuánto caminas, cuánto estás sentado y qué entrenas. Sin tecnicismos.</span></li>
+        <li><span><b>Cuidado:</b> si algo de tu salud lo pide, no te damos un déficit.</span></li>
+        <li><span><b>Tú decides:</b> al final ves tu meta de hoy junto a la nueva y eliges cuál usar.</span></li>
       </ul>
     </div>`,
   units: () => `
@@ -242,9 +272,45 @@ const VIEWS = {
     <p style="font-size:12px;color:var(--ink-soft);margin:2px 2px 0;line-height:1.5;">Guardamos todo en el sistema métrico para que los cálculos sean exactos; tú lo ves en ${U.isLb() ? 'libras' : 'kilos'}.</p>`;
   },
   activity: () => `
-    <h1 class="disp ob-title">¿Qué tan activo eres en un día normal?</h1>
-    <p class="ob-sub">Piensa en una semana típica, sin contar entrenamientos especiales.</p>
-    ${choices(ACTIVITY, 'activity')}`,
+    <h1 class="disp ob-title">Cuéntame cómo es tu día</h1>
+    <p class="ob-sub">Hablamos de hechos: cuánto estás sentado, cuánto caminas y qué ejercicio haces. Puedes escribir, hablar o usar opciones. Piensa en una semana normal.</p>
+    <div id="actBox"></div>
+    <button type="button" class="ac-ask" id="askBtn">¿Dudas? Pregúntale a cadence</button>`,
+  health: () => {
+    const fem = (MODE === 'full' ? data.sex : me.profile.sex) !== 'male';
+    const h = data.health;
+    const item = (key, title, text, on) => `<button type="button" class="choice" data-h="${key}" aria-pressed="${on}"><b>${title}</b>${text ? `<small>${text}</small>` : ''}</button>`;
+    const sw = (attr, labels, now) => `<div class="ac-switch" style="margin:2px 0 6px;">${labels.map(([v, l]) => `<button type="button" ${attr}="${v}" aria-pressed="${now === v}">${l}</button>`).join('')}</div>`;
+    return `
+    <h1 class="disp ob-title">Una pregunta de cuidado</h1>
+    <p class="ob-sub">Si algo de esto aplica, cadence no te calculará un déficit (comer menos) y te recomendará hablarlo con tu médico o nutricionista. Es privado y solo lo usa cadence.</p>
+    <div class="choice-grid">
+      ${fem ? item('pregnancy', 'Estoy embarazada', '', h.pregnancy > 0) + (h.pregnancy > 0 ? sw('data-tri', [[1, '1.er trimestre'], [2, '2.º trimestre'], [3, '3.er trimestre']], h.pregnancy) : '')
+        + item('lactation', 'Estoy dando pecho', '', h.lactation > 0) + (h.lactation > 0 ? sw('data-lac', [[1, '0 a 6 meses'], [2, '7 a 12 meses']], h.lactation) : '') : ''}
+      ${item('diabetes', 'Tengo diabetes', '', h.diabetes)}
+      ${item('kidney', 'Tengo una enfermedad del riñón', '', h.kidney)}
+      ${item('professional', 'Ya sigo un plan de un médico o nutricionista', 'Lo que ves aquí será solo una referencia.', h.professional)}
+      ${item('none', 'Ninguna de estas', '', h.none)}
+    </div>`;
+  },
+  scoff: () => {
+    const q = [
+      '¿Te provocas el vómito porque te sientes incómodamente lleno/a?',
+      '¿Te preocupa haber perdido el control sobre la cantidad de comida que ingieres?',
+      `¿Has perdido recientemente más de ${U.isLb() ? '14 libras' : '6 kilos'} en un periodo de 3 meses?`,
+      '¿Crees que estás gordo/a aunque los demás digan que estás demasiado delgado/a?',
+      '¿Dirías que la comida domina tu vida?',
+    ];
+    if (data.scoffDone && data.edRisk) return `
+      <h1 class="disp ob-title">Gracias por contestar</h1>
+      <p class="ob-sub">Por tu bienestar, cadence no calculará un déficit ahora: te daremos tu mantenimiento y podrás seguir registrando lo que comes. Si te sirve, habla con un médico o nutricionista.</p>
+      <div class="note info">No es un diagnóstico. Es solo un aviso para cuidarte; no guardamos tus respuestas, solo ese resultado.</div>`;
+    return `
+    <h1 class="disp ob-title">Cinco preguntas rápidas</h1>
+    <p class="ob-sub">Antes de bajar de peso, queremos cuidar de ti. No es un diagnóstico y no guardamos tus respuestas, solo el resultado.</p>
+    <div style="display:flex;flex-direction:column;gap:14px;">${q.map((t, i) => `<div class="hl-card"><div style="font-size:14px;line-height:1.45;margin-bottom:10px;">${t}</div>
+      <div class="ac-switch"><button type="button" data-sc="${i}" data-v="1" aria-pressed="${data.scoff[i] === true}">Sí</button><button type="button" data-sc="${i}" data-v="0" aria-pressed="${data.scoff[i] === false}">No</button></div></div>`).join('')}</div>`;
+  },
   promise: () => `
     <div class="tone-wrap">
       <small>Antes de seguir, ${first(me.name)}</small>
@@ -255,7 +321,7 @@ const VIEWS = {
     const lose = goalNow() === 'lose';
     return `
     <h1 class="disp ob-title">${lose ? `¿Cuántas ${unitWord()} quieres bajar al mes?` : `¿Cuántas ${unitWord()} quieres subir al mes?`}</h1>
-    <p class="ob-sub">${goalNow() === 'muscle' ? 'Ganar músculo es más lento que bajar de peso: un ritmo suave es lo mejor.' : 'Elige un ritmo. Nosotros calculamos cuánto comer.'}</p>
+    <p class="ob-sub">${goalNow() === 'muscle' ? 'Ganar músculo es lento: lo recomendado depende de cuánto llevas entrenando fuerza. Más rápido casi todo sería grasa.' : 'Elige un ritmo. Nosotros calculamos cuánto comer, siempre dentro de lo seguro para tu cuerpo.'}</p>
     <div class="pace-big"><button type="button" id="paceLess" aria-label="Menos">−</button>
       <div><div class="num" id="paceNum">–</div><div class="sub">${unitWord()} al mes</div></div>
       <button type="button" id="paceMore" aria-label="Más">+</button></div>
@@ -269,26 +335,29 @@ const VIEWS = {
     <div style="display:flex;flex-direction:column;gap:12px;">
       <div class="fact"><i>1</i><div><b id="factBody">Tu cuerpo gasta calorías todo el día</b><span>Aunque estés quieto: respirar, pensar y moverte también gasta energía.</span></div></div>
       <div class="fact"><i>2</i><div><b>Lo que comes suma, lo que gastas resta</b><span>Si comes menos de lo que gastas, tu cuerpo usa la grasa que tiene guardada.</span></div></div>
-      <div class="fact"><i>3</i><div><b>500 menos al día ≈ 1 libra menos por semana</b><span>Una libra de grasa guarda unas 3.500 calorías. De ahí sale cada cuenta.</span></div></div>
+      <div class="fact"><i>3</i><div><b>500 menos al día ≈ 1 libra menos por semana</b><span>Una libra de grasa guarda unas 3.500 calorías. De ahí sale cada cuenta, aunque con los meses el ritmo baja un poco porque tu cuerpo se adapta.</span></div></div>
     </div>`,
-  current: () => {
+  compare: () => {
     const t = me.targets;
-    const c = t && t.change_lb_month;
-    const moves = me.profile.goal && me.profile.goal !== 'maintain';
-    const meaning = c == null ? '' : Math.abs(c) < 0.5 ? 'Con esa meta mantienes tu peso.' : c < 0 ? `Eso equivale a <b>bajar ${U.aboutChange(c)} al mes</b>.` : `Eso equivale a <b>subir ${U.aboutChange(c)} al mes</b>.`;
+    const meaning = (c) => (c == null ? '' : Math.abs(c) < 0.5 ? 'mantienes tu peso' : c < 0 ? `bajas ${U.aboutChange(c)} al mes` : `subes ${U.aboutChange(c)} al mes`);
+    const same = plan && t && Math.abs(plan.kcal - t.kcal) < 30;
+    const goal = me.profile.goal;
+    // The old goal read against what we now know about their day: the heart of the review.
+    const wrongWay = planNow && ((goal === 'lose' && planNow.change_lb_month > -0.5) || ((goal === 'gain' || goal === 'muscle') && planNow.change_lb_month < 0.5) || (goal === 'maintain' && Math.abs(planNow.change_lb_month) >= 0.5));
     return `
-    <h1 class="disp ob-title">Tu meta de hoy, en ${unitWord()}</h1>
-    <p class="ob-sub">Esto es lo que ya tenías, traducido para que se entienda.</p>
+    <h1 class="disp ob-title">${same ? 'Tu meta ya estaba bien' : 'Así queda con tu día a día real'}</h1>
+    <p class="ob-sub">${same ? 'Con lo que nos contaste, tu meta casi no cambia.' : 'Antes solo te preguntábamos si eras poco, medio o muy activo. Ahora usamos tu día a día real.'}</p>
     <div class="res-card" style="margin-top:0;">
-      <div class="res-row"><span>Tu meta de hoy</span><b class="mono" style="font-size:22px;">${t ? num(t.kcal) : '–'} <small style="font-size:11px;color:var(--ink-soft);">kcal al día</small></b></div>
-      ${t && t.maintenance_kcal ? `<div class="res-row"><span>Tu cuerpo gasta unas</span><b class="mono">${num(t.maintenance_kcal)} kcal</b></div>` : ''}
+      <div class="res-row"><span>Tu meta de hoy</span><b class="mono" style="font-size:20px;">${t ? num(t.kcal) : '–'} <small style="font-size:11px;color:var(--ink-soft);">kcal</small></b></div>
+      ${planNow ? `<div style="font-size:12.5px;color:${wrongWay ? '#C98A2B' : 'var(--ink-soft)'};margin-top:4px;">Con tu día a día real, comer eso: ${meaning(planNow.change_lb_month)}${wrongWay ? ' (no lo que buscas)' : ''}.</div>` : ''}
       <div class="res-sep"></div>
-      <div style="font-size:14px;line-height:1.5;">${meaning}</div>
+      <div class="res-row"><span>Nueva, con tu día a día</span><b class="mono" style="font-size:20px;">${plan ? num(plan.kcal) : '…'} <small style="font-size:11px;color:var(--ink-soft);">kcal</small></b></div>
+      ${plan ? `<div style="font-size:12.5px;color:var(--ink-soft);margin-top:4px;">Tu cuerpo gasta entre ${num(plan.maintenance_low)} y ${num(plan.maintenance_high)} kcal al día (es una estimación).${plan.change_lb_month != null ? ` Con esto ${meaning(plan.change_lb_month)}.` : ''}</div>` : ''}
     </div>
-    ${moves ? `<div class="choice-grid" style="margin-top:18px;">
-      <button type="button" class="choice" data-act="keep" aria-pressed="${keepCurrent}"><b>Dejarla como está</b><small>Tu meta no cambia.</small></button>
-      <button type="button" class="choice" data-act="change" aria-pressed="${!keepCurrent}"><b>Elegir mi ritmo en ${unitWord()}</b><small>Dices cuánto quieres cambiar al mes y cadence calcula cuánto comer.</small></button></div>`
-      : '<p class="ob-sub" style="margin-top:16px;">Tu objetivo es mantener tu peso: no hay nada que cambiar.</p>'}`;
+    ${plan && plan.note ? `<div class="note warn">${escapeHtml(plan.note)}</div>` : ''}
+    <div class="choice-grid" style="margin-top:18px;">
+      <button type="button" class="choice" data-act="change" aria-pressed="${!keepCurrent}"><b>Usar la nueva${same ? '' : ' (recomendado)'}</b><small>${movesAtAll() ? 'Después eliges tu ritmo en ' + unitWord() + ' al mes.' : 'Cadence la calcula con tu día a día.'}</small></button>
+      <button type="button" class="choice" data-act="keep" aria-pressed="${keepCurrent}"><b>Dejar la que tenía</b><small>Tu meta no cambia; guardamos tu día a día para tus próximos cálculos.</small></button></div>`;
   },
   plan: () => `
     <h1 class="disp ob-title" id="planHead">Tu plan</h1>
@@ -299,6 +368,7 @@ const VIEWS = {
         <div style="text-align:right;font-size:12px;color:var(--ink-soft);line-height:1.6;" id="planMath"></div>
       </div>
       <div id="planChart" style="margin-top:14px;"></div>
+      <div id="planRange" style="font-size:12px;color:var(--ink-soft);line-height:1.5;margin-top:8px;"></div>
       <div class="macro-chips">
         <div><b id="planP" style="color:#7C5CFF;">–</b><span>PROTEÍNA</span></div>
         <div><b id="planC" style="color:#2DD4FF;">–</b><span>CARBOS</span></div>
@@ -307,7 +377,8 @@ const VIEWS = {
     </div>
     <div class="note info" id="planNote" style="display:none;"></div>
     <div class="link-line"><button type="button" class="link-btn" id="exploreBtn">Mueve y mira: ¿y si como más o menos?</button></div>
-    <p style="margin:auto 2px 0;padding-top:14px;font-size:11.5px;color:var(--ink-soft);line-height:1.5;">Es una estimación: cada cuerpo responde distinto y con el tiempo baja un poco el ritmo. cadence la ajusta con tu peso real. No es un consejo médico.</p>`,
+    <button type="button" class="ac-ask" id="askBtn">¿Dudas? Pregúntale a cadence</button>
+    <p style="margin:auto 2px 0;padding-top:14px;font-size:11.5px;color:var(--ink-soft);line-height:1.5;">Es una estimación: cada cuerpo responde distinto y con el tiempo baja un poco el ritmo. Con unas semanas de tu peso y tu comida, cadence te propondrá ajustarla a tu cuerpo real. No es un consejo médico.</p>`,
   explore: () => `
     <h1 class="disp ob-title">Mueve y mira qué pasa</h1>
     <p class="ob-sub">Cambia lo que comes al día y mira cuánto cambiaría tu peso.</p>
@@ -318,8 +389,16 @@ const VIEWS = {
     <div class="note ok" id="exNote"></div>`,
 };
 
+// Everything they told us about how they live (the server turns it into numbers; the AI never does).
+function answers() {
+  const a = act || {};
+  const h = data.health;
+  return { lifestyle: a.lifestyle || null, steps: a.steps != null ? a.steps : null, training: a.training || [], lift_exp: a.lift_exp || null,
+    body_fat_pct: a.body_fat_pct != null ? a.body_fat_pct : null,
+    health: { pregnancy: h.pregnancy, lactation: h.lactation, diabetes: h.diabetes, kidney: h.kidney, professional: h.professional } };
+}
 function payload() {
-  const p = { sex: data.sex, birthdate: data.birthdate, height_cm: Number(data.height_cm), weight_kg: Number(data.weight_kg), activity: data.activity, goal: data.goal };
+  const p = { sex: data.sex, birthdate: data.birthdate, height_cm: Number(data.height_cm), weight_kg: Number(data.weight_kg), goal: data.goal, ...answers() };
   if (nudged) p.kcal = nudged;
   else if (data.goal && data.goal !== 'maintain') p.pace_lb_month = paceLb;
   return p;
@@ -328,7 +407,7 @@ function payload() {
 function previewBody(extra = {}) {
   if (MODE === 'full') return { ...payload(), ...extra };
   const p = me.profile;
-  return { sex: p.sex, birthdate: p.birthdate, height_cm: p.height_cm, weight_kg: p.weight_kg || 70, activity: p.activity, goal: p.goal, ...extra };
+  return { sex: p.sex, birthdate: p.birthdate, height_cm: p.height_cm, weight_kg: p.weight_kg || 70, goal: p.goal, ...answers(), ...extra };
 }
 
 async function loadPlan(extra) {
@@ -336,6 +415,7 @@ async function loadPlan(extra) {
     const body = extra || (MODE === 'full' ? payload() : (keepCurrent ? { kcal: me.targets && me.targets.kcal } : { pace_lb_month: paceLb }));
     plan = await apiPost('api/plan/preview', previewBody(body));
     if (!extra && plan.pace_lb_month != null && !nudged && (MODE === 'full' || !keepCurrent)) paceLb = plan.pace_lb_month; // the safe pace, if it was cut
+    if (plan.recommended_pace_lb_month != null) recPace = plan.recommended_pace_lb_month;
     return plan;
   } catch (err) { showError(err.message); return null; }
 }
@@ -345,14 +425,17 @@ const weightNow = () => (MODE === 'full' ? Number(data.weight_kg) : (me.profile.
 function paintPace() {
   const value = U.paceValue(paceLb);
   $('paceNum').textContent = Number(value.toFixed(1));
-  $('paceChips').innerHTML = paceChoices().map(([label, v]) => `<button type="button" data-v="${v}" aria-pressed="${Math.abs(v - value) < 0.05}"><b>${label}</b><span>${v} ${U.weightLabel()}</span></button>`).join('');
+  $('paceChips').innerHTML = paceChoices().map(([label, v]) => `<button type="button" data-v="${v}" aria-pressed="${Math.abs(v - value) < 0.13}"><b>${label}</b><span>${v} ${U.weightLabel()}</span></button>`).join('');
   $('paceChips').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => setPace(U.paceToLb(Number(b.dataset.v)))));
   const note = $('paceNote');
   if (!plan) { $('paceRes').innerHTML = ''; note.style.display = 'none'; return; }
   const proj = plan.projection_kg || [];
+  const lo = plan.projection_low_kg, hi = plan.projection_high_kg;
+  const rng = (i) => (lo && hi ? `entre ${U.fmtWeight(Math.min(lo[i], hi[i]))} y ${U.fmtWeight(Math.max(lo[i], hi[i]))}` : (proj[i] != null ? U.fmtWeight(proj[i]) : '–'));
   $('paceRes').innerHTML = `<div class="res-row"><span>Para lograrlo comerás</span><b class="mono" style="font-size:22px;">${num(plan.kcal)} <small style="font-size:11px;color:var(--ink-soft);">kcal al día</small></b></div><div class="res-sep"></div>
-    <div class="res-row"><span>En 1 mes pesarías</span><b class="mono">${proj[0] != null ? U.fmtWeight(proj[0]) : '–'}</b></div>
-    <div class="res-row"><span>En 3 meses</span><b class="mono">${proj[2] != null ? U.fmtWeight(proj[2]) : '–'}</b></div>`;
+    <div class="res-row"><span>En 1 mes pesarías</span><b class="mono" style="font-size:13px;text-align:right;">${rng(0)}</b></div>
+    <div class="res-row"><span>En 3 meses</span><b class="mono" style="font-size:13px;text-align:right;">${rng(2)}</b></div>
+    <div style="font-size:11.5px;color:var(--ink-soft);margin-top:10px;line-height:1.45;">Son estimaciones: tu cuerpo gasta un poco menos conforme cambia tu peso y el cálculo puede errar un 10 %.</div>`;
   if (plan.note) { note.textContent = plan.note; note.className = 'note warn'; note.style.display = 'block'; }
   else { note.textContent = 'Es un ritmo seguro para tu peso y tu estatura.'; note.className = 'note ok'; note.style.display = 'block'; }
 }
@@ -370,32 +453,37 @@ function paintPlan() {
   if (!plan) return;
   const goal = goalNow();
   const c = plan.change_lb_month;
-  const moves = goal !== 'maintain' && Math.abs(c) >= 0.5;
+  const moves = goal !== 'maintain' && !plan.blocked && Math.abs(c) >= 0.5;
   $('planHead').innerHTML = !moves ? 'Mantienes tu peso' : c < 0 ? `Bajas <span class="hl">${U.aboutChange(c)}</span> el primer mes` : `Subes <span class="hl">${U.aboutChange(c)}</span> el primer mes`;
-  $('planSub').textContent = goal === 'muscle' ? 'Para ganar músculo: comer un poco más y entrenar con fuerza.' : 'Esto es lo que tu cuerpo hace con tu meta.';
+  $('planSub').textContent = goal === 'muscle' ? 'Para ganar músculo: comer un poco más y entrenar fuerza.' : 'Esto es lo que tu cuerpo hace con tu meta.';
   $('planKcal').textContent = num(plan.kcal);
   $('planMath').innerHTML = `Gastas ~${num(plan.maintenance_kcal)}<br>Comes ${num(plan.kcal)}<br><b style="color:${c < 0 ? 'var(--good)' : '#B7A6FF'};">${Math.abs(plan.maintenance_kcal - plan.kcal)} ${c <= 0 ? 'de menos → bajas' : 'de más → subes'}</b>`;
   $('planP').textContent = `${plan.protein_g}g`; $('planC').textContent = `${plan.carbs_g}g`; $('planF').textContent = `${plan.fat_g}g`;
   const w = weightNow();
   const proj = plan.projection_kg || [];
-  $('planChart').innerHTML = proj.length === 3 ? chartSvg([w, ...proj].map((kg) => U.weightValue(kg)), ['Hoy', '1 mes', '2 meses', '3 meses']) : '';
+  $('planChart').innerHTML = proj.length === 3 && moves ? chartSvg([w, ...proj].map((kg) => U.weightValue(kg)), ['Hoy', '1 mes', '2 meses', '3 meses']) : '';
+  const lo = plan.projection_low_kg, hi = plan.projection_high_kg;
+  $('planRange').innerHTML = `Tu cuerpo gasta entre <b>${num(plan.maintenance_low)}</b> y <b>${num(plan.maintenance_high)}</b> kcal al día: las fórmulas aciertan con un margen de unos ±10 %.`
+    + (moves && lo && hi ? ` En 3 meses podrías pesar entre <b>${U.fmtWeight(Math.min(lo[2], hi[2]))}</b> y <b>${U.fmtWeight(Math.max(lo[2], hi[2]))}</b>.` : '');
   const note = $('planNote');
-  const extra = goal === 'muscle' ? 'La báscula sube: es lo normal al ganar músculo. Una parte será músculo y otra un poco de grasa. Tu proteína de cada día es la de arriba y conviene entrenar fuerza 3 a 4 días a la semana.' : (plan.note || '');
+  const extra = goal === 'muscle' && !plan.blocked ? 'La báscula sube: es lo normal al ganar músculo. Una parte será músculo y otra un poco de grasa. Tu proteína de cada día es la de arriba y conviene entrenar fuerza al menos 2 veces por semana cada músculo.' : (plan.note || '');
   note.textContent = extra; note.style.display = extra ? 'block' : 'none';
+  if (plan.note && goal === 'muscle') { note.textContent = `${plan.note} ${extra}`; }
 }
 
 function paintExplore() {
   const m = plan.maintenance_kcal;
   const k = exploreKcal;
-  const lbm = (m - k) * 30 / 3500; // pounds lost per month (negative = gained)
   const w = weightNow();
-  const at = (months) => U.fmtWeight(w - (lbm / U.LB_PER_KG) * months);
+  const path = projectKg(w, m, k, [1, 2, 3]);
+  const lbm = (w - path[0]) * U.LB_PER_KG; // pounds lost in the first month (negative = gained)
+  const at = (months) => U.fmtWeight(path[months - 1]);
   $('exNum').textContent = num(k);
   $('exRes').innerHTML = `<div style="text-align:center;font-size:13px;color:var(--ink-soft);">${lbm >= 0 ? 'Bajarías' : 'Subirías'} cada mes</div>
     <div class="mono" style="font-size:36px;font-weight:700;text-align:center;margin-top:4px;">${U.fmtChange(lbm)}</div><div class="res-sep"></div>
     <div class="res-row"><span>En 1 mes</span><b class="mono">${at(1)}</b></div><div class="res-row"><span>En 2 meses</span><b class="mono">${at(2)}</b></div><div class="res-row"><span>En 3 meses</span><b class="mono">${at(3)}</b></div>`;
   const floor = { female: 1200, male: 1500, other: 1350 }[(MODE === 'full' ? data.sex : me.profile.sex)] || 1350;
-  const max = (plan.max_pace_lb_month || 7);
+  const max = (plan.max_pace_lb_month || 0) + 0.3;
   const note = $('exNote');
   let text; let kind;
   if (k < floor) { text = `Por debajo del mínimo seguro (${num(floor)}). No lo recomendamos.`; kind = 'bad'; }
@@ -447,6 +535,36 @@ function bind() {
     $('exLess').addEventListener('click', move(-50)); $('exMore').addEventListener('click', move(50));
     paintExplore();
   }
+  document.querySelectorAll('[data-h]').forEach((btn) => btn.addEventListener('click', () => {
+    const h = data.health; const k = btn.dataset.h;
+    if (k === 'none') { Object.assign(h, { pregnancy: 0, lactation: 0, diabetes: false, kidney: false, professional: false, none: !h.none }); }
+    else {
+      h.none = false;
+      if (k === 'pregnancy') h.pregnancy = h.pregnancy ? 0 : 1;
+      else if (k === 'lactation') h.lactation = h.lactation ? 0 : 1;
+      else h[k] = !h[k];
+    }
+    if (window.sfx) sfx.play('pick');
+    render();
+  }));
+  document.querySelectorAll('[data-tri]').forEach((b) => b.addEventListener('click', () => { data.health.pregnancy = Number(b.dataset.tri); render(); }));
+  document.querySelectorAll('[data-lac]').forEach((b) => b.addEventListener('click', () => { data.health.lactation = Number(b.dataset.lac); render(); }));
+  document.querySelectorAll('[data-sc]').forEach((b) => b.addEventListener('click', () => {
+    data.scoff[Number(b.dataset.sc)] = b.dataset.v === '1';
+    document.querySelectorAll(`[data-sc="${b.dataset.sc}"]`).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    if (window.sfx) sfx.play('pick');
+    showError('');
+  }));
+  if ($('askBtn')) $('askBtn').addEventListener('click', () => cadenceAssistant.open());
+  if ($('actBox')) {
+    actCtl = null;
+    cadenceActivity.mount($('actBox'), {
+      chat: true, goal: () => goalNow(), startWith: act && act.lifestyle ? 'form' : 'chat',
+      value: act || (MODE === 'update' ? {
+        lifestyle: me.profile.lifestyle, steps: me.profile.steps, training: me.profile.training, lift_exp: me.profile.lift_exp, body_fat_pct: me.profile.body_fat_pct } : null),
+      onChange: (read) => { act = read; showError(''); },
+    }).then((ctl) => { actCtl = ctl; });
+  }
   if ($('exploreBtn')) $('exploreBtn').addEventListener('click', () => { exploreKcal = plan.kcal; step = -1; history.pushState({ ob: -1 }, ''); render(); });
 }
 
@@ -471,10 +589,22 @@ async function render() {
   bind();
   if (sky) sky.calm(n !== 'intro');
   if (n === 'calorie') {
-    if (!plan) await loadPlan(MODE === 'full' ? undefined : undefined);
+    if (!plan && act && act.lifestyle) await loadPlan(MODE === 'full' ? undefined : { kcal: me.targets && me.targets.kcal });
     if (plan && $('factBody')) $('factBody').textContent = `Tu cuerpo gasta unas ${num(plan.maintenance_kcal)} calorías al día`;
+    else if ($('factBody')) $('factBody').textContent = 'Tu cuerpo gasta calorías todo el día';
   }
-  if (n === 'pace') { if (!paceTouched) { paceLb = paceDefault(); plan = null; } if (!plan || plan.pace_lb_month == null) await loadPlan(MODE === 'full' ? undefined : { pace_lb_month: paceLb }); if (name() === 'pace') paintPace(); }
+  if (n === 'compare') {
+    if (!plan || !planNow) {
+      try { planNow = await apiPost('api/plan/preview', previewBody({ kcal: me.targets.kcal })); } catch { planNow = null; }
+      await loadPlan(me.pace_lb_month != null ? { pace_lb_month: me.pace_lb_month } : { pace_lb_month: null });
+    }
+    if (name() === 'compare') { $('main').innerHTML = VIEWS.compare(); bind(); }
+  }
+  if (n === 'pace') {
+    if (!plan || plan.recommended_pace_lb_month == null) await loadPlan(MODE === 'full' ? { ...payload(), pace_lb_month: undefined } : { pace_lb_month: null });
+    if (!paceTouched) { paceLb = paceDefault(); plan = null; }
+    if (name() === 'pace') { if (!plan || plan.pace_lb_month == null) await loadPlan(MODE === 'full' ? undefined : { pace_lb_month: paceLb }); if (name() === 'pace') paintPace(); }
+  }
   if (n === 'plan') { await loadPlan(nudged ? (MODE === 'full' ? undefined : { kcal: nudged }) : undefined); if (name() === 'plan') paintPlan(); }
   window.scrollTo(0, 0);
 }
@@ -494,7 +624,8 @@ function validate() {
     if (!(h >= 100 && h <= 250)) return U.isFt() ? 'Escribe tu estatura en pies y pulgadas (entre 3′4″ y 8′2″).' : 'Escribe tu estatura en centímetros (entre 100 y 250).';
     if (!(w >= 30 && w <= 300)) return U.isLb() ? 'Escribe tu peso en libras (entre 66 y 660).' : 'Escribe tu peso en kilos (entre 30 y 300).';
   }
-  if (n === 'activity' && !data.activity) return 'Elige una opción.';
+  if (n === 'activity') return actCtl ? actCtl.problem() : 'Un momento, estoy preparando las preguntas.';
+  if (n === 'scoff' && !data.scoffDone && data.scoff.some((v) => v === null)) return 'Responde las cinco preguntas.';
   return '';
 }
 
@@ -513,9 +644,12 @@ async function finish() {
       rememberUser(saved);
       cadenceUnits.set(saved.units);
     } else {
-      if (!keepCurrent && me.profile.goal !== 'maintain') await apiPut('api/goals', nudged ? { kcal: nudged } : { pace_lb_month: paceLb });
-      else if (nudged) await apiPut('api/goals', { kcal: nudged });
-      await apiPost('api/welcome/done', {});
+      const p = me.profile;
+      const body = { sex: p.sex, birthdate: p.birthdate, height_cm: p.height_cm, weight_kg: p.weight_kg || 70, goal: p.goal,
+        target_weight_kg: p.target_weight_kg || undefined, ...answers(), keep_goal: keepCurrent };
+      if (!keepCurrent) { if (nudged) body.kcal = nudged; else if (p.goal !== 'maintain') body.pace_lb_month = paceLb; }
+      await apiPut('api/profile', body);
+      if (me.needs_welcome) await apiPost('api/welcome/done', {});
     }
     swrClear();
     window.location.replace('index.html');
@@ -537,7 +671,17 @@ $('next').addEventListener('click', async () => {
     plan = null;
   }
   if (n === 'explore') { nudged = exploreKcal; history.back(); return; } // back to the plan, now with those calories
-  if (n === 'pace' || n === 'goal' || n === 'body' || n === 'about' || n === 'activity') plan = null;
+  if (n === 'scoff' && !data.scoffDone) {
+    try {
+      const out = await apiPost('api/screening', { answers: data.scoff.map(Boolean) });
+      data.scoffDone = true; data.edRisk = Boolean(out.ed_risk);
+    } catch (err) { showError(err.message); return; }
+    if (data.edRisk) { render(); return; } // a kind message first, then on
+  }
+  if (n === 'health' && !data.health.none && !data.health.pregnancy && !data.health.lactation && !data.health.diabetes && !data.health.kidney && !data.health.professional) {
+    data.health.none = true; // nothing ticked means none
+  }
+  if (['pace', 'goal', 'body', 'about', 'activity', 'health', 'scoff', 'compare'].includes(n)) { plan = null; planNow = null; if (n !== 'pace') paceTouched = false; }
   if (n !== 'plan') { go(1); return; }
   await finish();
 });
@@ -554,14 +698,17 @@ window.addEventListener('popstate', (e) => {
     me = await ensureSession({ needOnboarded: false });
   } catch { return; }
   if (MODE === 'full' && me.onboarded) { window.location.replace('index.html'); return; }
-  if (MODE === 'update' && !(me.onboarded && me.needs_welcome)) { window.location.replace('index.html'); return; } // only for those who still have to see it
+  if (MODE === 'update' && !(me.onboarded && (me.needs_welcome || me.needs_review))) { window.location.replace('index.html'); return; } // only for those who still have to see it
   const p = me.profile || {};
   data.sex = p.sex || null; data.birthdate = p.birthdate || ''; data.height_cm = p.height_cm || '';
-  data.weight_kg = p.weight_kg || ''; data.activity = p.activity || null; data.goal = p.goal || null;
+  data.weight_kg = p.weight_kg || ''; data.goal = p.goal || null;
+  if (me.health) Object.assign(data.health, { pregnancy: me.health.pregnancy || 0, lactation: me.health.lactation || 0, diabetes: Boolean(me.health.diabetes), kidney: Boolean(me.health.kidney), professional: Boolean(me.health.professional) });
+  data.edRisk = Boolean(me.health && me.health.ed_risk);
+  data.health.none = !(data.health.pregnancy || data.health.lactation || data.health.diabetes || data.health.kidney || data.health.professional) && MODE === 'update';
   paceLb = paceDefault();
   if (MODE === 'update') {
     if (me.pace_lb_month != null) { paceLb = me.pace_lb_month; paceTouched = true; }
-    keepCurrent = true;
+    keepCurrent = false; // the new goal is the recommended choice; the person can keep the old one
   }
   history.replaceState({ ob: 0 }, '');
   render();

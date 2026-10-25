@@ -1117,3 +1117,30 @@ body.nav-leaving { opacity: 0; transition: opacity 0.2s ease-in 0.12s; }
   .db-away { flex-basis: 100%; margin-top: 4px; }
 }
 @media (prefers-reduced-motion: reduce) { .db-num { transition: none; } .db-pager { scroll-behavior: auto; } }
+
+/* what the day's calories mean for the weight, in the person's own units */
+.pace-line { margin-top: 14px; font-size: 12.5px; line-height: 1.45; color: var(--ink-soft); }
+
+/* unit pickers (first use, welcome, Ajustes) */
+.un-row { display: flex; flex-direction: column; gap: 9px; margin-bottom: 18px; }
+.un-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--ink-soft); }
+.un-seg { display: flex; background: rgba(127, 127, 140, 0.14); border-radius: 100px; padding: 3px; }
+.un-seg button { flex: 1; border: none; border-radius: 100px; padding: 11px 0; font: 700 13.5px 'Inter', sans-serif; background: transparent; color: var(--ink-soft); cursor: pointer; transition: background 0.2s, color 0.2s; }
+.un-seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.un-preview { padding: 16px 18px; border-radius: 20px; background: var(--card); border: 1px solid var(--card-border); display: flex; flex-direction: column; gap: 10px; }
+.un-preview > div { display: flex; justify-content: space-between; font-size: 14px; }
+.un-preview > div span { color: var(--ink-soft); }
+@media (prefers-reduced-motion: reduce) { .un-seg button { transition: none; } }
+
+/* Progreso: what the week of eating means for the scale */
+.pace-head { font-size: 22px; line-height: 1.25; font-weight: 700; margin-top: 8px; }
+.pace-hl { background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.pace-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 8px; line-height: 1.5; }
+.pace-sub b { color: var(--ink); }
+.pc-chart { position: relative; display: flex; gap: 6px; align-items: flex-end; height: 102px; margin-top: 14px; }
+.pc-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; height: 100%; }
+.pc-bar { width: 20px; border-radius: 7px 7px 3px 3px; background: linear-gradient(180deg, var(--accent-to), var(--accent-from)); }
+.pc-bar.empty { background: transparent; border: 1.5px dashed rgba(127, 127, 140, 0.4); }
+.pc-col span { font-size: 10.5px; font-weight: 700; color: var(--ink-soft); }
+.pc-goal { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(127, 127, 140, 0.5); pointer-events: none; }
+.pace-foot { font-size: 11px; color: var(--ink-soft); margin-top: 12px; line-height: 1.5; }

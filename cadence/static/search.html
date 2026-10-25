@@ -90,6 +90,7 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/units.js"></script>
 <script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/shell.js"></script>
@@ -119,7 +120,7 @@ function toggleFavorite(food) {
   const list = loadFavorites();
   const idx = list.findIndex((f) => f.id === food.id);
   if (idx >= 0) list.splice(idx, 1);
-  else list.unshift({ id: food.id, name: food.name, energy_kcal_100g: food.energy_kcal_100g, grams: food.last_amount_grams || 100 });
+  else list.unshift({ id: food.id, name: food.name, energy_kcal_100g: food.energy_kcal_100g, grams: food.last_amount_grams || 100, liquid: food.liquid });
   saveFavorites(list.slice(0, 20));
   renderFavorites();
   refreshStars();
@@ -138,7 +139,8 @@ function addFood(food) {
   result.components.push({
     detected_name: food.name,
     confidence: null,
-    candidates: [{ id: food.id, name: food.name, score: 1, energy_kcal_100g: food.energy_kcal_100g }],
+    liquid: food.liquid,
+    candidates: [{ id: food.id, name: food.name, score: 1, energy_kcal_100g: food.energy_kcal_100g, liquid: food.liquid }],
     selectedId: food.id,
     grams: food.last_amount_grams || food.grams || 100,
   });
@@ -206,7 +208,7 @@ async function renderRecents() {
       return;
     }
     recents.forEach((food) => {
-      wrap.appendChild(foodRow(food, `Registrado ${agoLabel(food.last_logged)} · ${Math.round(food.last_amount_grams)}g`));
+      wrap.appendChild(foodRow(food, `Registrado ${agoLabel(food.last_logged)} · ${cadenceUnits.fmtAmount(food.last_amount_grams, food.liquid)}`));
     });
     refreshStars();
   } catch (err) {
@@ -250,7 +252,7 @@ document.getElementById('termInput').addEventListener('input', (e) => {
         box.innerHTML = '<div class="empty-hint">Sin resultados. Prueba con otro nombre.</div>';
         return;
       }
-      foods.forEach((food) => box.appendChild(foodRow(food, 'por 100 g')));
+      foods.forEach((food) => box.appendChild(foodRow(food, food.liquid ? 'por 100 ml' : 'por 100 g')));
       refreshStars();
     } catch (err) {
       if (seq !== searchSeq) return;

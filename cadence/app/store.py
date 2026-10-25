@@ -101,6 +101,13 @@ def _connect() -> sqlite3.Connection:
         ("plates", "user_id", "INTEGER"),
         ("custom_foods", "fibre", "REAL"),  # optional: grams of fibre per 100 g
         ("workouts", "at", "TEXT"),  # local time (HH:MM) the workout was done
+        ("users", "units", "TEXT"),  # JSON: how this person wants to SEE weight / height / liquids (data is always metric)
+        ("users", "pace_lb", "REAL"),  # pounds per month the goal was chosen by (None = calories set by hand / old rule)
+        # 0 = has not seen the one-time "what changed" welcome yet. Everyone who existed when this column appeared
+        # starts at 0; accounts created afterwards are inserted with 1 (they go through the full first-use flow).
+        ("users", "welcome_v2", "INTEGER NOT NULL DEFAULT 0"),
+        ("entry_meta", "liquid", "INTEGER"),  # 1 = measured in millilitres (the model or the person said so)
+        ("custom_foods", "liquid", "INTEGER"),
     ):
         columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in columns:
@@ -126,12 +133,12 @@ def get_meta(entry_ids: list[str]) -> dict[str, dict]:
     marks = ",".join("?" * len(entry_ids))
     with closing(_connect()) as conn:
         rows = conn.execute(
-            f"SELECT entry_id, note, crop IS NOT NULL, plate_key, box FROM entry_meta WHERE entry_id IN ({marks})",
+            f"SELECT entry_id, note, crop IS NOT NULL, plate_key, box, liquid FROM entry_meta WHERE entry_id IN ({marks})",
             [str(i) for i in entry_ids],
         ).fetchall()
     return {
         row[0]: {"note": row[1] or None, "has_crop": bool(row[2]), "plate_key": row[3],
-                 "box": json.loads(row[4]) if row[4] else None}
+                 "box": json.loads(row[4]) if row[4] else None, "liquid": None if row[5] is None else bool(row[5])}
         for row in rows
     }
 
@@ -191,6 +198,15 @@ def set_logged_on(entry_ids: list[str], day: str, user_id: int | None = None) ->
                          (day, user_id, str(entry_id)))
 
 
+def set_liquid(entry_ids_by_flag: dict[str, bool], user_id: int | None = None) -> None:
+    """Remember which entries are measured in millilitres (entry id -> True/False), when the model or the person said so."""
+    with closing(_connect()) as conn, conn:
+        for entry_id, liquid in entry_ids_by_flag.items():
+            conn.execute("INSERT OR IGNORE INTO entry_meta (entry_id) VALUES (?)", (str(entry_id),))
+            conn.execute("UPDATE entry_meta SET liquid = ?, user_id = COALESCE(user_id, ?) WHERE entry_id = ?",
+                         (int(liquid), user_id, str(entry_id)))
+
+
 def get_logged_on(entry_ids: list[str]) -> dict[str, str]:
     """entry id -> ISO day it was registered; entries registered before this existed are absent."""
     found: dict[str, str] = {}
@@ -230,12 +246,16 @@ class User:
     goal_fat: float | None = None
     onboarded: bool = False
     created_at: str = field(default="")
+    units: str | None = None
+    pace_lb: float | None = None
+    welcome_v2: bool = True
 
 
 _USER_COLUMNS = ("id, email, name, is_admin, plan_id, sex, birthdate, height_cm, activity, goal, target_weight_kg, "
-                 "goal_kcal, goal_protein, goal_carbs, goal_fat, onboarded, created_at")
+                 "goal_kcal, goal_protein, goal_carbs, goal_fat, onboarded, created_at, units, pace_lb, welcome_v2")
 _PROFILE_FIELDS = {"name", "sex", "birthdate", "height_cm", "activity", "goal", "target_weight_kg", "goal_kcal",
-                   "goal_protein", "goal_carbs", "goal_fat", "onboarded", "plan_id", "password_hash"}
+                   "goal_protein", "goal_carbs", "goal_fat", "onboarded", "plan_id", "password_hash", "units", "pace_lb",
+                   "welcome_v2"}
 
 
 def _user(row) -> User | None:
@@ -244,6 +264,7 @@ def _user(row) -> User | None:
     values = list(row)
     values[3] = bool(values[3])
     values[15] = bool(values[15])
+    values[-1] = bool(values[-1])
     return User(*values)
 
 
@@ -284,7 +305,7 @@ def create_user(email: str, name: str, password_hash: str, invite: str | None, a
                     conn.execute("ROLLBACK")
                     return None, "bad_invite"
             cursor = conn.execute(
-                "INSERT INTO users (email, name, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO users (email, name, password_hash, is_admin, created_at, welcome_v2) VALUES (?, ?, ?, ?, ?, 1)",
                 (email, name, password_hash, 1 if first else 0, _now()),
             )
             user_id = cursor.lastrowid
@@ -585,20 +606,22 @@ def claim_entry(entry_id: str, user_id: int) -> None:
 # entries that use it too. A custom food has ingredient id -<id> everywhere; its entries are "c<id>".
 
 def create_custom_food(user_id: int, name: str, kcal: float, protein: float, carbs: float, fat: float,
-                       barcode: str | None = None, fibre: float | None = None) -> int:
+                       barcode: str | None = None, fibre: float | None = None, liquid: bool | None = None) -> int:
     with closing(_connect()) as conn, conn:
         cur = conn.execute(
-            "INSERT INTO custom_foods (user_id, name, kcal, protein, carbs, fat, barcode, created_at, fibre) VALUES (?,?,?,?,?,?,?,?,?)",
-            (user_id, name.strip(), kcal, protein, carbs, fat, barcode or None, _now(), fibre))
+            "INSERT INTO custom_foods (user_id, name, kcal, protein, carbs, fat, barcode, created_at, fibre, liquid) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (user_id, name.strip(), kcal, protein, carbs, fat, barcode or None, _now(), fibre,
+             None if liquid is None else int(liquid)))
         return cur.lastrowid
 
 
 def _food(row) -> dict:
     return {"id": -row[0], "user_id": row[1], "name": row[2], "energy": row[3], "protein": row[4],
-            "carbohydrates": row[5], "fat": row[6], "barcode": row[7], "source": "custom", "fibres": row[8]}
+            "carbohydrates": row[5], "fat": row[6], "barcode": row[7], "source": "custom", "fibres": row[8],
+            "liquid": None if row[9] is None else bool(row[9])}
 
 
-_FOOD_COLUMNS = "id, user_id, name, kcal, protein, carbs, fat, barcode, fibre"
+_FOOD_COLUMNS = "id, user_id, name, kcal, protein, carbs, fat, barcode, fibre, liquid"
 
 
 def get_custom_food(ingredient_id: int, user_id: int | None = None) -> dict | None:

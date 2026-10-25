@@ -39,9 +39,11 @@ Reglas estrictas:
 - "search_alternatives": hasta 3 nombres alternativos cortos en ingles del MISMO
   alimento, de lo mas especifico a lo mas general ("chicken noodle soup",
   "chicken soup", "chicken broth"). Sirven para encontrarlo si la base lo nombra distinto.
+- "liquid": true SOLO si ese componente se mide en mililitros (una sopa, un caldo, un
+  jugo, un batido, leche, cafe, un refresco); omitelo o pon false en sólidos.
 
 Responde UNICAMENTE con un JSON array, sin texto adicional, con esta forma:
-[{"name": "pollo a la plancha", "search_name": "grilled chicken breast", "search_alternatives": ["chicken breast", "grilled chicken"], "confidence": 0.9, "estimated_grams": 120, "box_2d": [250, 100, 700, 480]}, {"name": "agua", "water_ml": 250, "confidence": 0.9}]
+[{"name": "pollo a la plancha", "search_name": "grilled chicken breast", "search_alternatives": ["chicken breast", "grilled chicken"], "confidence": 0.9, "estimated_grams": 120, "box_2d": [250, 100, 700, 480]}, {"name": "sopa de pollo", "search_name": "chicken soup", "search_alternatives": ["chicken broth"], "liquid": true, "confidence": 0.8, "estimated_grams": 300, "box_2d": [100, 600, 500, 950]}, {"name": "agua", "water_ml": 250, "confidence": 0.9}]
 """
 
 
@@ -59,6 +61,8 @@ Reglas estrictas:
 - "name" va en espanol, tal como lo dijo (corto). "search_name" es el mismo alimento
   como nombre generico corto en ingles y TAL COMO SE COME (cooked/grilled/boiled).
   "search_alternatives": hasta 3 nombres alternativos en ingles, de mas a menos especifico.
+- "liquid": true SOLO si se mide en mililitros (sopa, caldo, jugo, batido, leche, cafe,
+  refresco); si dijo "un vaso de leche" o "un plato de sopa", convierte a gramos (1 ml = 1 g).
 - "confidence": 0 a 1, que tan seguro estas de haber entendido ese alimento.
 - Agua sola ("un vaso de agua", "medio litro de agua"): elemento con "name": "agua"
   y "water_ml" en mililitros (un vaso ~250, una botella ~500, un litro 1000). No es un
@@ -135,6 +139,7 @@ def _parse_components(raw_text: str) -> list[DetectedComponent]:
             confidence=item.get("confidence"),
             estimated_grams=_sane_grams(item.get("estimated_grams")),
             box=_box_from_gemini(item.get("box_2d")),
+            liquid=item.get("liquid") if isinstance(item.get("liquid"), bool) else None,
         )
         for item in data
     ]

@@ -24,6 +24,11 @@ _GOAL_RULES = {
 _KCAL_FLOOR = {"female": 1200, "male": 1500, "other": 1350}
 
 
+KCAL_PER_LB = 3500  # one pound of body fat holds about 3,500 kcal (7,700 per kg)
+LB_PER_KG = 2.2046226
+_DAYS_PER_MONTH = 30
+
+
 @dataclass
 class Targets:
     kcal: int
@@ -32,6 +37,41 @@ class Targets:
     fat_g: int
     maintenance_kcal: int
     note: str | None = None
+    # What these calories mean for the scale, in pounds per month (positive = the weight goes the way of the goal).
+    pace_lb_month: float | None = None
+    max_pace_lb_month: float | None = None  # the fastest pace that is safe for this person
+    projection_kg: list[float] | None = None  # expected weight after 1, 2 and 3 months (an estimate)
+
+
+def weight_change_lb_month(maintenance_kcal: float, kcal: float) -> float:
+    """Pounds per month the scale would move eating `kcal` a day (negative = losing). An estimate, not a promise."""
+    return (kcal - maintenance_kcal) * _DAYS_PER_MONTH / KCAL_PER_LB
+
+
+def kcal_gap_for_pace(lb_month: float) -> float:
+    return lb_month * KCAL_PER_LB / _DAYS_PER_MONTH
+
+
+def max_pace_lb_month(sex: str, goal: str, weight_kg: float, height_cm: float, age: int, maintenance: float) -> float:
+    """The fastest safe pace, in lb/month, in the direction of the goal.
+
+    Losing: no more than 1 % of the body weight per week, never under the daily minimum, nothing for minors or for a
+    weight that is already low. Gaining: no more than 0.5 % of the body weight per week."""
+    weeks = _DAYS_PER_MONTH / 7
+    if goal == "lose":
+        bmi = weight_kg / ((height_cm / 100) ** 2)
+        if age < 18 or bmi < 18.5:
+            return 0.0
+        by_weight = 0.01 * weight_kg * weeks * LB_PER_KG
+        by_floor = max(0.0, (maintenance - _KCAL_FLOOR.get(sex, 1350)) * _DAYS_PER_MONTH / KCAL_PER_LB)
+        return round(min(by_weight, by_floor), 1)
+    if goal in ("gain", "muscle"):
+        return round(0.005 * weight_kg * weeks * LB_PER_KG, 1)
+    return 0.0
+
+
+def maintenance_kcal(sex: str, birthdate: date, height_cm: float, weight_kg: float, activity: str, today: date) -> float:
+    return bmr(sex, weight_kg, height_cm, age_on(birthdate, today)) * ACTIVITY[activity]
 
 
 def age_on(birthdate: date, today: date) -> int:
@@ -45,7 +85,9 @@ def bmr(sex: str, weight_kg: float, height_cm: float, age: int) -> float:
 
 
 def compute_targets(sex: str, birthdate: date, height_cm: float, weight_kg: float, activity: str, goal: str,
-                    today: date) -> Targets:
+                    today: date, pace_lb_month: float | None = None) -> Targets:
+    """Daily calories and macros. With `pace_lb_month` the calories come from the pace the person asked for
+    (pounds per month in the direction of the goal), limited to what is safe; without it, the fixed rule of the goal."""
     age = age_on(birthdate, today)
     maintenance = bmr(sex, weight_kg, height_cm, age) * ACTIVITY[activity]
     rule = _GOAL_RULES[goal]
@@ -54,6 +96,17 @@ def compute_targets(sex: str, birthdate: date, height_cm: float, weight_kg: floa
     if age < 18 and factor < 1:
         factor, note = 1.0, "Eres menor de edad: mantenemos tus calorías en lugar de un déficit."
     kcal = maintenance * factor
+    max_pace = max_pace_lb_month(sex, goal, weight_kg, height_cm, age, maintenance)
+    if pace_lb_month is not None and goal in ("lose", "gain", "muscle"):
+        wanted = max(0.0, pace_lb_month)
+        used = min(wanted, max_pace)
+        if used < wanted - 0.05 and max_pace > 0:
+            note = f"Ajustamos tu ritmo a {max_pace:g} libras al mes, lo más seguro para ti."
+        elif max_pace == 0 and goal == "lose":
+            note = ("Eres menor de edad: mantenemos tus calorías en lugar de un déficit." if age < 18
+                    else "Tu peso ya es bajo para tu estatura: te sugerimos mantener en lugar de bajar.")
+        sign = -1 if goal == "lose" else 1
+        kcal = maintenance + sign * kcal_gap_for_pace(used)
     bmi = weight_kg / ((height_cm / 100) ** 2)
     if goal == "lose" and bmi < 18.5:
         kcal, note = maintenance, "Tu peso ya es bajo para tu estatura: te sugerimos mantener en lugar de bajar."
@@ -65,8 +118,15 @@ def compute_targets(sex: str, birthdate: date, height_cm: float, weight_kg: floa
     protein = round(weight_kg * rule["protein_per_kg"])
     fat = round(kcal * 0.27 / 9)
     carbs = max(0, round((kcal - protein * 4 - fat * 9) / 4))
+    # What the final calories mean for the scale (after every safety limit), and where the weight would be.
+    change = weight_change_lb_month(maintenance, kcal)  # negative = losing
+    along = -change if goal == "lose" else change if goal in ("gain", "muscle") else 0.0
+    pace = round(max(0.0, along), 1)
+    kg_month = change / LB_PER_KG
+    projection = [round(weight_kg + kg_month * m, 1) for m in (1, 2, 3)]
     return Targets(kcal=int(kcal), protein_g=int(protein), carbs_g=int(carbs), fat_g=int(fat),
-                   maintenance_kcal=int(round(maintenance / 10) * 10), note=note)
+                   maintenance_kcal=int(round(maintenance / 10) * 10), note=note, pace_lb_month=pace,
+                   max_pace_lb_month=max_pace, projection_kg=projection)
 
 
 def macros_for_kcal(kcal: float, weight_kg: float, goal: str) -> tuple[int, int, int]:

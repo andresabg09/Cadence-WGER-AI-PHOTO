@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import accounts, auth, gamify, nutrition, reminders, scoring, store
+from . import accounts, auth, foodunits, gamify, nutrition, reminders, scoring, store
 from .config import settings
 from .diagnostics import run_diagnostics
 from .progress import achievements as build_achievements, day_totals, streak_runs
@@ -67,6 +67,7 @@ from .schemas import (
     HistoryDay,
     HistoryResponse,
     ProgressDay,
+    PaceOut,
     ProgressResponse,
     WeightPoint,
     ConfirmedEntry,
@@ -224,6 +225,14 @@ def ingredient_info(wger: WgerClient, user: store.User, ingredient_id: int) -> d
             raise WgerError("Ese alimento propio no existe")
         return food
     return wger.get_ingredient(ingredient_id)
+
+
+def _is_liquid_entry(ingredient: dict, meta: dict) -> bool:
+    """Measured in millilitres? What was said when it was logged wins, then the person's own food flag, then its name."""
+    flag = meta.get("liquid")
+    if flag is None:
+        flag = ingredient.get("liquid")
+    return foodunits.is_liquid(ingredient.get("name", ""), flag)
 
 
 def owns_entry(wger: WgerClient, user: store.User, entry_id: str) -> bool:
@@ -454,7 +463,8 @@ def water_goal_for(user: store.User) -> tuple[int, bool]:
 @app.put("/api/water/goal", response_model=WaterOut)
 def set_water_goal(body: WaterGoalIn, user: store.User = Depends(current_user)):
     """Change the daily water goal (ml), or None to go back to the automatic one."""
-    store.set_water_goal(user.id, None if body.ml is None else int(round(body.ml / 250) * 250))
+    step = body.step_ml if body.step_ml in (237, 250) else 250  # a glass of 8 oz or 250 ml
+    store.set_water_goal(user.id, None if body.ml is None else int(round(body.ml / step) * step))
     today_iso = local_now().date().isoformat()
     return WaterOut(date=today_iso, ml=store.water_ml(user.id, today_iso), goal_ml=water_goal_for(user)[0])
 
@@ -600,6 +610,7 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
                     protein_g=round(protein, 1),
                     carbs_g=round(carbs, 1),
                     fat_g=round(fat, 1),
+                    liquid=_is_liquid_entry(ingredient, meta.get(str(entry["id"]), {})),
                     taken_at=(entry_datetime(entry).isoformat() if entry_datetime(entry) else None),
                     note=meta.get(str(entry["id"]), {}).get("note"),
                     has_crop=meta.get(str(entry["id"]), {}).get("has_crop", False),
@@ -666,6 +677,8 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
             water_ml=store.water_ml(user.id, shown_date.isoformat()),
             water_goal_ml=water_goal_for(user)[0],
             water_goal_auto=water_goal_for(user)[1],
+            maintenance_kcal=_maintenance_round(user),
+            goal_change_lb_month=_goal_change(user, goal.kcal),
             burn=_burn(totals.kcal, goal.kcal, store.workouts_between(user.id, shown_date.isoformat(), shown_date.isoformat()), store.latest_weight(user.id)),
         )
     finally:
@@ -788,6 +801,17 @@ def _goal_kcal(user: store.User) -> float:
     return user.goal_kcal or settings.fallback_goal_kcal
 
 
+def _maintenance_round(user: store.User) -> int | None:
+    value = accounts.maintenance_for(user)
+    return None if value is None else int(round(value / 10) * 10)
+
+
+def _goal_change(user: store.User, kcal: float) -> float | None:
+    """Pounds per month the scale would move if every day were like the goal (negative = loses)."""
+    value = accounts.maintenance_for(user)
+    return None if value is None or not kcal else round(nutrition.weight_change_lb_month(value, kcal), 1)
+
+
 @app.get("/api/progress", response_model=ProgressResponse)
 def progress(user: store.User = Depends(current_user)):
     """Streak, the last 4 weeks, weight and achievements (everything read from the person's own data)."""
@@ -825,7 +849,15 @@ def progress(user: store.User = Depends(current_user)):
         medals = build_achievements(
             total_logged=len(entries), photos=store.photo_count(user.id), best_streak=best, weights=len(all_weights),
             totals=totals, goal_kcal=goal, goal_protein=user.goal_protein or settings.fallback_goal_protein_g)
+        pace = None
+        maintenance = accounts.maintenance_for(user)
+        week = [totals[d]["kcal"] for d in (today_ - timedelta(days=n) for n in range(1, 8)) if d in totals and totals[d]["kcal"] > 0]
+        if maintenance and len(week) >= 3:  # today is left out: it is not finished; days without records are not zeros
+            avg = sum(week) / len(week)
+            pace = PaceOut(days=len(week), avg_kcal=round(avg), goal_kcal=round(goal), maintenance_kcal=round(maintenance),
+                           change_lb_month=round(nutrition.weight_change_lb_month(maintenance, avg), 1))
         return ProgressResponse(
+            pace=pace,
             today=today_.isoformat(), streak_current=current.length if current else 0, streak_best=best,
             logged_today=today_ in counting, goal_kcal=goal, days=days,
             weights=[WeightPoint(**w) for w in weights], weight_change_30d=change,
@@ -1107,6 +1139,8 @@ def match_components(wger: WgerClient, user: store.User, detected: list) -> list
         components.append(
             ComponentMatch(
                 detected_name=component.name,
+                liquid=(component.liquid if component.liquid is not None
+                        else bool(candidates and candidates[0].liquid) or foodunits.is_liquid(component.name)),
                 confidence=component.confidence,
                 estimated_grams=component.estimated_grams,
                 box=component.box,
@@ -1225,14 +1259,16 @@ def create_food(food: FoodIn, user: store.User = Depends(current_user)):
     code = (food.barcode or "").strip() or None
     existing = store.custom_food_by_barcode(user.id, code) if code else None
     if existing:
-        return SearchResult(id=existing["id"], name=existing["name"], energy_kcal_100g=existing["energy"])
-    fid = store.create_custom_food(user.id, food.name, food.kcal, food.protein, food.carbs, food.fat, code, food.fibre)
-    return SearchResult(id=-fid, name=food.name.strip(), energy_kcal_100g=food.kcal)
+        return SearchResult(id=existing["id"], name=existing["name"], energy_kcal_100g=existing["energy"],
+                            liquid=foodunits.is_liquid(existing["name"], existing.get("liquid")))
+    fid = store.create_custom_food(user.id, food.name, food.kcal, food.protein, food.carbs, food.fat, code, food.fibre, food.liquid)
+    return SearchResult(id=-fid, name=food.name.strip(), energy_kcal_100g=food.kcal, liquid=foodunits.is_liquid(food.name, food.liquid))
 
 
 @app.get("/api/foods", response_model=list[SearchResult])
 def my_foods(user: store.User = Depends(current_user)):
-    return [SearchResult(id=f["id"], name=f["name"], energy_kcal_100g=f["energy"]) for f in store.custom_foods(user.id)[:30]]
+    return [SearchResult(id=f["id"], name=f["name"], energy_kcal_100g=f["energy"], liquid=foodunits.is_liquid(f["name"], f.get("liquid")))
+            for f in store.custom_foods(user.id)[:30]]
 
 
 def _off_lookup(code: str) -> tuple[dict | None, str, str | None]:
@@ -1394,6 +1430,7 @@ def recent_foods(user: store.User = Depends(current_user)):
                 id=entry["ingredient"],
                 name=data.get("name", "?"),
                 energy_kcal_100g=float(data.get("energy", 0) or 0),
+                liquid=foodunits.is_liquid(data.get("name", "?"), data.get("liquid")),
                 last_amount_grams=float(entry["amount"]),
                 last_logged=when.date().isoformat() if when else None,
             )
@@ -1564,6 +1601,12 @@ def confirm(request: ConfirmRequest, user: store.User = Depends(current_user)):
         entry_day = when.astimezone(local_tz()).date()
         real_today = local_now().date()
         try:
+            flags = {c.diary_entry_id: bool(item.liquid) for c, item in zip(created, request.items) if item.liquid is not None}
+            if flags:
+                store.set_liquid(flags, user.id)
+        except Exception:  # noqa: BLE001 - the unit is only a display detail
+            logger.exception("no se pudo anotar la unidad (ml/g)")
+        try:
             store.set_logged_on([c.diary_entry_id for c in created], real_today.isoformat(), user.id)
         except Exception:  # noqa: BLE001 - the plate is already in wger; only the streak bookkeeping is lost
             logger.exception("no se pudo anotar el dia de registro")
@@ -1622,7 +1665,8 @@ def _favorites(wger: WgerClient, user: store.User, limit: int = 8) -> list[Favor
             grams = float(entry["amount"])
             kcal += (scoring.number(data.get("energy")) or 0.0) * grams / 100
             protein += (scoring.number(data.get("protein")) or 0.0) * grams / 100
-            items.append(FavoriteItem(ingredient_id=entry["ingredient"], name=data["name"], grams=grams))
+            items.append(FavoriteItem(ingredient_id=entry["ingredient"], name=data["name"], grams=grams,
+                                      liquid=_is_liquid_entry(data, meta.get(str(entry["id"]), {}))))
         if not ok or kcal < 50:
             continue
         plate = next((meta[str(e["id"])]["plate_key"] for e in found["members"] if meta.get(str(e["id"]), {}).get("plate_key")), None)
@@ -1650,7 +1694,7 @@ def _idea_item(wger: WgerClient, user: store.User, component: DetectedComponent)
     if not matched.candidates or matched.candidates[0].score < 0.55:
         return None
     top = matched.candidates[0]
-    return FavoriteItem(ingredient_id=top.id, name=top.name, grams=float(component.estimated_grams or 100))
+    return FavoriteItem(ingredient_id=top.id, name=top.name, grams=float(component.estimated_grams or 100), liquid=matched.liquid)
 
 
 @app.get("/api/ideas", response_model=IdeasResponse)

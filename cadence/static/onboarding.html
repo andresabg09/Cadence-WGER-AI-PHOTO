@@ -37,6 +37,53 @@
   .macro-chips span { font-size: 9.5px; color: var(--ink-soft); font-weight: 700; letter-spacing: 0.04em; }
   .nudge { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 16px; }
   .nudge button { width: 44px; height: 44px; border-radius: 14px; border: 1px solid var(--card-border); background: var(--card); color: var(--ink); font-size: 20px; font-weight: 700; cursor: pointer; }
+  .ob-bar { display: flex; flex-direction: column; gap: 8px; align-items: center; flex: 1; padding: 0 10px; }
+  .ob-bar b { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
+  .ob-track { width: 100%; height: 4px; border-radius: 4px; background: rgba(127,127,140,0.2); overflow: hidden; }
+  .ob-track i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent-from), var(--accent-to)); transition: width 0.35s ease; }
+  .ob-field-row { display: flex; gap: 10px; }
+  .ob-field-row .field { flex: 1; }
+  .pace-big { display: flex; align-items: center; justify-content: center; gap: 22px; margin: 6px 0 0; }
+  .pace-big button { width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--card-border); background: var(--card); color: var(--ink); font-size: 24px; cursor: pointer; }
+  .pace-big .num { font-family: 'Space Mono', monospace; font-size: 54px; font-weight: 700; line-height: 1; text-align: center; }
+  .pace-big .sub { font-size: 13px; color: var(--ink-soft); margin-top: 6px; text-align: center; }
+  .pace-chips { display: flex; gap: 10px; margin-top: 20px; }
+  .pace-chips button { flex: 1; padding: 12px 4px; border-radius: 16px; border: 1.5px solid var(--card-border); background: var(--card); color: var(--ink); cursor: pointer; font-family: inherit; }
+  .pace-chips button[aria-pressed="true"] { border-color: #4A8BFF; background: rgba(74,139,255,0.12); }
+  .pace-chips b { display: block; font-size: 12px; }
+  .pace-chips span { display: block; font-family: 'Space Mono', monospace; font-size: 14px; font-weight: 700; margin-top: 4px; }
+  .res-card { margin-top: 18px; padding: 16px 18px; border-radius: 20px; background: var(--card); border: 1px solid var(--card-border); }
+  .res-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 13.5px; }
+  .res-row + .res-row { margin-top: 9px; }
+  .res-row span { color: var(--ink-soft); }
+  .res-sep { height: 1px; background: var(--card-border); margin: 13px 0; }
+  .note { margin-top: 14px; padding: 12px 14px; border-radius: 14px; font-size: 12.5px; line-height: 1.45; }
+  .note.ok { background: rgba(61,220,132,0.10); border: 1px solid rgba(61,220,132,0.32); color: var(--good); }
+  .note.warn { background: rgba(255,170,64,0.12); border: 1px solid rgba(255,170,64,0.4); color: #C98A2B; }
+  .note.bad { background: rgba(255,92,92,0.12); border: 1px solid rgba(255,92,92,0.4); color: var(--bad); }
+  .note.info { background: rgba(124,92,255,0.12); border: 1px solid rgba(124,92,255,0.4); color: var(--ink); }
+  .fact { display: flex; gap: 16px; align-items: center; padding: 18px; border-radius: 20px; background: var(--card); border: 1px solid var(--card-border); }
+  .fact i { width: 46px; height: 46px; border-radius: 15px; background: rgba(124,92,255,0.16); display: flex; align-items: center; justify-content: center; font: 700 16px 'Space Mono', monospace; color: #8FA6FF; flex-shrink: 0; font-style: normal; }
+  .fact b { display: block; font-size: 16px; }
+  .fact span { display: block; font-size: 13px; color: var(--ink-soft); line-height: 1.45; margin-top: 4px; }
+  .hl { background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .link-line { margin-top: 14px; text-align: center; }
+  /* the quiet gradient screens: a message, not a question */
+  body.ob-tone { background: linear-gradient(180deg, #4A8BFF 0%, #6C7CFF 55%, #8E7CFF 100%) !important; }
+  body.ob-tone .constellation, body.ob-tone canvas { display: none; }
+  body.ob-tone .ob-bar b { color: #0F2A66; }
+  body.ob-tone .ob-track { background: rgba(0,0,0,0.22); }
+  body.ob-tone .ob-track i { background: #fff; }
+  body.ob-tone .ob-back { background: transparent; border-color: transparent; }
+  body.ob-tone .ob-back svg path { stroke: #fff; }
+  body.ob-tone .btn-primary { background: #fff; color: #4A6BFF; box-shadow: none; }
+  .tone-wrap { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 8px; color: #0A0A14; }
+  .tone-wrap small { font-size: 15px; font-weight: 700; color: #0F2A66; margin-bottom: 10px; }
+  .tone-wrap h1 { margin: 0; font-size: 34px; line-height: 1.12; font-weight: 700; }
+  .tone-wrap p { margin: 18px 0 0; font-size: 16px; line-height: 1.5; color: #12122A; }
+  .tone-wrap ul { margin: 22px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; font-size: 15.5px; color: #12122A; }
+  .tone-wrap li { display: flex; gap: 12px; line-height: 1.4; }
+  .tone-wrap li::before { content: ''; flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: #fff; margin-top: 7px; }
   @keyframes floatSlow { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-10px) rotate(3deg); } }
   .float { animation: floatSlow 4.5s ease-in-out infinite; }
 </style>
@@ -48,7 +95,7 @@
       <button class="ob-back" id="back" aria-label="Volver" style="visibility:hidden;">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
       </button>
-      <div class="step-dots" id="dots" aria-hidden="true"></div>
+      <div class="ob-bar" id="bar" aria-hidden="true"><b id="barLabel"></b><div class="ob-track"><i id="barFill" style="width:0%;"></i></div></div>
       <span style="width:40px;"></span>
     </div>
     <div class="ob-main" id="main"></div>
@@ -60,45 +107,87 @@
 </div>
 
 <script src="static/js/api.js"></script>
+<script src="static/js/units.js"></script>
+<script src="static/js/units-ui.js"></script>
 <script src="static/js/constellation.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/datepicker.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
+const U = cadenceUnits;
 let sky = null;
-const STEPS = ['intro', 'about', 'body', 'activity', 'goal', 'plan'];
+// Two ways in: the full first-use flow, or (mode=update) the one-time "what changed" welcome for people who were already here.
+const MODE = new URLSearchParams(window.location.search).get('mode') === 'update' ? 'update' : 'full';
 const data = { sex: null, birthdate: '', height_cm: '', weight_kg: '', activity: null, goal: null };
 let step = 0;
 let me = null;
-let plan = null;      // what the server calculated for the answers so far
-let nudged = null;    // calories the user changed by hand (null = keep the calculation)
+let plan = null;       // what the server calculated for the answers so far
+let nudged = null;     // calories typed by hand in "Mueve y mira" (null = keep the calculation)
+let paceLb = 4;        // pounds per month towards the goal (what the server speaks)
+let unitsPick = null;  // what the units step shows
+let keepCurrent = true; // update mode: leave the saved goal as it is
+let exploreKcal = null;
+let paceTouched = false; // false: the recommended pace follows the units and the goal
+
+const SECTION = { intro: 'Bienvenida', units: 'Empezamos', goal: 'Objetivos', about: 'Sobre ti', body: 'Sobre ti', activity: 'Sobre ti',
+  promise: 'Tu plan', pace: 'Tu plan', calorie: 'Tu plan', plan: 'Tu plan', explore: 'Tu plan', changed: 'Novedades', current: 'Tu plan' };
+const TONED = new Set(['promise', 'changed']); // gradient message screens
+
+function steps() {
+  if (MODE === 'update') {
+    const moves = me && me.profile.goal && me.profile.goal !== 'maintain';
+    return ['changed', 'units', 'calorie', 'current', ...(moves && !keepCurrent ? ['pace'] : []), 'plan'];
+  }
+  return ['intro', 'units', 'goal', 'about', 'body', 'activity', 'promise', ...(data.goal === 'maintain' ? [] : ['pace']), 'calorie', 'plan'];
+}
+const name = () => { const list = steps(); return step === -1 ? 'explore' : list[Math.min(step, list.length - 1)]; };
 
 const ACTIVITY = [
-  ['low', 'Poco movimiento', 'Trabajo sentado, casi nada de ejercicio.'],
-  ['moderate', 'Activo', 'Ejercicio o deporte 3 a 5 días por semana.'],
-  ['high', 'Muy activo', 'Entrenas casi a diario o tu trabajo es físico.'],
+  ['low', 'Poco activo', 'Trabajo sentado, casi no camino ni hago ejercicio.'],
+  ['moderate', 'Moderado', 'Camino bastante o entreno 3 a 5 días por semana.'],
+  ['high', 'Muy activo', 'Trabajo de pie o entreno casi todos los días.'],
 ];
 const GOALS = [
-  ['lose', 'Bajar de peso', 'Un déficit moderado y seguro.'],
-  ['maintain', 'Mantener mi peso', 'Comer lo justo para quedarte como estás.'],
-  ['gain', 'Subir de peso', 'Un pequeño superávit de calorías.'],
-  ['muscle', 'Ganar músculo', 'Más calorías y más proteína.'],
+  ['lose', 'Bajar de peso', 'Comer un poco menos de lo que gastas.'],
+  ['maintain', 'Mantener mi peso', 'Comer justo lo que gastas.'],
+  ['muscle', 'Ganar músculo', 'Comer un poco más y entrenar con fuerza.'],
+  ['gain', 'Subir de peso', 'Comer más de lo que gastas, sin entrenar fuerte.'],
 ];
+const goalNow = () => (MODE === 'update' ? me.profile.goal : data.goal);
+const unitWord = () => (U.isLb() ? 'libras' : 'kilos');
+const first = (n) => escapeHtml((n || '').split(' ')[0]);
 
-function maxBirthdate() {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - 13);
-  return d.toISOString().slice(0, 10);
-}
+// Pace in the person's unit: pounds (steps of 1) or kilos (steps of 0.5) per month.
+const paceStep = () => (U.isLb() ? 1 : 0.5);
+const paceDefault = () => U.paceToLb(U.isLb() ? (goalNow() === 'lose' ? 4 : 2) : (goalNow() === 'lose' ? 2 : 1)); // the recommended pace, in pounds per month
+const paceChoices = () => {
+  if (U.isLb()) return goalNow() === 'lose' ? [['Suave', 2], ['Recomendado', 4], ['Rápido', 6]] : [['Suave', 1], ['Recomendado', 2], ['Rápido', 3]];
+  return goalNow() === 'lose' ? [['Suave', 1], ['Recomendado', 2], ['Rápido', 3]] : [['Suave', 0.5], ['Recomendado', 1], ['Rápido', 1.5]];
+};
 
-function showError(message) {
-  $('error').textContent = message || '';
-  $('error').classList.toggle('show', Boolean(message));
-}
+function maxBirthdate() { const d = new Date(); d.setFullYear(d.getFullYear() - 13); return d.toISOString().slice(0, 10); }
+function showError(message) { $('error').textContent = message || ''; $('error').classList.toggle('show', Boolean(message)); }
+const num = (n) => Number(n).toLocaleString('es');
 
 function choices(list, key) {
   return `<div class="choice-grid">${list.map(([value, title, text]) =>
     `<button type="button" class="choice" data-key="${key}" data-value="${value}" aria-pressed="${data[key] === value}"><b>${title}</b>${text ? `<small>${text}</small>` : ''}</button>`).join('')}</div>`;
+}
+
+// A smooth line from today to three months ahead: the weight the plan expects (an estimate).
+function chartSvg(points, labels) {
+  const w = 330, h = 150;
+  const lo = Math.min(...points) - 1, hi = Math.max(...points) + 1;
+  const xy = points.map((v, i) => [30 + (i / (points.length - 1)) * (w - 60), 22 + ((hi - v) / (hi - lo)) * (h - 62)]);
+  let d = `M${xy[0][0].toFixed(1)},${xy[0][1].toFixed(1)}`;
+  for (let i = 1; i < xy.length; i += 1) { const cx = (xy[i - 1][0] + xy[i][0]) / 2; d += ` C${cx.toFixed(1)},${xy[i - 1][1].toFixed(1)} ${cx.toFixed(1)},${xy[i][1].toFixed(1)} ${xy[i][0].toFixed(1)},${xy[i][1].toFixed(1)}`; }
+  const area = `${d} L${xy[xy.length - 1][0].toFixed(1)},${h - 26} L${xy[0][0].toFixed(1)},${h - 26} Z`;
+  const dots = xy.map(([x, y], i) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="var(--bg)" stroke="url(#cg)" stroke-width="2.5"/>
+    <text x="${x.toFixed(1)}" y="${(y - 12).toFixed(1)}" text-anchor="middle" font-family="Space Mono" font-size="11" font-weight="700" fill="currentColor">${Number(points[i].toFixed(1))}</text>
+    <text x="${x.toFixed(1)}" y="${h - 8}" text-anchor="middle" font-family="Inter" font-size="10.5" font-weight="600" fill="#8B8B96">${labels[i]}</text>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" aria-hidden="true" style="color:var(--ink);display:block;"><defs><linearGradient id="cg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#2DD4FF"/></linearGradient>
+    <linearGradient id="ca" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7C5CFF" stop-opacity="0.28"/><stop offset="1" stop-color="#7C5CFF" stop-opacity="0"/></linearGradient></defs>
+    <path d="${area}" fill="url(#ca)"/><path d="${d}" fill="none" stroke="url(#cg)" stroke-width="3" stroke-linecap="round"/>${dots}</svg>`;
 }
 
 const VIEWS = {
@@ -106,13 +195,32 @@ const VIEWS = {
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:30px;padding:10px 6px;">
       ${cadenceHero(170)}
       <div>
-        <h1 class="disp ob-title" style="font-size:26px;">Hola${me ? `, ${escapeHtml(me.name)}` : ''}. Conoce tu comida al instante</h1>
-        <p class="ob-sub" style="margin:0;">Toma una foto de tu plato: la IA reconoce cada alimento y cadence calcula las calorías. Primero, unas preguntas rápidas para calcular cuánto necesitas tú.</p>
+        <h1 class="disp ob-title" style="font-size:26px;">Hola${me ? `, ${first(me.name)}` : ''}. Conoce tu comida al instante</h1>
+        <p class="ob-sub" style="margin:0;">Toma una foto de tu plato: la IA reconoce cada alimento y cadence calcula las calorías. Primero, unas preguntas rápidas para saber cuánto necesitas tú.</p>
       </div>
     </div>`,
+  changed: () => `
+    <div class="tone-wrap">
+      <small>Hola, ${first(me.name)}</small>
+      <h1 class="disp">cadence ahora te habla en tus medidas.</h1>
+      <p>Mejoramos cómo ves tus números para que sepas, sin hacer cuentas, qué pasa con tu peso:</p>
+      <ul>
+        <li><span><b>Tus unidades:</b> libras o kilos, pies o centímetros, onzas o mililitros.</span></li>
+        <li><span><b>Tu meta en libras:</b> te decimos cuánto cambia tu peso cada mes con lo que comes.</span></li>
+        <li><span><b>Las calorías, explicadas:</b> en 20 segundos y sin tecnicismos.</span></li>
+      </ul>
+    </div>`,
+  units: () => `
+    <h1 class="disp ob-title">¿Cómo prefieres ver tus medidas?</h1>
+    <p class="ob-sub">Lo dejamos como se usa en Panamá. Puedes cambiarlo cuando quieras en Ajustes.</p>
+    <div id="unBox"></div>`,
+  goal: () => `
+    <h1 class="disp ob-title">¿Qué quieres lograr?</h1>
+    <p class="ob-sub">Elige lo más importante para ti. Después te decimos cómo llegar, en ${unitWord()} y en comida.</p>
+    ${choices(GOALS, 'goal')}`,
   about: () => `
     <h1 class="disp ob-title">Cuéntanos de ti</h1>
-    <p class="ob-sub">Con esto calculamos tu gasto diario. Es privado y solo lo usa cadence.</p>
+    <p class="ob-sub">Con esto calculamos cuánta energía gasta tu cuerpo en un día. Es privado y solo lo usa cadence.</p>
     ${choices([['female', 'Mujer', ''], ['male', 'Hombre', ''], ['other', 'Prefiero no decir', '']], 'sex').replace('choice-grid', 'choice-grid two')}
     <div class="field" style="margin-top:18px;"><span>FECHA DE NACIMIENTO</span>
       <button type="button" class="input date-btn" id="birthBtn">
@@ -120,63 +228,196 @@ const VIEWS = {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
     </div>`,
-  body: () => `
-    <h1 class="disp ob-title">Tu cuerpo</h1>
-    <p class="ob-sub">Tu estatura y tu peso de hoy. Después podrás actualizarlos.</p>
-    <label class="field"><span>ESTATURA</span><div class="input-unit"><input class="input" id="height" type="number" inputmode="decimal" min="100" max="250" step="0.5" placeholder="170" value="${data.height_cm}"><i>cm</i></div></label>
-    <label class="field"><span>PESO</span><div class="input-unit"><input class="input" id="weight" type="number" inputmode="decimal" min="30" max="300" step="0.1" placeholder="70" value="${data.weight_kg}"><i>kg</i></div></label>`,
+  body: () => {
+    const parts = data.height_cm ? U.heightParts(Number(data.height_cm)) : { ft: '', inch: '' };
+    const wShown = data.weight_kg ? Number(U.weightValue(Number(data.weight_kg)).toFixed(1)) : '';
+    return `
+    <h1 class="disp ob-title">¿Cuánto mides y cuánto pesas?</h1>
+    <p class="ob-sub">Pesa lo que marque la báscula hoy. No tiene que ser perfecto; después podrás actualizarlo.</p>
+    ${U.isFt()
+      ? `<div class="ob-field-row"><label class="field"><span>ESTATURA</span><div class="input-unit"><input class="input" id="hFt" type="number" inputmode="numeric" min="3" max="8" step="1" placeholder="5" value="${parts.ft}"><i>pies</i></div></label>
+         <label class="field"><span>&nbsp;</span><div class="input-unit"><input class="input" id="hIn" type="number" inputmode="numeric" min="0" max="11" step="1" placeholder="9" value="${parts.inch}"><i>pulgadas</i></div></label></div>`
+      : `<label class="field"><span>ESTATURA</span><div class="input-unit"><input class="input" id="height" type="number" inputmode="decimal" min="100" max="250" step="0.5" placeholder="170" value="${data.height_cm}"><i>cm</i></div></label>`}
+    <label class="field"><span>PESO ACTUAL</span><div class="input-unit"><input class="input" id="weight" type="number" inputmode="decimal" min="1" max="700" step="0.1" placeholder="${U.isLb() ? '154' : '70'}" value="${wShown}"><i>${U.weightLabel() === 'lb' ? 'libras' : 'kg'}</i></div></label>
+    <p style="font-size:12px;color:var(--ink-soft);margin:2px 2px 0;line-height:1.5;">Guardamos todo en el sistema métrico para que los cálculos sean exactos; tú lo ves en ${U.isLb() ? 'libras' : 'kilos'}.</p>`;
+  },
   activity: () => `
-    <h1 class="disp ob-title">¿Cuánto te mueves?</h1>
-    <p class="ob-sub">Elige lo que más se parezca a tu semana normal.</p>
+    <h1 class="disp ob-title">¿Qué tan activo eres en un día normal?</h1>
+    <p class="ob-sub">Piensa en una semana típica, sin contar entrenamientos especiales.</p>
     ${choices(ACTIVITY, 'activity')}`,
-  goal: () => `
-    <h1 class="disp ob-title">¿Cuál es tu objetivo?</h1>
-    <p class="ob-sub">Puedes cambiarlo cuando quieras.</p>
-    ${choices(GOALS, 'goal')}`,
-  plan: () => `
-    <h1 class="disp ob-title">Tu punto de partida</h1>
-    <p class="ob-sub">Calculado con la fórmula Mifflin-St Jeor. Es un buen comienzo: ajústalo si quieres.</p>
-    <div class="plan-card">
-      <div style="font-size:10.5px;color:var(--ink-soft);font-weight:700;letter-spacing:0.05em;margin-bottom:8px;">META DIARIA</div>
-      <div class="plan-kcal" id="planKcal">${plan ? plan.kcal : '…'}</div>
-      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">kcal por día</div>
-      <div class="macro-chips">
-        <div><b id="planP" style="color:#7C5CFF;">${plan ? plan.protein_g : '–'}g</b><span>PROTEÍNA</span></div>
-        <div><b id="planC" style="color:#2DD4FF;">${plan ? plan.carbs_g : '–'}g</b><span>CARBOS</span></div>
-        <div><b id="planF" style="color:#FF8A5B;">${plan ? plan.fat_g : '–'}g</b><span>GRASA</span></div>
-      </div>
-      <div class="nudge"><button type="button" id="less" aria-label="Menos calorías">−</button><span style="font-size:11.5px;color:var(--ink-soft);">Ajustar de 50 en 50</span><button type="button" id="more" aria-label="Más calorías">+</button></div>
+  promise: () => `
+    <div class="tone-wrap">
+      <small>Antes de seguir, ${first(me.name)}</small>
+      <h1 class="disp">Las calorías son solo el medio. Lo que importa son tus ${unitWord()}.</h1>
+      <p>Te vamos a decir cuánto comer, cuántas ${unitWord()} cambia tu peso cada mes y qué hacer para lograrlo. Sin tablas ni cuentas raras.</p>
+    </div>`,
+  pace: () => {
+    const lose = goalNow() === 'lose';
+    return `
+    <h1 class="disp ob-title">${lose ? `¿Cuántas ${unitWord()} quieres bajar al mes?` : `¿Cuántas ${unitWord()} quieres subir al mes?`}</h1>
+    <p class="ob-sub">${goalNow() === 'muscle' ? 'Ganar músculo es más lento que bajar de peso: un ritmo suave es lo mejor.' : 'Elige un ritmo. Nosotros calculamos cuánto comer.'}</p>
+    <div class="pace-big"><button type="button" id="paceLess" aria-label="Menos">−</button>
+      <div><div class="num" id="paceNum">–</div><div class="sub">${unitWord()} al mes</div></div>
+      <button type="button" id="paceMore" aria-label="Más">+</button></div>
+    <div class="pace-chips" id="paceChips"></div>
+    <div class="res-card" id="paceRes"></div>
+    <div class="note ok" id="paceNote" style="display:none;"></div>`;
+  },
+  calorie: () => `
+    <h1 class="disp ob-title">La caloría, en 20 segundos</h1>
+    <p class="ob-sub">La unidad con la que tu cuerpo mide la energía de la comida.</p>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div class="fact"><i>1</i><div><b id="factBody">Tu cuerpo gasta calorías todo el día</b><span>Aunque estés quieto: respirar, pensar y moverte también gasta energía.</span></div></div>
+      <div class="fact"><i>2</i><div><b>Lo que comes suma, lo que gastas resta</b><span>Si comes menos de lo que gastas, tu cuerpo usa la grasa que tiene guardada.</span></div></div>
+      <div class="fact"><i>3</i><div><b>500 menos al día ≈ 1 libra menos por semana</b><span>Una libra de grasa guarda unas 3.500 calorías. De ahí sale cada cuenta.</span></div></div>
+    </div>`,
+  current: () => {
+    const t = me.targets;
+    const c = t && t.change_lb_month;
+    const moves = me.profile.goal && me.profile.goal !== 'maintain';
+    const meaning = c == null ? '' : Math.abs(c) < 0.5 ? 'Con esa meta mantienes tu peso.' : c < 0 ? `Eso equivale a <b>bajar ${U.aboutChange(c)} al mes</b>.` : `Eso equivale a <b>subir ${U.aboutChange(c)} al mes</b>.`;
+    return `
+    <h1 class="disp ob-title">Tu meta de hoy, en ${unitWord()}</h1>
+    <p class="ob-sub">Esto es lo que ya tenías, traducido para que se entienda.</p>
+    <div class="res-card" style="margin-top:0;">
+      <div class="res-row"><span>Tu meta de hoy</span><b class="mono" style="font-size:22px;">${t ? num(t.kcal) : '–'} <small style="font-size:11px;color:var(--ink-soft);">kcal al día</small></b></div>
+      ${t && t.maintenance_kcal ? `<div class="res-row"><span>Tu cuerpo gasta unas</span><b class="mono">${num(t.maintenance_kcal)} kcal</b></div>` : ''}
+      <div class="res-sep"></div>
+      <div style="font-size:14px;line-height:1.5;">${meaning}</div>
     </div>
-    <p id="planNote" style="margin:14px 2px 0;font-size:12px;color:var(--ink-soft);line-height:1.5;">${plan && plan.note ? escapeHtml(plan.note) : ''}</p>
-    <p style="margin:auto 2px 0;padding-top:14px;font-size:11px;color:var(--ink-soft);line-height:1.5;">Es una estimación general, no un consejo médico.</p>`,
+    ${moves ? `<div class="choice-grid" style="margin-top:18px;">
+      <button type="button" class="choice" data-act="keep" aria-pressed="${keepCurrent}"><b>Dejarla como está</b><small>Tu meta no cambia.</small></button>
+      <button type="button" class="choice" data-act="change" aria-pressed="${!keepCurrent}"><b>Elegir mi ritmo en ${unitWord()}</b><small>Dices cuánto quieres cambiar al mes y cadence calcula cuánto comer.</small></button></div>`
+      : '<p class="ob-sub" style="margin-top:16px;">Tu objetivo es mantener tu peso: no hay nada que cambiar.</p>'}`;
+  },
+  plan: () => `
+    <h1 class="disp ob-title" id="planHead">Tu plan</h1>
+    <p class="ob-sub" id="planSub"></p>
+    <div class="plan-card" style="text-align:left;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;">
+        <div><div style="font-size:10.5px;color:var(--ink-soft);font-weight:700;letter-spacing:0.05em;">TU META DIARIA</div><div class="plan-kcal" style="font-size:38px;margin-top:6px;" id="planKcal">…</div><div style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">kcal por día</div></div>
+        <div style="text-align:right;font-size:12px;color:var(--ink-soft);line-height:1.6;" id="planMath"></div>
+      </div>
+      <div id="planChart" style="margin-top:14px;"></div>
+      <div class="macro-chips">
+        <div><b id="planP" style="color:#7C5CFF;">–</b><span>PROTEÍNA</span></div>
+        <div><b id="planC" style="color:#2DD4FF;">–</b><span>CARBOS</span></div>
+        <div><b id="planF" style="color:#FF8A5B;">–</b><span>GRASA</span></div>
+      </div>
+    </div>
+    <div class="note info" id="planNote" style="display:none;"></div>
+    <div class="link-line"><button type="button" class="link-btn" id="exploreBtn">Mueve y mira: ¿y si como más o menos?</button></div>
+    <p style="margin:auto 2px 0;padding-top:14px;font-size:11.5px;color:var(--ink-soft);line-height:1.5;">Es una estimación: cada cuerpo responde distinto y con el tiempo baja un poco el ritmo. cadence la ajusta con tu peso real. No es un consejo médico.</p>`,
+  explore: () => `
+    <h1 class="disp ob-title">Mueve y mira qué pasa</h1>
+    <p class="ob-sub">Cambia lo que comes al día y mira cuánto cambiaría tu peso.</p>
+    <div class="pace-big"><button type="button" id="exLess" aria-label="Menos">−</button>
+      <div><div class="num" id="exNum" style="font-size:44px;">–</div><div class="sub">calorías al día</div></div>
+      <button type="button" id="exMore" aria-label="Más">+</button></div>
+    <div class="res-card" id="exRes"></div>
+    <div class="note ok" id="exNote"></div>`,
 };
 
 function payload() {
-  return {
-    sex: data.sex, birthdate: data.birthdate, height_cm: Number(data.height_cm), weight_kg: Number(data.weight_kg),
-    activity: data.activity, goal: data.goal, kcal: nudged,
-  };
+  const p = { sex: data.sex, birthdate: data.birthdate, height_cm: Number(data.height_cm), weight_kg: Number(data.weight_kg), activity: data.activity, goal: data.goal };
+  if (nudged) p.kcal = nudged;
+  else if (data.goal && data.goal !== 'maintain') p.pace_lb_month = paceLb;
+  return p;
+}
+// What the preview needs, in either mode (update mode uses the saved profile).
+function previewBody(extra = {}) {
+  if (MODE === 'full') return { ...payload(), ...extra };
+  const p = me.profile;
+  return { sex: p.sex, birthdate: p.birthdate, height_cm: p.height_cm, weight_kg: p.weight_kg || 70, activity: p.activity, goal: p.goal, ...extra };
 }
 
-async function loadPlan() {
+async function loadPlan(extra) {
   try {
-    plan = await apiPost('api/plan/preview', payload());
-    $('planKcal').textContent = plan.kcal;
-    $('planP').textContent = `${plan.protein_g}g`;
-    $('planC').textContent = `${plan.carbs_g}g`;
-    $('planF').textContent = `${plan.fat_g}g`;
-    $('planNote').textContent = plan.note || '';
-    showError('');
-  } catch (err) {
-    showError(err.message);
-  }
+    const body = extra || (MODE === 'full' ? payload() : (keepCurrent ? { kcal: me.targets && me.targets.kcal } : { pace_lb_month: paceLb }));
+    plan = await apiPost('api/plan/preview', previewBody(body));
+    if (!extra && plan.pace_lb_month != null && !nudged && (MODE === 'full' || !keepCurrent)) paceLb = plan.pace_lb_month; // the safe pace, if it was cut
+    return plan;
+  } catch (err) { showError(err.message); return null; }
+}
+
+const weightNow = () => (MODE === 'full' ? Number(data.weight_kg) : (me.profile.weight_kg || 70));
+
+function paintPace() {
+  const value = U.paceValue(paceLb);
+  $('paceNum').textContent = Number(value.toFixed(1));
+  $('paceChips').innerHTML = paceChoices().map(([label, v]) => `<button type="button" data-v="${v}" aria-pressed="${Math.abs(v - value) < 0.05}"><b>${label}</b><span>${v} ${U.weightLabel()}</span></button>`).join('');
+  $('paceChips').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => setPace(U.paceToLb(Number(b.dataset.v)))));
+  const note = $('paceNote');
+  if (!plan) { $('paceRes').innerHTML = ''; note.style.display = 'none'; return; }
+  const proj = plan.projection_kg || [];
+  $('paceRes').innerHTML = `<div class="res-row"><span>Para lograrlo comerás</span><b class="mono" style="font-size:22px;">${num(plan.kcal)} <small style="font-size:11px;color:var(--ink-soft);">kcal al día</small></b></div><div class="res-sep"></div>
+    <div class="res-row"><span>En 1 mes pesarías</span><b class="mono">${proj[0] != null ? U.fmtWeight(proj[0]) : '–'}</b></div>
+    <div class="res-row"><span>En 3 meses</span><b class="mono">${proj[2] != null ? U.fmtWeight(proj[2]) : '–'}</b></div>`;
+  if (plan.note) { note.textContent = plan.note; note.className = 'note warn'; note.style.display = 'block'; }
+  else { note.textContent = 'Es un ritmo seguro para tu peso y tu estatura.'; note.className = 'note ok'; note.style.display = 'block'; }
+}
+
+async function setPace(lb) {
+  paceLb = Math.max(U.paceToLb(paceStep()), Math.round(lb * 10) / 10);
+  nudged = null;
+  paceTouched = true;
+  paintPace();
+  await loadPlan(MODE === 'full' ? undefined : { pace_lb_month: paceLb });
+  if (name() === 'pace') paintPace();
+}
+
+function paintPlan() {
+  if (!plan) return;
+  const goal = goalNow();
+  const c = plan.change_lb_month;
+  const moves = goal !== 'maintain' && Math.abs(c) >= 0.5;
+  $('planHead').innerHTML = !moves ? 'Mantienes tu peso' : c < 0 ? `Bajas <span class="hl">${U.aboutChange(c)}</span> el primer mes` : `Subes <span class="hl">${U.aboutChange(c)}</span> el primer mes`;
+  $('planSub').textContent = goal === 'muscle' ? 'Para ganar músculo: comer un poco más y entrenar con fuerza.' : 'Esto es lo que tu cuerpo hace con tu meta.';
+  $('planKcal').textContent = num(plan.kcal);
+  $('planMath').innerHTML = `Gastas ~${num(plan.maintenance_kcal)}<br>Comes ${num(plan.kcal)}<br><b style="color:${c < 0 ? 'var(--good)' : '#B7A6FF'};">${Math.abs(plan.maintenance_kcal - plan.kcal)} ${c <= 0 ? 'de menos → bajas' : 'de más → subes'}</b>`;
+  $('planP').textContent = `${plan.protein_g}g`; $('planC').textContent = `${plan.carbs_g}g`; $('planF').textContent = `${plan.fat_g}g`;
+  const w = weightNow();
+  const proj = plan.projection_kg || [];
+  $('planChart').innerHTML = proj.length === 3 ? chartSvg([w, ...proj].map((kg) => U.weightValue(kg)), ['Hoy', '1 mes', '2 meses', '3 meses']) : '';
+  const note = $('planNote');
+  const extra = goal === 'muscle' ? 'La báscula sube: es lo normal al ganar músculo. Una parte será músculo y otra un poco de grasa. Tu proteína de cada día es la de arriba y conviene entrenar fuerza 3 a 4 días a la semana.' : (plan.note || '');
+  note.textContent = extra; note.style.display = extra ? 'block' : 'none';
+}
+
+function paintExplore() {
+  const m = plan.maintenance_kcal;
+  const k = exploreKcal;
+  const lbm = (m - k) * 30 / 3500; // pounds lost per month (negative = gained)
+  const w = weightNow();
+  const at = (months) => U.fmtWeight(w - (lbm / U.LB_PER_KG) * months);
+  $('exNum').textContent = num(k);
+  $('exRes').innerHTML = `<div style="text-align:center;font-size:13px;color:var(--ink-soft);">${lbm >= 0 ? 'Bajarías' : 'Subirías'} cada mes</div>
+    <div class="mono" style="font-size:36px;font-weight:700;text-align:center;margin-top:4px;">${U.fmtChange(lbm)}</div><div class="res-sep"></div>
+    <div class="res-row"><span>En 1 mes</span><b class="mono">${at(1)}</b></div><div class="res-row"><span>En 2 meses</span><b class="mono">${at(2)}</b></div><div class="res-row"><span>En 3 meses</span><b class="mono">${at(3)}</b></div>`;
+  const floor = { female: 1200, male: 1500, other: 1350 }[(MODE === 'full' ? data.sex : me.profile.sex)] || 1350;
+  const max = (plan.max_pace_lb_month || 7);
+  const note = $('exNote');
+  let text; let kind;
+  if (k < floor) { text = `Por debajo del mínimo seguro (${num(floor)}). No lo recomendamos.`; kind = 'bad'; }
+  else if (lbm > max + 0.1 && goalNow() === 'lose') { text = 'Es rápido: difícil de sostener. Mejor un poco más suave.'; kind = 'warn'; }
+  else if (Math.abs(lbm) < 0.6) { text = 'Aquí mantienes tu peso.'; kind = 'info'; }
+  else if (lbm < 0) { text = 'Con esto tu peso sube. Sirve si quieres ganar.'; kind = 'info'; }
+  else { text = 'Un ritmo que se puede sostener.'; kind = 'ok'; }
+  note.textContent = text; note.className = `note ${kind}`;
 }
 
 function bind() {
-  document.querySelectorAll('.choice').forEach((btn) => btn.addEventListener('click', () => {
+  document.querySelectorAll('.choice[data-key]').forEach((btn) => btn.addEventListener('click', () => {
     data[btn.dataset.key] = btn.dataset.value;
     document.querySelectorAll(`.choice[data-key="${btn.dataset.key}"]`).forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+    if (window.sfx) sfx.play('pick');
+    if (btn.dataset.key === 'goal') paceTouched = false;
     showError('');
+  }));
+  document.querySelectorAll('.choice[data-act]').forEach((btn) => btn.addEventListener('click', () => {
+    keepCurrent = btn.dataset.act === 'keep';
+    document.querySelectorAll('.choice[data-act]').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+    if (window.sfx) sfx.play('pick');
   }));
   const birth = $('birthBtn');
   if (birth) birth.addEventListener('click', async () => {
@@ -188,78 +429,123 @@ function bind() {
     showError('');
   });
   const height = $('height'); if (height) height.addEventListener('input', () => { data.height_cm = height.value; });
-  const weight = $('weight'); if (weight) weight.addEventListener('input', () => { data.weight_kg = weight.value; });
-  const less = $('less'); const more = $('more');
-  if (less) {
-    const nudge = (delta) => async () => {
-      if (!plan) return;
-      nudged = Math.max(800, Math.round(((nudged || plan.kcal) + delta) / 10) * 10);
-      await loadPlan();
-    };
-    less.addEventListener('click', nudge(-50));
-    more.addEventListener('click', nudge(50));
+  const ft = $('hFt'); const inch = $('hIn');
+  const setFt = () => { data.height_cm = ft.value === '' && inch.value === '' ? '' : U.heightToCm(Number(ft.value || 0), Number(inch.value || 0)); };
+  if (ft) { ft.addEventListener('input', setFt); inch.addEventListener('input', setFt); }
+  const weight = $('weight'); if (weight) weight.addEventListener('input', () => { data.weight_kg = weight.value === '' ? '' : Math.round(U.weightToKg(Number(weight.value)) * 100) / 100; });
+  if ($('unBox')) {
+    const read = cadenceUnitsUI.mount($('unBox'), U.get().chosen ? U.get() : U.PANAMA, (v) => { unitsPick = v; });
+    unitsPick = read();
   }
+  if ($('paceLess')) {
+    $('paceLess').addEventListener('click', () => setPace(U.paceToLb(Math.max(paceStep(), U.paceValue(paceLb) - paceStep()))));
+    $('paceMore').addEventListener('click', () => setPace(U.paceToLb(U.paceValue(paceLb) + paceStep())));
+    paintPace();
+  }
+  if ($('exLess')) {
+    const move = (d) => () => { exploreKcal = Math.max(1200, Math.min(4500, exploreKcal + d)); paintExplore(); if (window.sfx) sfx.play('tick'); };
+    $('exLess').addEventListener('click', move(-50)); $('exMore').addEventListener('click', move(50));
+    paintExplore();
+  }
+  if ($('exploreBtn')) $('exploreBtn').addEventListener('click', () => { exploreKcal = plan.kcal; step = -1; history.pushState({ ob: -1 }, ''); render(); });
 }
 
-function render() {
-  const name = STEPS[step];
-  $('main').innerHTML = VIEWS[name]();
-  $('dots').innerHTML = STEPS.slice(1).map((_, i) => `<span class="${i < step ? 'on' : ''}"></span>`).join('');
-  $('dots').style.visibility = step === 0 ? 'hidden' : 'visible';
+function progress() {
+  const list = steps();
+  const total = Math.max(1, list.length - 1);
+  const at = step === -1 ? list.length - 1 : step;
+  $('barFill').style.width = `${Math.round((at / total) * 100)}%`;
+}
+
+async function render() {
+  const n = name();
+  document.body.classList.toggle('ob-tone', TONED.has(n));
+  $('main').innerHTML = VIEWS[n]();
+  $('barLabel').textContent = SECTION[n] || '';
+  progress();
+  const hideBar = n === 'intro';
+  $('bar').style.visibility = hideBar ? 'hidden' : 'visible';
   $('back').style.visibility = step === 0 ? 'hidden' : 'visible';
-  $('next').textContent = name === 'intro' ? 'Empezar' : name === 'plan' ? 'Empezar a registrar' : 'Siguiente';
+  $('next').textContent = n === 'intro' ? 'Empezar' : n === 'plan' ? (MODE === 'update' ? 'Listo, entrar a cadence' : 'Empezar a registrar') : n === 'explore' ? 'Usar estas calorías' : 'Siguiente';
   showError('');
   bind();
-  if (sky) sky.calm(name !== 'intro'); // the sky takes the whole screen on the welcome, then rests behind the questions
-  if (name === 'plan') loadPlan();
+  if (sky) sky.calm(n !== 'intro');
+  if (n === 'calorie') {
+    if (!plan) await loadPlan(MODE === 'full' ? undefined : undefined);
+    if (plan && $('factBody')) $('factBody').textContent = `Tu cuerpo gasta unas ${num(plan.maintenance_kcal)} calorías al día`;
+  }
+  if (n === 'pace') { if (!paceTouched) { paceLb = paceDefault(); plan = null; } if (!plan || plan.pace_lb_month == null) await loadPlan(MODE === 'full' ? undefined : { pace_lb_month: paceLb }); if (name() === 'pace') paintPace(); }
+  if (n === 'plan') { await loadPlan(nudged ? (MODE === 'full' ? undefined : { kcal: nudged }) : undefined); if (name() === 'plan') paintPlan(); }
   window.scrollTo(0, 0);
 }
 
 function validate() {
-  const name = STEPS[step];
-  if (name === 'about') {
+  const n = name();
+  if (n === 'goal' && !data.goal) return 'Elige una opción.';
+  if (n === 'about') {
     if (!data.sex) return 'Elige una opción.';
     if (!data.birthdate) return 'Escribe tu fecha de nacimiento.';
     const age = (Date.now() - new Date(data.birthdate)) / 31557600000;
     if (age < 13) return 'cadence es para personas de 13 años o más.';
     if (age > 110) return 'Revisa tu fecha de nacimiento.';
   }
-  if (name === 'body') {
+  if (n === 'body') {
     const h = Number(data.height_cm); const w = Number(data.weight_kg);
-    if (!(h >= 100 && h <= 250)) return 'Escribe tu estatura en centímetros (entre 100 y 250).';
-    if (!(w >= 30 && w <= 300)) return 'Escribe tu peso en kilos (entre 30 y 300).';
+    if (!(h >= 100 && h <= 250)) return U.isFt() ? 'Escribe tu estatura en pies y pulgadas (entre 3′4″ y 8′2″).' : 'Escribe tu estatura en centímetros (entre 100 y 250).';
+    if (!(w >= 30 && w <= 300)) return U.isLb() ? 'Escribe tu peso en libras (entre 66 y 660).' : 'Escribe tu peso en kilos (entre 30 y 300).';
   }
-  if (name === 'activity' && !data.activity) return 'Elige una opción.';
-  if (name === 'goal' && !data.goal) return 'Elige una opción.';
+  if (n === 'activity' && !data.activity) return 'Elige una opción.';
   return '';
 }
 
 function go(delta, pushed) {
-  step = Math.max(0, Math.min(STEPS.length - 1, step + delta));
+  const list = steps();
+  step = Math.max(0, Math.min(list.length - 1, step + delta));
   if (delta > 0 && !pushed) history.pushState({ ob: step }, '');
   render();
 }
 
-$('next').addEventListener('click', async () => {
-  const problem = validate();
-  if (problem) { showError(problem); return; }
-  if (STEPS[step] !== 'plan') { go(1); return; }
+async function finish() {
   $('next').disabled = true;
   try {
-    const saved = await apiPut('api/profile', payload());
-    rememberUser(saved);
+    if (MODE === 'full') {
+      const saved = await apiPut('api/profile', { ...payload(), pace_lb_month: nudged ? undefined : (data.goal === 'maintain' ? 0 : paceLb) });
+      rememberUser(saved);
+      cadenceUnits.set(saved.units);
+    } else {
+      if (!keepCurrent && me.profile.goal !== 'maintain') await apiPut('api/goals', nudged ? { kcal: nudged } : { pace_lb_month: paceLb });
+      else if (nudged) await apiPut('api/goals', { kcal: nudged });
+      await apiPost('api/welcome/done', {});
+    }
+    swrClear();
     window.location.replace('index.html');
   } catch (err) {
     showError(err.message);
     $('next').disabled = false;
   }
+}
+
+$('next').addEventListener('click', async () => {
+  const n = name();
+  const problem = validate();
+  if (problem) { showError(problem); return; }
+  if (n === 'units') {
+    try {
+      const saved = await apiPut('api/units', unitsPick || U.PANAMA);
+      cadenceUnits.set(saved.units); // the next screens already speak in these units
+    } catch (err) { showError(err.message); return; }
+    plan = null;
+  }
+  if (n === 'explore') { nudged = exploreKcal; history.back(); return; } // back to the plan, now with those calories
+  if (n === 'pace' || n === 'goal' || n === 'body' || n === 'about' || n === 'activity') plan = null;
+  if (n !== 'plan') { go(1); return; }
+  await finish();
 });
 
 // The system Back button walks the steps backwards instead of leaving the questionnaire.
 $('back').addEventListener('click', () => history.back());
 window.addEventListener('popstate', (e) => {
-  const target = (e.state && e.state.ob) || 0;
-  step = target;
+  step = e.state && typeof e.state.ob === 'number' ? e.state.ob : 0;
   render();
 });
 
@@ -267,14 +553,20 @@ window.addEventListener('popstate', (e) => {
   try {
     me = await ensureSession({ needOnboarded: false });
   } catch { return; }
-  if (me.onboarded) { window.location.replace('index.html'); return; }
+  if (MODE === 'full' && me.onboarded) { window.location.replace('index.html'); return; }
+  if (MODE === 'update' && !(me.onboarded && me.needs_welcome)) { window.location.replace('index.html'); return; } // only for those who still have to see it
   const p = me.profile || {};
   data.sex = p.sex || null; data.birthdate = p.birthdate || ''; data.height_cm = p.height_cm || '';
   data.weight_kg = p.weight_kg || ''; data.activity = p.activity || null; data.goal = p.goal || null;
+  paceLb = paceDefault();
+  if (MODE === 'update') {
+    if (me.pace_lb_month != null) { paceLb = me.pace_lb_month; paceTouched = true; }
+    keepCurrent = true;
+  }
   history.replaceState({ ob: 0 }, '');
   render();
   sky = mountConstellation(document.body);
-  sky.calm(STEPS[step] !== 'intro');
+  sky.calm(name() !== 'intro');
 })();
 </script>
 </body>

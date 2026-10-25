@@ -1163,6 +1163,7 @@ body.nav-leaving { opacity: 0; transition: opacity 0.2s ease-in 0.12s; }
 .ac-round { width: 46px; height: 46px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--card-border); background: var(--card); color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; }
 .ac-round.go { border: none; color: #fff; background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); }
 .ac-round.rec { border-color: var(--bad); color: var(--bad); animation: acPulse 1.2s infinite; }
+.ac-round.rec.metered { animation: none; box-shadow: 0 0 0 calc(var(--lvl, 0) * 18px) rgba(255,92,92,0.35); transition: box-shadow 0.08s linear; }
 .ac-round:disabled { opacity: 0.45; cursor: default; }
 @keyframes acPulse { 0% { box-shadow: 0 0 0 0 rgba(255,92,92,0.45); } 100% { box-shadow: 0 0 0 14px rgba(255,92,92,0); } }
 .ac-quiet { text-align: center; }

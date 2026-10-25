@@ -135,11 +135,8 @@
       </div>`;
       const field = box.querySelector('#acText');
       const hint = box.querySelector('#acHint');
-      dict = cadenceDictation.attach({
-        field, button: box.querySelector('#acMic'),
-        onState: ({ on, busy: working }) => { hint.textContent = on ? 'Te escucho… toca el micrófono para dejar de escuchar. No se envía solo.' : working ? 'Pasando tu voz a texto…' : 'Toca el micrófono y habla: tu voz se escribe aquí. Léelo, corrígelo y envíalo cuando quieras.'; },
-        onError: (message) => { hint.textContent = message; },
-      });
+      const calm = hint.textContent;
+      dict = cadenceDictation.attach({ field, button: box.querySelector('#acMic'), onHint: (t) => { hint.textContent = t || calm; }, onError: (t) => { hint.textContent = t; } });
       box.querySelector('#acSend').addEventListener('click', send);
       field.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
       box.querySelector('#acForm').addEventListener('click', () => { if (dict) dict.stop(); toForm(null); });

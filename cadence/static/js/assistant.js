@@ -39,7 +39,7 @@
     const input = sheet.querySelector('#asText');
     const note = sheet.querySelector('.as-note');
     const calm = note.textContent;
-    const dict = cadenceDictation.attach({ field: input, button: sheet.querySelector('#asMic'), onState: ({ on, busy: working }) => { note.textContent = on ? 'Te escucho… toca el micrófono para dejar de escuchar. No se envía solo.' : working ? 'Pasando tu voz a texto…' : calm; }, onError: (m) => { note.textContent = m; } });
+    const dict = cadenceDictation.attach({ field: input, button: sheet.querySelector('#asMic'), onHint: (t) => { note.textContent = t || calm; }, onError: (t) => { note.textContent = t; } });
     const history = [];
     let busy = false;
     const add = (role, text) => {

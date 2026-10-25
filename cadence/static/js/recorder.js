@@ -51,6 +51,7 @@
     }, 250);
     recorder.start();
     return {
+      stream,
       stop() { if (recorder.state !== 'inactive') recorder.stop(); return done; },
       cancel() { cancelled = true; if (recorder.state !== 'inactive') recorder.stop(); else release(); },
     };

@@ -4,7 +4,8 @@
   const HIDE_ON = /\/(scan|confirm|voice|search|login|onboarding)\.html$/;
   if (HIDE_ON.test(location.pathname)) return;
 
-  const MARK = `<svg width="26" height="26" viewBox="-16 -16 32 32" fill="none" aria-hidden="true"><defs><linearGradient id="co-r" x1="-12" y1="12" x2="12" y2="-12" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color: var(--accent-from)"/><stop offset="1" style="stop-color: var(--accent-to)"/></linearGradient><linearGradient id="co-l" x1="-6" y1="-6" x2="6" y2="6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#A592FF"/><stop offset="1" stop-color="#27B8E8"/></linearGradient></defs><circle r="11.5" stroke="rgba(255,255,255,0.12)" stroke-width="2.6"/><circle r="11.5" stroke="url(#co-r)" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="54 80" transform="rotate(-110)"/><circle r="6.2" fill="url(#co-l)"/><circle r="3.5" fill="#0A0A12" fill-opacity="0.9"/><circle cx="-1.6" cy="-1.8" r="1.25" fill="#fff"/></svg>`;
+  // A personal trainer: cap, head, shoulders and a whistle on its cord.
+  const MARK = `<svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true"><defs><linearGradient id="co-g" x1="6" y1="28" x2="26" y2="4" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#A592FF"/><stop offset="1" stop-color="#27B8E8"/></linearGradient></defs><path d="M5.5 29c0-5.6 4.5-9.2 10.5-9.2s10.5 3.6 10.5 9.2z" fill="url(#co-g)"/><circle cx="16" cy="13.4" r="4.6" fill="url(#co-g)"/><path d="M10.7 12.6a5.3 5.3 0 0 1 10.6 0z" fill="#fff"/><path d="M20.6 12.6h4.6a1.2 1.2 0 0 1 0 2.4h-4.6z" fill="#fff"/><path d="M12.6 20.6 16 25.2l3.4-4.6" stroke="#fff" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/><rect x="14" y="24.4" width="4" height="3" rx="1.5" fill="#fff"/></svg>`;
   const SEEN = 'cadence_orb_seen';
   const SCRIPTS = ['static/js/recorder.js', 'static/js/dictation.js', 'static/js/assistant.js'];
 
@@ -36,7 +37,7 @@
     const orb = document.createElement('button');
     orb.type = 'button';
     orb.className = 'coach-orb';
-    orb.setAttribute('aria-label', 'Hablar con cadence');
+    orb.setAttribute('aria-label', 'Hablar con tu entrenador cadence');
     orb.innerHTML = `<span class="co-core">${MARK}</span>`;
     document.body.appendChild(orb);
 

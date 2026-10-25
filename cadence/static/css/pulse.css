@@ -1158,7 +1158,8 @@ body.nav-leaving { opacity: 0; transition: opacity 0.2s ease-in 0.12s; }
 @keyframes acDot { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
 .ac-compose { display: flex; align-items: flex-end; gap: 8px; }
 .ac-compose .input { min-height: 46px; flex: 1; font-size: 16px; }
-.ac-compose textarea.input { padding: 12px 14px; max-height: 140px; resize: none; line-height: 1.4; font-family: inherit; overflow-y: auto; }
+.ac-compose textarea.input { padding: 12px 14px; max-height: 140px; resize: none; line-height: 1.4; font-family: inherit; overflow-y: hidden; scrollbar-width: none; }
+.ac-compose textarea.input::-webkit-scrollbar { display: none; }
 .ac-voice { text-align: center; margin: -4px 0 0; }
 .ac-round { width: 46px; height: 46px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--card-border); background: var(--card); color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; }
 .ac-round.go { border: none; color: #fff; background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); }

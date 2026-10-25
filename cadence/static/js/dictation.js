@@ -17,6 +17,8 @@
   function grow(field) {
     field.style.height = 'auto';
     field.style.height = `${Math.min(field.scrollHeight, 140)}px`;
+    // It just grows; only a very long text scrolls inside it (and without a visible bar).
+    field.style.overflowY = field.scrollHeight > 140 ? 'auto' : 'hidden';
   }
 
   // Watches the microphone level; calls onLevel(0..1) every frame. Returns { stop(), peak() }.

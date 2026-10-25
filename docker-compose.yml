@@ -31,7 +31,7 @@ services:
       # Use a GET request (not --spider, which sends HEAD and makes gunicorn log
       # a warning on every check) against the lightweight version endpoint
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:8000/api/v2/version/"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
       start_period: 300s
       retries: 5
@@ -52,7 +52,7 @@ services:
       - media:/wger/media:ro
     healthcheck:
       test: ["CMD", "service", "nginx", "status"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
       retries: 5
       start_period: 30s
@@ -92,11 +92,17 @@ services:
       web:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "celery", "-A", "wger", "inspect", "ping"]
-      interval: 10s
+      # `celery -A wger inspect ping` arrancaba toda la app de wger (Django + celery) cada 10 s: rafagas de CPU constantes.
+      # Esto solo mira si el proceso de celery sigue vivo (la palabra va partida para que este mismo chequeo no cuente).
+      test:
+        - CMD
+        - python3
+        - -c
+        - "import os,sys\nme=str(os.getpid())\nfor p in os.listdir('/proc'):\n    if p.isdigit() and p!=me:\n        try:\n            if (b'cel'+b'ery') in open('/proc/'+p+'/cmdline','rb').read(): sys.exit(0)\n        except OSError: pass\nsys.exit(1)"
+      interval: 60s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
 
   celery_beat:
@@ -159,7 +165,7 @@ services:
     healthcheck:
       # python -c avoids adding curl/wget to the image just for this.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
       start_period: 15s
       retries: 5

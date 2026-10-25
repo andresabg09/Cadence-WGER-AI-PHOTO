@@ -110,6 +110,9 @@
     if (document.body.classList.contains('with-shell')) {
       buildSidebar();
       refreshConnection();
+      const orb = document.createElement('script');
+      orb.src = 'static/js/coach-orb.js';
+      document.head.appendChild(orb);
     }
     watchConnectivity();
   });

@@ -127,7 +127,7 @@
         <div class="ac-msgs" aria-live="polite"></div>
         <div class="ac-compose">
           <button type="button" class="ac-round" id="acMic" aria-label="Dictar con la voz" aria-pressed="false">${MIC}</button>
-          <textarea class="input ac-text" id="acText" rows="1" data-placeholder="Escribe o dicta tu respuesta…" placeholder="Escribe o dicta tu respuesta…" autocomplete="off" maxlength="1400" enterkeyhint="send"></textarea>
+          <textarea class="input ac-text" id="acText" rows="1" data-placeholder="Escribe o dicta…" placeholder="Escribe o dicta…" autocomplete="off" maxlength="1400" enterkeyhint="send"></textarea>
           <button type="button" class="ac-round go" id="acSend" aria-label="Enviar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
         <p class="ac-hint ac-voice" id="acHint">Toca el micrófono y habla: tu voz se escribe aquí. Léelo, corrígelo y envíalo cuando quieras.</p>
@@ -168,7 +168,7 @@
         <div class="ac-switch"><button type="button" id="acNone" aria-pressed="${none}">No hago ejercicio planificado</button><button type="button" id="acSome" aria-pressed="${!none}">Sí hago</button></div>
         ${none ? '' : `<div class="ac-row-head"><span>EJERCICIO</span><span>MIN</span><span>DÍAS/SEM</span><span></span></div>
         ${state.training.map(rowHtml).join('')}
-        ${state.training.length < 4 ? '<button type="button" class="link-btn" id="acAdd" style="text-align:left;padding:4px 2px;">+ Agregar otro ejercicio</button>' : ''}
+        ${state.training.length < 4 ? '<button type="button" class="ac-ask dashed" id="acAdd">Agregar otro ejercicio</button>' : ''}
         <p class="ac-hint">Cuenta solo lo que haces con regularidad y los minutos que de verdad te mueves. Caminar al trabajo o las tareas de casa ya cuentan en tu día a día.</p>`}
         ${wantsMuscle() && !wantsLift() ? `<p class="ac-hint" style="background:rgba(124,92,255,0.10);border:1px solid rgba(124,92,255,0.3);border-radius:14px;padding:12px 14px;">Para ganar músculo hace falta entrenar fuerza (cada músculo al menos 2 veces por semana). Mientras no entrenes, calculamos tu meta como si empezaras desde cero.</p>` : ''}
         ${wantsLift() ? `<div class="ac-sec">¿CUÁNTO LLEVAS ENTRENANDO FUERZA?</div><div class="choice-grid">${LIFT.map(([k, t, s]) => `<button type="button" class="choice" data-lift="${k}" aria-pressed="${state.lift_exp === k}"><b>${t}</b><small>${s}</small></button>`).join('')}</div>` : ''}

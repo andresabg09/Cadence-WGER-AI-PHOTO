@@ -28,6 +28,7 @@ const SHELL_FILES = [
   'static/js/dictation.js',
   'static/js/activity.js',
   'static/js/assistant.js',
+  'static/js/coach-orb.js',
   'static/js/bits.js',
   'static/js/meal-detail.js',
   'static/js/workouts.js',

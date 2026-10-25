@@ -74,6 +74,12 @@ Responde UNICAMENTE con un JSON array, sin texto adicional:
 """
 
 
+_TRANSCRIBE_PROMPT = """
+Transcribe el audio en espanol, palabra por palabra, tal como se dijo. Escribe solo el texto, con puntuacion normal, sin comillas, sin
+comentarios y sin traducir. Si no se entiende nada o no hay voz, responde con una linea vacia.
+"""
+
+
 _IDEAS_PROMPT = """
 Eres un asistente practico de comidas para una persona en Panama/Latinoamerica. Sugiere {count} ideas de {meal}
 sencillas, con ingredientes comunes y faciles de conseguir. La persona aun puede comer unas {kcal} kcal y unos {protein} g
@@ -138,6 +144,14 @@ class GeminiVisionClient:
             model=self._model, contents=self._turns(turns, None),
             config=types.GenerateContentConfig(system_instruction=system, temperature=0.4))
         return response.text or ""
+
+    def transcribe(self, audio_bytes: bytes, mime_type: str) -> str:
+        """What was said, word for word, as plain text (dictation: the person reads and edits it before sending anything)."""
+        response = self._client.models.generate_content(
+            model=self._model,
+            contents=[types.Part.from_bytes(data=audio_bytes, mime_type=mime_type), _TRANSCRIBE_PROMPT],
+        )
+        return (response.text or "").strip()
 
     def identify_from_audio(self, audio_bytes: bytes, mime_type: str) -> list[DetectedComponent]:
         response = self._client.models.generate_content(

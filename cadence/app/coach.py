@@ -60,7 +60,6 @@ class ActivityOut(BaseModel):
 class InterviewOut(BaseModel):
     reply: str
     done: bool = False
-    heard: str | None = None  # what the person said, when they spoke
     activity: ActivityOut | None = None
     fallback: bool = False  # the AI could not do it: the screen shows the options form instead
 
@@ -117,10 +116,10 @@ Reglas:
   lo que entendiste, diciendo que lo confirme o corrija en la pantalla siguiente.
 
 Responde UNICAMENTE con un JSON object, sin texto adicional:
-{{"reply": "texto para la persona", "done": false, "heard": null, "activity": null}}
+{{"reply": "texto para la persona", "done": false, "activity": null}}
 Cuando "done" sea true, "activity" es:
 {{"lifestyle": "low", "steps": null, "work": "oficinista", "training": [{{"kind": "pesas", "minutes": 60, "days": 4}}], "lift_experience": "beginner", "confidence": 0.7}}
-"heard": si la persona hablo por audio, lo que dijo (transcripcion breve); si escribio, null. "steps" solo si la persona dio una cifra.
+"steps" solo si la persona dio una cifra.
 """
 
 
@@ -192,12 +191,12 @@ def _spend(user: store.User) -> None:
         raise HTTPException(429, "Llegaste al límite de mensajes de hoy. Puedes seguir con las opciones o volver mañana.")
 
 
-def _run_interview(user: store.User, history: list[Turn], goal: str | None, audio: tuple[bytes, str] | None) -> InterviewOut:
+def _run_interview(user: store.User, history: list[Turn], goal: str | None) -> InterviewOut:
     _spend(user)
-    user_turns = sum(1 for t in history if t.role == "user") + (1 if audio else 0)
+    user_turns = sum(1 for t in history if t.role == "user")
     turns = [{"role": t.role, "text": t.text} for t in history]
     try:
-        raw = _client().chat_json(_interview_system(goal, user_turns), turns, audio)
+        raw = _client().chat_json(_interview_system(goal, user_turns), turns)
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001 - any model/network failure sends the person to the options form
@@ -206,13 +205,12 @@ def _run_interview(user: store.User, history: list[Turn], goal: str | None, audi
     reply = str((data or {}).get("reply") or "").strip()
     if data is None or not reply:
         return InterviewOut(reply="No logré entender bien. ¿Prefieres responder con las opciones?", fallback=True)
-    heard = str(data.get("heard") or "").strip()[:600] or None if audio else None
     activity = validate_activity(data.get("activity")) if data.get("done") else None
     if data.get("done") and activity is None:  # it said it was done but gave nothing usable: keep asking, or hand over to the form
         if user_turns >= MAX_USER_TURNS:
-            return InterviewOut(reply="Mejor lo completamos con las opciones.", heard=heard, fallback=True)
-        return InterviewOut(reply=reply, done=False, heard=heard)
-    return InterviewOut(reply=reply, done=activity is not None, heard=heard, activity=activity)
+            return InterviewOut(reply="Mejor lo completamos con las opciones.", fallback=True)
+        return InterviewOut(reply=reply, done=False)
+    return InterviewOut(reply=reply, done=activity is not None, activity=activity)
 
 
 @router.get("/api/lifestyle")
@@ -226,24 +224,34 @@ def lifestyle_options(user: store.User = Depends(auth.current_user)):
 def interview(body: InterviewIn, user: store.User = Depends(auth.current_user)):
     if body.history and body.history[-1].role != "user":
         raise HTTPException(422, "Escribe tu respuesta")
-    return _run_interview(user, body.history, body.goal, None)
+    return _run_interview(user, body.history, body.goal)
 
 
-@router.post("/api/interview/audio", response_model=InterviewOut)
-async def interview_audio(audio: UploadFile = File(...), history: str = Form("[]"), goal: str | None = Form(None),
-                          user: store.User = Depends(auth.current_user)):
+_AUDIO_TYPES = {"audio/wav", "audio/x-wav", "audio/wave", "audio/mpeg", "audio/mp3", "audio/mp4", "audio/aac", "audio/ogg", "audio/webm", "audio/flac"}
+
+
+class TranscriptOut(BaseModel):
+    text: str
+
+
+@router.post("/api/transcribe", response_model=TranscriptOut)
+async def transcribe(audio: UploadFile = File(...), user: store.User = Depends(auth.current_user)):
+    """Dictation for browsers that cannot do it live: the audio comes back as TEXT that the person reads, edits and sends
+    themself. Nothing is interpreted here and nothing is saved."""
     data = await audio.read()
     if not data:
         raise HTTPException(400, "Audio vacío")
     if len(data) > MAX_AUDIO_BYTES:
         raise HTTPException(413, "El audio es demasiado largo (máximo 60 segundos)")
-    try:
-        turns = [Turn(**t) for t in json.loads(history)][:30]
-    except (ValueError, TypeError):
-        raise HTTPException(422, "Historial no válido") from None
-    from .main import _AUDIO_TYPES  # noqa: PLC0415
+    _spend(user)
     mime = (audio.content_type or "audio/wav").split(";")[0].lower()
-    return _run_interview(user, turns, goal, (data, mime if mime in _AUDIO_TYPES else "audio/wav"))
+    try:
+        text = _client().transcribe(data, mime if mime in _AUDIO_TYPES else "audio/wav")
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, "No pude pasar tu voz a texto ahora. Escribe tu respuesta.") from exc
+    return TranscriptOut(text=text[:1400])
 
 
 # ------------------------------------------------------------------ the assistant

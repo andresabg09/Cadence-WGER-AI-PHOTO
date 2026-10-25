@@ -25,6 +25,7 @@ const SHELL_FILES = [
   'static/js/units.js',
   'static/js/units-ui.js',
   'static/js/recorder.js',
+  'static/js/dictation.js',
   'static/js/activity.js',
   'static/js/assistant.js',
   'static/js/bits.js',

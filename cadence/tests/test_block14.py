@@ -217,7 +217,7 @@ def test_why_this_number_explains_the_steps_and_lists_sources(wger):
 def test_the_new_endpoints_need_a_signed_in_person(wger):
     http = new_client()
     for method, path, body in [("get", "/api/plan/explain", None), ("post", "/api/screening", {"answers": [False] * 5}),
-                               ("get", "/api/lifestyle", None), ("post", "/api/interview", {"history": []}),
+                               ("get", "/api/lifestyle", None), ("post", "/api/interview", {"history": []}), ("post", "/api/transcribe", None),
                                ("post", "/api/assistant", {"history": [{"role": "user", "text": "hola"}]}),
                                ("get", "/api/calibration", None), ("post", "/api/calibration/apply", None), ("post", "/api/calibration/dismiss", None)]:
         r = getattr(http, method)(path, **({"json": body} if body is not None else {}))
@@ -234,6 +234,13 @@ class StubGemini:
         self.replies = list(replies)
         self.calls = []
 
+    def transcribe(self, audio, mime):
+        self.calls.append({"transcribe": (len(audio), mime)})
+        reply = self.replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
     def chat_json(self, system, turns, audio=None):
         self.calls.append({"system": system, "turns": turns, "audio": audio})
         reply = self.replies.pop(0)
@@ -244,8 +251,8 @@ class StubGemini:
     chat_text = chat_json
 
 
-def say(text, done=False, activity=None, heard=None):
-    return json.dumps({"reply": text, "done": done, "heard": heard, "activity": activity})
+def say(text, done=False, activity=None):
+    return json.dumps({"reply": text, "done": done, "activity": activity})
 
 
 DONE = {"lifestyle": "low", "steps": None, "work": "oficinista", "training": [{"kind": "pesas", "minutes": 60, "days": 4}], "lift_experience": "beginner", "confidence": 0.8}
@@ -319,15 +326,18 @@ def test_the_interview_is_told_to_stop_asking_after_enough_turns_and_resists_ins
     assert http.post("/api/interview", json={"history": [{"role": "assistant", "text": "hola"}]}).status_code == 422  # the person must speak last
 
 
-def test_the_interview_by_voice_returns_what_was_heard(wger, gemini):
+def test_dictation_returns_text_the_person_edits_and_sends_themself(wger, gemini):
     http = new_client()
     register(http, "a@example.com")
-    stub = gemini(say("¿Y los fines de semana?", False, None, "trabajo en una oficina"))
-    out = http.post("/api/interview/audio", files={"audio": ("a.wav", b"RIFFxxxx", "audio/wav")}, data={"history": "[]", "goal": "lose"}).json()
-    assert out["heard"] == "trabajo en una oficina" and stub.calls[0]["audio"][1] == "audio/wav"
-    assert http.post("/api/interview/audio", files={"audio": ("a.wav", b"", "audio/wav")}, data={"history": "[]"}).status_code == 400
-    assert http.post("/api/interview/audio", files={"audio": ("a.wav", b"x" * 4_100_000, "audio/wav")}, data={"history": "[]"}).status_code == 413
-    assert http.post("/api/interview/audio", files={"audio": ("a.wav", b"x", "audio/wav")}, data={"history": "no es json"}).status_code == 422
+    stub = gemini("trabajo sentado en una oficina y camino poco")
+    out = http.post("/api/transcribe", files={"audio": ("a.wav", b"RIFFxxxx", "audio/wav")})
+    assert out.json() == {"text": "trabajo sentado en una oficina y camino poco"} and stub.calls[0]["transcribe"] == (8, "audio/wav")
+    assert len(stub.calls) == 1  # transcribing is not a turn of the interview: nothing was asked, nothing was saved
+    assert http.post("/api/transcribe", files={"audio": ("a.wav", b"", "audio/wav")}).status_code == 400
+    assert http.post("/api/transcribe", files={"audio": ("a.wav", b"x" * 4_100_000, "audio/wav")}).status_code == 413
+    gemini(RuntimeError("caído"))
+    assert http.post("/api/transcribe", files={"audio": ("a.wav", b"x", "audio/wav")}).status_code == 502
+    assert http.post("/api/interview/audio", files={"audio": ("a.wav", b"x", "audio/wav")}).status_code in (404, 405)  # the old send-by-voice path is gone
 
 
 def test_the_daily_chat_limit_protects_the_ai_bill_but_not_the_administrator(wger, gemini, monkeypatch):

@@ -432,7 +432,14 @@ fotos de stock, tienda de monedas con dinero.
   subestima); solo cuentan dias con >= 60 % de la meta y >= 1.000 kcal (olvidar anotar hace ver un gasto MENOR, por eso lo que baja esta
   limitado a 0,90 del factor y lo que sube a 1,15); minimo 10 dias, 4 pesos en 12+ dias; peso de los datos 21 % a 10 dias, 100 % a 21; un
   paso mueve la meta <= 150 kcal; NADA cambia sin que la persona acepte; "Ahora no" calla 14 dias. No se calibra con embarazo/lactancia.
-  ENTREVISTA CON IA (`app/coach.py`, `static/js/activity.js`): chat o voz (`js/recorder.js`, WAV 16 kHz) en que Gemini SOLO convierte lo que la
+  VOZ = DICTADO (`static/js/dictation.js`, regla de Andres 25 oct): hablar NUNCA envia nada solo. El microfono escribe en la caja de texto mientras
+  la persona habla (reconocimiento del navegador: Chrome/Edge/Opera/Android; se reinicia solo tras un silencio), ella lo lee, lo corrige y lo
+  envia con el boton; tocar el microfono otra vez deja de escuchar. Sin reconocimiento en vivo (app de iPhone, Firefox) graba (`js/recorder.js`,
+  WAV 16 kHz) y al parar `POST /api/transcribe` devuelve SOLO TEXTO que cae en la misma caja (no interpreta ni guarda; cuenta para `CHAT_DAILY_LIMIT`).
+  Lo usan la entrevista y 'Pregunta a cadence'. (`voice.html`, registrar comida por voz, sigue siendo audio -> Gemini -> Confirmar.)
+  LAS PREGUNTAS SIGUEN A LAS RESPUESTAS: la experiencia en fuerza solo se pregunta si hay un ejercicio de fuerza (pesas / calistenia); sin
+  ejercicio planificado no se pregunta (con objetivo musculo se avisa que se calcula como principiante). Nunca pedir algo que contradiga lo respondido.
+  ENTREVISTA CON IA (`app/coach.py`, `static/js/activity.js`): chat (escrito o dictado) en que Gemini SOLO convierte lo que la
   persona cuenta en respuestas estructuradas (nivel, pasos, ejercicios con claves de `ACTIVITIES`, experiencia); el servidor las valida
   (`validate_activity`: nivel inventado = no sirve, pasos mandan sobre la impresion, minutos/dias acotados) y el calculo es codigo fijo: LA IA
   NUNCA CALCULA CALORIAS. Maximo 6 preguntas (despues se le exige terminar); si falla o no entiende, se pasa al formulario de opciones (siempre

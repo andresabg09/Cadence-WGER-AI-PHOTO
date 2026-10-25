@@ -5,7 +5,8 @@
   let OPTIONS = null;
   async function options() { if (!OPTIONS) OPTIONS = await apiGet('api/lifestyle'); return OPTIONS; }
   const GROUP_NAMES = { caminar: 'Caminar', correr: 'Correr', bici: 'Bicicleta', agua: 'Agua', fuerza: 'Fuerza y gimnasio', flexibilidad: 'Flexibilidad', deporte: 'Deportes y baile', otros: 'Otros' };
-  const STRENGTH = new Set(['pesas', 'pesas_fuertes', 'calistenia', 'hiit']);
+  const STRENGTH = new Set(['pesas', 'pesas_fuertes', 'calistenia']);
+  const MIC = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0014 0M12 18v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
   const LIFT = [['beginner', 'Menos de 1 año', 'O todavía no entreno fuerza.'], ['intermediate', '1 a 3 años', 'Entreno con constancia.'], ['advanced', 'Más de 3 años', 'Con progresión sostenida.']];
 
   // box: where to draw. opts: { goal, value (saved answers), onChange(read), startWith: 'chat' | 'form' }
@@ -23,14 +24,16 @@
     let mode = opts.startWith === 'form' || !opts.chat ? 'form' : 'chat';
     let history = [];
     let busy = false;
-    let recorder = null;
+    let dict = null;       // the dictation on the message box
     let chatOffline = false;
 
     const level = () => (state.steps !== '' && Number(state.steps) >= 0 ? stepsLevel(Number(state.steps)) : state.lifestyle);
     const stepsLevel = (n) => (n < 4000 ? 'very_low' : n < 7000 ? 'low' : n < 10000 ? 'light' : n < 12500 ? 'moderate' : 'heavy');
     const levelInfo = (key) => lists.levels.find((l) => l.key === key);
     const goal = () => (typeof opts.goal === 'function' ? opts.goal() : opts.goal);
-    const wantsLift = () => goal() === 'muscle' || goal() === 'gain' || state.training.some((t) => STRENGTH.has(t.kind));
+    // Experience is asked ONLY of someone who really lifts: no exercise, no question about training years.
+    const wantsLift = () => !none && state.training.some((t) => STRENGTH.has(t.kind));
+    const wantsMuscle = () => goal() === 'muscle' || goal() === 'gain';
 
     function read() {
       const training = none ? [] : state.training.filter((t) => t.kind && Number(t.minutes) >= 5 && Number(t.days) > 0)
@@ -38,7 +41,7 @@
       const steps = state.steps !== '' && Number.isFinite(Number(state.steps)) ? Math.round(Number(state.steps)) : null;
       return {
         lifestyle: level(), steps, training,
-        lift_exp: wantsLift() ? state.lift_exp : null,
+        lift_exp: wantsLift() ? state.lift_exp : null, // ask-only-if-they-lift; the server treats a muscle goal without it as a beginner
         body_fat_pct: state.body_fat_pct !== '' && Number(state.body_fat_pct) >= 3 ? Number(state.body_fat_pct) : null,
       };
     }
@@ -71,7 +74,7 @@
     }
     function lock(on) {
       busy = on;
-      box.querySelectorAll('.ac-compose input, .ac-compose button').forEach((n) => { n.disabled = on && !n.classList.contains('rec'); });
+      box.querySelectorAll('.ac-compose textarea, #acSend').forEach((n) => { n.disabled = on; });
     }
     function toForm(reason) {
       mode = 'form';
@@ -81,7 +84,6 @@
     }
     function handleTurn(out) {
       typing(false);
-      if (out.heard) { const last = box.querySelectorAll('.ac-msg.me.voice'); if (last.length) last[last.length - 1].textContent = out.heard; }
       if (out.reply) { bubble('bot', out.reply); history.push({ role: 'assistant', text: out.reply }); }
       if (out.fallback) { setTimeout(() => toForm(null), 900); return; }
       if (out.done && out.activity) {
@@ -104,54 +106,43 @@
         setTimeout(() => toForm(null), 1400);
       }
       lock(false);
+      const f = box.querySelector('#acText');
+      if (f && mode === 'chat') f.focus();
     }
-    function send(text) {
-      const t = text.trim();
-      if (!t || busy) return;
+    function send() {
+      const field = box.querySelector('#acText');
+      if (!field || busy) return;
+      if (dict) dict.stop();   // sending ends the listening; what was written is exactly what goes
+      const t = field.value.trim();
+      if (!t) return;
       bubble('me', t);
       history.push({ role: 'user', text: t });
-      box.querySelector('.ac-compose input').value = '';
+      field.value = ''; cadenceDictation.grow(field);
       turn(apiPost('api/interview', { history, goal: goal() || null }));
-    }
-    async function toggleMic() {
-      const mic = box.querySelector('#acMic');
-      if (recorder) {
-        const rec = recorder; recorder = null;
-        mic.classList.remove('rec');
-        bubble('me', '…', true);
-        lock(true); typing(true);
-        const wav = await rec.stop();
-        if (!wav) { box.querySelectorAll('.ac-msg.me.voice').forEach((n) => n.remove()); typing(false); lock(false); bubble('bot', 'No alcancé a escucharte. Habla un poco más o escribe tu respuesta.'); return; }
-        const form = new FormData();
-        form.append('audio', wav, 'voz.wav'); form.append('history', JSON.stringify(history)); if (goal()) form.append('goal', goal());
-        lock(false);
-        const out = apiPost('api/interview/audio', form, { isFormData: true });
-        // what was heard becomes the person's turn in the history (the server returns it in `heard`)
-        turn(out.then((o) => { if (o.heard) history.push({ role: 'user', text: o.heard }); return o; }));
-        return;
-      }
-      try {
-        recorder = await cadenceRecorder.start({ maxSeconds: 60, onAutoStop: () => { if (recorder) toggleMic(); } });
-        mic.classList.add('rec');
-        if (window.sfx) sfx.play('recStart');
-      } catch (err) { bubble('bot', err.message); }
     }
 
     function drawChat() {
+      if (dict) { dict.stop(); dict = null; }
       box.innerHTML = `<div class="ac">
         <div class="ac-msgs" aria-live="polite"></div>
         <div class="ac-compose">
-          <button type="button" class="ac-round" id="acMic" aria-label="Hablar" ${cadenceRecorder.supported() ? '' : 'hidden'}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0014 0M12 18v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
-          <input class="input" type="text" id="acText" placeholder="Escribe tu respuesta…" autocomplete="off" maxlength="600" enterkeyhint="send">
+          <button type="button" class="ac-round" id="acMic" aria-label="Dictar con la voz" aria-pressed="false">${MIC}</button>
+          <textarea class="input ac-text" id="acText" rows="1" data-placeholder="Escribe o dicta tu respuesta…" placeholder="Escribe o dicta tu respuesta…" autocomplete="off" maxlength="1400" enterkeyhint="send"></textarea>
           <button type="button" class="ac-round go" id="acSend" aria-label="Enviar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
+        <p class="ac-hint ac-voice" id="acHint">Toca el micrófono y habla: tu voz se escribe aquí. Léelo, corrígelo y envíalo cuando quieras.</p>
         <button type="button" class="ac-ask" id="acForm">Prefiero responder con opciones</button>
       </div>`;
-      box.querySelector('#acSend').addEventListener('click', () => send(box.querySelector('#acText').value));
-      box.querySelector('#acText').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(e.target.value); } });
-      box.querySelector('#acMic').addEventListener('click', toggleMic);
-      box.querySelector('#acForm').addEventListener('click', () => { if (recorder) { recorder.cancel(); recorder = null; } toForm(null); });
+      const field = box.querySelector('#acText');
+      const hint = box.querySelector('#acHint');
+      dict = cadenceDictation.attach({
+        field, button: box.querySelector('#acMic'),
+        onState: ({ on, busy: working }) => { hint.textContent = on ? 'Te escucho… toca el micrófono para dejar de escuchar. No se envía solo.' : working ? 'Pasando tu voz a texto…' : 'Toca el micrófono y habla: tu voz se escribe aquí. Léelo, corrígelo y envíalo cuando quieras.'; },
+        onError: (message) => { hint.textContent = message; },
+      });
+      box.querySelector('#acSend').addEventListener('click', send);
+      field.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+      box.querySelector('#acForm').addEventListener('click', () => { if (dict) dict.stop(); toForm(null); });
       if (!history.length) turn(apiPost('api/interview', { history: [], goal: goal() || null }));
       else history.forEach((m) => bubble(m.role === 'assistant' ? 'bot' : 'me', m.text));
     }
@@ -182,6 +173,7 @@
         ${state.training.map(rowHtml).join('')}
         ${state.training.length < 4 ? '<button type="button" class="link-btn" id="acAdd" style="text-align:left;padding:4px 2px;">+ Agregar otro ejercicio</button>' : ''}
         <p class="ac-hint">Cuenta solo lo que haces con regularidad y los minutos que de verdad te mueves. Caminar al trabajo o las tareas de casa ya cuentan en tu día a día.</p>`}
+        ${wantsMuscle() && !wantsLift() ? `<p class="ac-hint" style="background:rgba(124,92,255,0.10);border:1px solid rgba(124,92,255,0.3);border-radius:14px;padding:12px 14px;">Para ganar músculo hace falta entrenar fuerza (cada músculo al menos 2 veces por semana). Mientras no entrenes, calculamos tu meta como si empezaras desde cero.</p>` : ''}
         ${wantsLift() ? `<div class="ac-sec">¿CUÁNTO LLEVAS ENTRENANDO FUERZA?</div><div class="choice-grid">${LIFT.map(([k, t, s]) => `<button type="button" class="choice" data-lift="${k}" aria-pressed="${state.lift_exp === k}"><b>${t}</b><small>${s}</small></button>`).join('')}</div>` : ''}
         <details ${fat ? 'open' : ''}><summary class="ac-hint" style="cursor:pointer;">Conozco mi porcentaje de grasa corporal (opcional)</summary>
           <label class="field" style="margin:10px 0 0;"><span>GRASA CORPORAL</span><div class="input-unit"><input class="input" id="acFat" type="number" inputmode="decimal" min="3" max="60" step="0.5" placeholder="Ej. 22" value="${esc(state.body_fat_pct)}"><i>%</i></div></label>

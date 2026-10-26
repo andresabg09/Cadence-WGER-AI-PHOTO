@@ -13,7 +13,7 @@ ICONS = """
 check x arrow-right arrow-up arrow-down caret-down plus drop magnifying-glass trophy fire sparkle fork-knife bell target scales
 chart-line-up clock-counter-clockwise barbell camera chart-bar note-pencil star star:fill clock microphone lock question smiley-meh
 bowl-food cooking-pot prohibit check-circle calendar-blank device-mobile keyboard download-simple ruler palette speaker-high
-speaker-low chat-circle-dots key file-text lightning crown-simple leaf medal sun moon person-simple-run:duotone person-simple-run
+speaker-low chat-circle-dots key file-text lightning crown-simple leaf medal sun moon person-simple-run:duotone person-simple-run brain:duotone
 person-simple-walk person-simple-hike person-simple-bike bicycle person-simple-swim person-simple-tai-chi flower-lotus person-arms-spread hand-fist
 soccer-ball basketball tennis-ball volleyball boxing-glove boat broom plant stairs music-notes music-notes-simple sneaker sneaker-move
 speedometer heartbeat baby-carriage mountains timer grains heart house user

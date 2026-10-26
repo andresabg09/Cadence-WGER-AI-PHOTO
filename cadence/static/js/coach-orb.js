@@ -4,7 +4,7 @@
   const HIDE_ON = /\/(scan|confirm|voice|search|login|onboarding)\.html$/;
   if (HIDE_ON.test(location.pathname)) return;
 
-  // A person in motion (Phosphor, duotone): someone who trains you.
+  // A brain (Phosphor, duotone): the thinking behind your coach.
   const SEEN = 'cadence_orb_seen';
   const SCRIPTS = ['static/js/recorder.js', 'static/js/dictation.js', 'static/js/assistant.js'];
 
@@ -37,7 +37,7 @@
     orb.type = 'button';
     orb.className = 'coach-orb';
     orb.setAttribute('aria-label', 'Hablar con tu entrenador cadence');
-    orb.innerHTML = `<span class="co-core">${cadenceIcons.icon('person-simple-run:duotone')}</span>`;
+    orb.innerHTML = `<span class="co-core">${cadenceIcons.icon('brain:duotone')}</span>`;
     document.body.appendChild(orb);
 
     let tip = null;

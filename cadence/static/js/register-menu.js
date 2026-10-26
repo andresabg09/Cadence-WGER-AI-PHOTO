@@ -28,7 +28,7 @@
     root.className = 'rm-scrim';
     root.innerHTML = `
       <div class="rm-card" role="dialog" aria-modal="true" aria-label="Registrar comida">
-        <button type="button" class="rm-x" aria-label="Cerrar">✕</button>
+        <button type="button" class="rm-x" aria-label="Cerrar"><i data-ico="x"></i></button>
         <div class="rm-kick mono">REGISTRAR${meal && MEALS[meal] ? ` · ${MEALS[meal].toUpperCase()}` : ''}</div>
         <h2 class="disp">¿Cómo quieres añadirlo?</h2>
         <div class="rm-opts">

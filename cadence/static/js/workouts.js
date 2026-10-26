@@ -51,7 +51,7 @@
       <div id="woCustom" style="display:none;"><label class="field"><span>MINUTOS</span><div class="input-unit"><input class="input" id="woMin" type="number" inputmode="numeric" min="5" max="600" step="5" value="${minutes}"><i>min</i></div></label></div>
       <label class="field"><span>NOTA (OPCIONAL)</span><input class="input" id="woNote" maxlength="80" placeholder="Ej.: pecho y tríceps" value="${esc(workout && workout.note ? workout.note : '')}" autocomplete="off"></label>
       <div class="form-error" id="woErr" style="margin-top:10px;"></div>
-      <div class="sheet-actions">${workout ? '<button type="button" class="btn-danger" id="woDel">Borrar</button>' : ''}<button type="button" class="btn-primary" id="woSave">${workout ? 'Guardar cambios' : '✓ Registrar entrenamiento'}</button></div>`, nested);
+      <div class="sheet-actions">${workout ? '<button type="button" class="btn-danger" id="woDel">Borrar</button>' : ''}<button type="button" class="btn-primary" id="woSave">${workout ? 'Guardar cambios' : 'Registrar entrenamiento'}</button></div>`, nested);
     const $ = (id) => sheet.querySelector(`#${id}`);
     const paint = () => {
       $('woKcal').textContent = Math.round(activity.kcal_per_min * (minutes || 0));

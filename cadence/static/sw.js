@@ -21,6 +21,7 @@ const SHELL_FILES = [
   'reminders.html',
   'voice.html',
   'static/css/pulse.css',
+  'static/js/icons.js',
   'static/js/api.js',
   'static/js/units.js',
   'static/js/units-ui.js',

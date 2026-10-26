@@ -40,15 +40,16 @@
     <div class="col">
       <div class="card" id="dailyCard"><div class="skeleton" style="height:180px;"></div></div>
       <div class="card" id="weeklyCard"><div class="skeleton" style="height:240px;"></div></div>
-      <div class="rule-note"><span>✓</span><span>Los retos premian registrar, ser constante y comer con equilibrio. Ninguno te pide comer menos de lo que necesitas.</span></div>
+      <div class="rule-note"><span><i data-ico="check"></i></span><span>Los retos premian registrar, ser constante y comer con equilibrio. Ninguno te pide comer menos de lo que necesitas.</span></div>
     </div>
     <div class="col">
       <div class="card" id="shopCard"><div class="skeleton" style="height:200px;"></div></div>
-      <a class="menu-row card" href="awards.html" style="border:1px solid var(--card-border);border-radius:18px;"><span class="ico">🏆</span><span class="label">Mis premios</span><span class="chev">›</span></a>
+      <a class="menu-row card" href="awards.html" style="border:1px solid var(--card-border);border-radius:18px;"><span class="ico"><i data-ico="trophy"></i></span><span class="label">Mis premios</span><span class="chev">›</span></a>
     </div>
   </div>
 </div>
 
+<script src="static/js/icons.js"></script>
 <script src="static/js/api.js"></script>
 <script src="static/js/units.js"></script>
 <script src="static/js/bits.js"></script>
@@ -67,7 +68,7 @@ function rowHtml(c) {
   const left = bits.award(c.art, 52, c.state !== 'todo');
   const info = c.note ? `<div class="ch-note">${bits.esc(c.note)}</div>`
     : c.state === 'ready' ? `<button type="button" class="claim-btn" data-claim="${c.key}">Reclamar +${c.reward} ${bits.coin(16)}</button>`
-    : c.state === 'claimed' ? '<div class="ch-done">Reclamado ✓</div>'
+    : c.state === 'claimed' ? '<div class="ch-done">Reclamado <i data-ico="check"></i></div>'
     : `<div class="ch-bar"><div class="track"><i style="width:${pct.toFixed(0)}%"></i></div><span class="mono">${c.now} / ${c.total}</span></div>`;
   const reward = c.state === 'ready' ? '' : `<div class="ch-reward"><span class="mono">+${c.reward}</span>${bits.coin(17)}</div>`;
   return `<div class="ch-row ${c.state}">${left}<div class="ch-main"><div class="ch-title">${bits.esc(c.title)}</div><div class="ch-hint">${bits.esc(c.hint)}</div>${info}</div>${reward}</div>`;

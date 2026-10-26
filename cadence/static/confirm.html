@@ -89,6 +89,7 @@
   </div>
 </div>
 
+<script src="static/js/icons.js"></script>
 <script src="static/js/api.js"></script>
 <script src="static/js/units.js"></script>
 <script src="static/js/sfx.js"></script>
@@ -164,9 +165,9 @@ function renderSubtitle() {
   const manual = state.length - ai;
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   let text;
-  if (state.length === 0) text = waterMl ? '💧 Agua detectada' : 'Sin componentes';
+  if (state.length === 0) text = waterMl ? 'Agua detectada' : 'Sin componentes';
   else if (ai === 0) text = plural(manual, 'alimento agregado', 'alimentos agregados');
-  else text = `✨ ${plural(ai, 'identificado', 'identificados')} por IA${manual ? ` · ${plural(manual, 'manual', 'manuales')}` : ''}`;
+  else text = `${plural(ai, 'identificado', 'identificados')} por IA${manual ? ` · ${plural(manual, 'manual', 'manuales')}` : ''}`;
   if (photos.length > 1) text += ` · ${photos.length} fotos`;
   document.getElementById('subtitle').textContent = text;
 }
@@ -367,12 +368,12 @@ function emptyState() {
   const mealQuery = meal ? `&meal=${meal}` : '';
   return `
     <div class="empty-state span-all">
-      <span style="font-size:36px;">🤔</span>
+      <span style="font-size:36px;color:var(--accent-to);"><i data-ico="smiley-meh"></i></span>
       <h3 class="disp" style="margin:14px 0 6px;font-size:15.5px;font-weight:700;">No logramos identificar el plato</h3>
       <p style="margin:0 0 18px;font-size:12px;color:var(--ink-soft);line-height:1.5;">Puede ser el ángulo, la luz, o un alimento poco común. Prueba de nuevo o regístralo a mano — toma 10 segundos.</p>
       <div style="display:flex;flex-direction:column;gap:10px;max-width:320px;margin:0 auto;">
-        <a href="scan.html${meal ? `?meal=${meal}` : ''}" data-replace class="btn-primary">📸 Tomar otra foto</a>
-        <a href="search.html?from=confirm${mealQuery}" data-replace class="btn-secondary" style="display:flex;align-items:center;justify-content:center;min-height:44px;">🔍 Buscar manualmente</a>
+        <a href="scan.html${meal ? `?meal=${meal}` : ''}" data-replace class="btn-primary"><i data-ico="camera"></i>&nbsp;Tomar otra foto</a>
+        <a href="search.html?from=confirm${mealQuery}" data-replace class="btn-secondary" style="display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;"><i data-ico="magnifying-glass"></i> Buscar manualmente</a>
         <a href="scan.html?mode=barcode${meal ? `&meal=${meal}` : ''}" data-replace class="btn-secondary" style="display:flex;align-items:center;justify-content:center;min-height:44px;">▦ Escanear código de barras</a>
       </div>
     </div>`;
@@ -397,14 +398,14 @@ function renderItems() {
     const water = document.createElement('div');
     water.className = 'card water-card span-all';
     water.innerHTML = `
-      <span class="wc-ico">💧</span>
+      <span class="wc-ico"><i data-ico="drop"></i></span>
       <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;">Agua detectada</div><div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">Se suma a tu barra de agua de hoy, sin calorías.</div></div>
       <div style="display:flex;align-items:center;gap:8px;">
         <button class="water-step" id="waterMinus" aria-label="Menos agua" style="border:1px solid var(--card-border);background:var(--bg);color:var(--ink);">−</button>
         <span class="mono" style="font-size:13px;font-weight:700;min-width:62px;text-align:center;">${cadenceUnits.fmtWater(waterMl)}</span>
         <button class="water-step" id="waterPlus" aria-label="Más agua" style="border:none;background:linear-gradient(135deg,var(--accent-from),var(--accent-to));color:#fff;">+</button>
       </div>
-      <button class="wc-x" id="waterDrop" aria-label="No sumar el agua">✕</button>`;
+      <button class="wc-x" id="waterDrop" aria-label="No sumar el agua"><i data-ico="x"></i></button>`;
     wrap.appendChild(water);
     water.querySelector('#waterMinus').addEventListener('click', () => setWater(waterMl - Math.round(cadenceUnits.liquidStep(50))));
     water.querySelector('#waterPlus').addEventListener('click', () => setWater(waterMl + Math.round(cadenceUnits.liquidStep(50))));
@@ -419,7 +420,7 @@ function renderItems() {
 
     const pills = item.candidates.map((c) => {
       const active = c.id === item.selectedId;
-      return `<button data-idx="${idx}" data-cid="${c.id}" class="candidate-pill chip-soft${active ? ' active' : ''}">${active ? '✓ ' : ''}${escapeHtml(c.name)}${c.score != null ? ` ${Math.round(c.score * 100)}%` : ''}</button>`;
+      return `<button data-idx="${idx}" data-cid="${c.id}" class="candidate-pill chip-soft${active ? ' active' : ''}">${active ? '<i data-ico="check"></i> ' : ''}${escapeHtml(c.name)}${c.score != null ? ` ${Math.round(c.score * 100)}%` : ''}</button>`;
     }).join('');
 
     card.innerHTML = `
@@ -431,7 +432,7 @@ function renderItems() {
             <span class="disp" id="kcal-${idx}" style="font-size:13px;font-weight:700;color:var(--accent-to);white-space:nowrap;">${Math.round(itemKcal(item))} kcal</span>
           </div>
           <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;">${pills || '<span style="font-size:11px;color:var(--ink-soft);">Sin coincidencias — búscalo aquí abajo.</span>'}
-            <button type="button" class="candidate-pill chip-soft find-btn" data-idx="${idx}" aria-expanded="${item.searching ? 'true' : 'false'}">🔍 Buscar otro</button>
+            <button type="button" class="candidate-pill chip-soft find-btn" data-idx="${idx}" aria-expanded="${item.searching ? 'true' : 'false'}"><i data-ico="magnifying-glass"></i> Buscar otro</button>
           </div>
         </div>
       </div>
@@ -465,7 +466,7 @@ function renderItems() {
   morePhoto.href = `scan.html?append=1${meal ? `&meal=${meal}` : ''}`;
   morePhoto.setAttribute('data-replace', '');
   morePhoto.className = 'add-photo span-all';
-  morePhoto.innerHTML = '📷 Agregar otra foto a este registro';
+  morePhoto.innerHTML = '<i data-ico="camera"></i> Agregar otra foto a este registro';
   morePhoto.addEventListener('click', persistState);
   wrap.appendChild(morePhoto);
 
@@ -572,7 +573,7 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
     if (waterMl > 0) {
       try {
         const after = await addWater(saved.date, waterMl); // null when offline: queued and sent later
-        waterLine = ` · 💧 +${cadenceUnits.fmtWater(waterMl)} de agua`;
+        waterLine = ` · +${cadenceUnits.fmtWater(waterMl)} de agua`;
         const goal = addWater.goal || 2000;
         if (after !== null && after - waterMl < goal && after >= goal) sessionStorage.setItem('cadence_water_goal', '1');
       } catch {
@@ -597,7 +598,7 @@ document.getElementById('confirmBtn').addEventListener('click', async () => {
     const flash = saved.counts_for_streak === false
       ? `Guardado en ${dayLabel}. Es un registro tardío: no suma a tu racha, que solo cuenta si registras el mismo día.`
       : `Guardado en ${dayLabel}`;
-    const message = items.length ? flash + waterLine : `💧 +${cadenceUnits.fmtWater(waterMl)} sumados a tu agua (${dayLabel})`;
+    const message = items.length ? flash + waterLine : `+${cadenceUnits.fmtWater(waterMl)} sumados a tu agua (${dayLabel})`;
     try {
       sessionStorage.setItem('cadence_flash', message);
       sessionStorage.setItem('cadence_flash_kind', saved.counts_for_streak === false ? 'warn' : 'ok');

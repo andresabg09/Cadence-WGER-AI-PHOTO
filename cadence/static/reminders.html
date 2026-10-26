@@ -42,7 +42,7 @@
       <div class="card">
         <div class="section-title" style="margin-bottom:6px;">HIDRATACIÓN</div>
         <div class="rm-row">
-          <span class="rm-ico">💧</span>
+          <span class="rm-ico"><i data-ico="drop"></i></span>
           <div class="rm-text"><b>Recordar beber agua</b><span id="waterHint"></span></div>
           <label class="switch"><input type="checkbox" id="waterOn" aria-label="Recordar beber agua"><i></i></label>
         </div>
@@ -62,7 +62,7 @@
       <div class="card">
         <div class="section-title" style="margin-bottom:6px;">RESUMEN</div>
         <div class="rm-row">
-          <span class="rm-ico">📊</span>
+          <span class="rm-ico"><i data-ico="chart-bar"></i></span>
           <div class="rm-text"><b>Resumen semanal</b><span id="weeklyHint"></span></div>
           <label class="switch"><input type="checkbox" id="weeklyOn" aria-label="Resumen semanal"><i></i></label>
         </div>
@@ -72,6 +72,7 @@
   </div>
 </div>
 
+<script src="static/js/icons.js"></script>
 <script src="static/js/api.js"></script>
 <script src="static/js/units.js"></script>
 <script src="static/js/sfx.js"></script>
@@ -80,7 +81,7 @@
 <script src="static/js/install.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
-const MEALS = [['desayuno', '🥣', 'Desayuno'], ['almuerzo', '🍲', 'Almuerzo'], ['cena', '🍽️', 'Cena']];
+const MEALS = [['desayuno', 'bowl-food', 'Desayuno'], ['almuerzo', 'cooking-pot', 'Almuerzo'], ['cena', 'fork-knife', 'Cena']];
 const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 let prefs = null;
 let devices = 0;
@@ -104,7 +105,7 @@ function render() {
   $('waterHint').textContent = `Cada ${w.every_h} ${w.every_h === 1 ? 'hora' : 'horas'} · ${label(w.from)} – ${label(w.to)}`;
   $('mealRows').innerHTML = MEALS.map(([k, ico, name]) => `
     <div class="rm-row">
-      <span class="rm-ico">${ico}</span>
+      <span class="rm-ico"><i data-ico="${ico}"></i></span>
       <div class="rm-text"><b>${name}</b><span><select class="time-pick" data-meal-time="${k}" aria-label="Hora del ${name.toLowerCase()}">${options(prefs.meals[k].time)}</select></span></div>
       <label class="switch"><input type="checkbox" data-meal="${k}" ${prefs.meals[k].on ? 'checked' : ''} aria-label="Avisar ${name.toLowerCase()}"><i></i></label>
     </div>`).join('');
@@ -121,15 +122,15 @@ function renderDevice(state) {
   const installed = window.cadenceInstall && window.cadenceInstall.isInstalled();
   let html;
   if (!supported) {
-    html = `<div class="rm-device warn">🔔 <span><b>Este navegador no recibe avisos.</b> ${/iphone|ipad/i.test(navigator.userAgent) && !installed
+    html = `<div class="rm-device warn"><i data-ico="bell"></i> <span><b>Este navegador no recibe avisos.</b> ${/iphone|ipad/i.test(navigator.userAgent) && !installed
       ? 'En iPhone primero instala cadence: toca Compartir y «Añadir a pantalla de inicio»; luego ábrela desde su ícono y vuelve aquí.'
       : 'Prueba con Chrome o instala cadence en tu teléfono.'}</span></div>`;
   } else if (state === 'denied') {
-    html = '<div class="rm-device warn">🚫 <span><b>Los avisos están bloqueados.</b> Actívalos para cadence en los ajustes del navegador o del teléfono y vuelve aquí.</span></div>';
+    html = '<div class="rm-device warn"><i data-ico="prohibit"></i> <span><b>Los avisos están bloqueados.</b> Actívalos para cadence en los ajustes del navegador o del teléfono y vuelve aquí.</span></div>';
   } else if (devices > 0 && state === 'granted') {
-    html = '<div class="rm-device ok">✅ <span><b>Avisos activados en este dispositivo.</b> <button class="link-btn" id="testPush">Enviar un aviso de prueba</button></span></div>';
+    html = '<div class="rm-device ok"><i data-ico="check-circle"></i> <span><b>Avisos activados en este dispositivo.</b> <button class="link-btn" id="testPush">Enviar un aviso de prueba</button></span></div>';
   } else {
-    html = '<div class="rm-device">🔔 <span>Activa un recordatorio y te pediremos permiso para enviarte avisos en este dispositivo.</span></div>';
+    html = '<div class="rm-device"><i data-ico="bell"></i> <span>Activa un recordatorio y te pediremos permiso para enviarte avisos en este dispositivo.</span></div>';
   }
   box.innerHTML = html;
   const test = $('testPush');

@@ -43,6 +43,7 @@
   </div>
 </div>
 
+<script src="static/js/icons.js"></script>
 <script src="static/js/api.js"></script>
 <script src="static/js/units.js"></script>
 <script src="static/js/sfx.js"></script>
@@ -108,7 +109,7 @@ function paintFirst(page) {
   goal = page.goal_kcal;
   nextBefore = page.next_before;
   $('list').innerHTML = '';
-  if (page.days.length === 0) $('list').innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><span style="font-size:34px;">🗓️</span><h3 class="disp" style="margin:12px 0 6px;font-size:15px;">Todavía no hay días para mostrar</h3><p style="margin:0;font-size:12px;color:var(--ink-soft);">Cuando registres comidas, cada día aparecerá aquí.</p></div>';
+  if (page.days.length === 0) $('list').innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><span style="font-size:34px;color:var(--accent-to);"><i data-ico="calendar-blank"></i></span><h3 class="disp" style="margin:12px 0 6px;font-size:15px;">Todavía no hay días para mostrar</h3><p style="margin:0;font-size:12px;color:var(--ink-soft);">Cuando registres comidas, cada día aparecerá aquí.</p></div>';
   addDays(page.days);
   renderStrip(page.days.map((d) => d.date));
   $('more').style.display = nextBefore ? '' : 'none';

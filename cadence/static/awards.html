@@ -44,6 +44,7 @@
   </div>
 </div>
 
+<script src="static/js/icons.js"></script>
 <script src="static/js/api.js"></script>
 <script src="static/js/units.js"></script>
 <script src="static/js/bits.js"></script>
@@ -93,7 +94,7 @@ function onData(d, stale) {
   paint();
   if (!stale && d.new && d.new.length) {
     if (window.sfx) sfx.play('award');
-    showToast(d.new.length === 1 ? `🏆 ¡Premio nuevo: ${d.new[0].title}!` : `🏆 ¡${d.new.length} premios nuevos!`, 'ok');
+    showToast(d.new.length === 1 ? `¡Premio nuevo: ${d.new[0].title}!` : `¡${d.new.length} premios nuevos!`, 'ok');
   }
 }
 apiGetSWR('api/awards', onData).catch((err) => { $('grid').innerHTML = `<p style="color:var(--bad);font-size:13px;grid-column:1/-1;">${bits.esc(err.message)}</p>`; });

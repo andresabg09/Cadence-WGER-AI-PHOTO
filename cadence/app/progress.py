@@ -57,17 +57,17 @@ def achievements(*, total_logged: int, photos: int, best_streak: int, weights: i
     on_target = any(goal_kcal > 0 and 0.9 * goal_kcal <= t["kcal"] <= 1.05 * goal_kcal for t in totals.values())
     protein = any(goal_protein > 0 and t["protein"] >= goal_protein for t in totals.values())
     spec = [
-        ("first_log", "Primer registro", "Registra tu primer alimento", "🍽️", total_logged >= 1),
-        ("first_photo", "Primera foto", "Registra un plato con foto", "📸", photos >= 1),
-        ("streak_3", "Arrancaste", "3 días seguidos", "🔥", best_streak >= 3),
-        ("streak_7", "Una semana", "7 días seguidos", "🔥", best_streak >= 7),
-        ("streak_14", "Dos semanas", "14 días seguidos", "⚡", best_streak >= 14),
-        ("streak_30", "Un mes entero", "30 días seguidos", "👑", best_streak >= 30),
-        ("logs_25", "25 alimentos", "Registra 25 alimentos", "🥗", total_logged >= 25),
-        ("logs_100", "100 alimentos", "Registra 100 alimentos", "🏅", total_logged >= 100),
-        ("first_weight", "Primer peso", "Anota tu peso", "⚖️", weights >= 1),
-        ("weights_5", "Constancia", "Anota tu peso 5 veces", "📈", weights >= 5),
-        ("on_target", "Día en la meta", "Termina un día cerca de tu meta de calorías", "🎯", on_target),
-        ("protein", "Proteína completa", "Llega a tu meta de proteína en un día", "💪", protein),
+        ("first_log", "Primer registro", "Registra tu primer alimento", "fork-knife", total_logged >= 1),
+        ("first_photo", "Primera foto", "Registra un plato con foto", "camera", photos >= 1),
+        ("streak_3", "Arrancaste", "3 días seguidos", "fire", best_streak >= 3),
+        ("streak_7", "Una semana", "7 días seguidos", "fire", best_streak >= 7),
+        ("streak_14", "Dos semanas", "14 días seguidos", "lightning", best_streak >= 14),
+        ("streak_30", "Un mes entero", "30 días seguidos", "crown-simple", best_streak >= 30),
+        ("logs_25", "25 alimentos", "Registra 25 alimentos", "leaf", total_logged >= 25),
+        ("logs_100", "100 alimentos", "Registra 100 alimentos", "medal", total_logged >= 100),
+        ("first_weight", "Primer peso", "Anota tu peso", "scales", weights >= 1),
+        ("weights_5", "Constancia", "Anota tu peso 5 veces", "chart-line-up", weights >= 5),
+        ("on_target", "Día en la meta", "Termina un día cerca de tu meta de calorías", "target", on_target),
+        ("protein", "Proteína completa", "Llega a tu meta de proteína en un día", "barbell", protein),
     ]
     return [Achievement(key=k, title=t, hint=h, icon=i, unlocked=u) for k, t, h, i, u in spec]

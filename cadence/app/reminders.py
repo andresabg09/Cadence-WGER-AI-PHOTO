@@ -23,9 +23,9 @@ router = APIRouter()
 
 WINDOW_MIN = 30
 MEAL_TEXT = {
-    "desayuno": ("Hora del desayuno ☀️", "Toma una foto de tu desayuno y cadence lo registra."),
-    "almuerzo": ("Hora del almuerzo 🍽️", "¿Ya almorzaste? Registra tu plato con una foto."),
-    "cena": ("Hora de la cena 🌙", "Cierra el día: registra tu cena con una foto."),
+    "desayuno": ("Hora del desayuno", "Toma una foto de tu desayuno y cadence lo registra."),
+    "almuerzo": ("Hora del almuerzo", "¿Ya almorzaste? Registra tu plato con una foto."),
+    "cena": ("Hora de la cena", "Cierra el día: registra tu cena con una foto."),
 }
 DEFAULT_PREFS = {
     "water": {"on": False, "every_h": 2, "from": "08:00", "to": "22:00"},
@@ -85,7 +85,7 @@ def due_reminders(prefs: dict, now: datetime) -> list[Reminder]:
         last = datetime.combine(now.date(), _at(water["to"]), tzinfo=now.tzinfo)
         while slot <= last:
             if slot <= now < slot + timedelta(minutes=WINDOW_MIN):
-                due.append(Reminder(f"water:{slot:%H%M}", "Hora de tomar agua 💧", "Un vaso ahora te acerca a tu meta de hoy.", "index.html"))
+                due.append(Reminder(f"water:{slot:%H%M}", "Hora de tomar agua", "Un vaso ahora te acerca a tu meta de hoy.", "index.html"))
             slot += timedelta(hours=water["every_h"])
     for meal, item in prefs["meals"].items():
         if item["on"] and _in_window(now, _at(item["time"])):
@@ -93,7 +93,7 @@ def due_reminders(prefs: dict, now: datetime) -> list[Reminder]:
             due.append(Reminder(f"meal:{meal}", title, body, f"scan.html?meal={meal}", meal))
     weekly = prefs["weekly"]
     if weekly["on"] and now.weekday() == 6 and _in_window(now, _at(weekly["time"])):
-        due.append(Reminder("weekly", "Tu resumen semanal 📊", "", "progress.html"))
+        due.append(Reminder("weekly", "Tu resumen semanal", "", "progress.html"))
     return due
 
 
@@ -234,7 +234,7 @@ def unsubscribe(body: SubscriptionIn, user: store.User = Depends(auth.current_us
 def push_test(user: store.User = Depends(auth.current_user)):
     if not store.subscriptions(user.id):
         raise HTTPException(409, "Este dispositivo aún no tiene los avisos activados")
-    sent = push_to_user(user, {"title": "cadence 🔔", "body": "¡Los avisos funcionan en este dispositivo!", "url": "index.html", "tag": "test"})
+    sent = push_to_user(user, {"title": "cadence", "body": "¡Los avisos funcionan en este dispositivo!", "url": "index.html", "tag": "test"})
     if sent == 0:
         raise HTTPException(502, "No se pudo entregar el aviso. Activa los avisos de nuevo en este dispositivo.")
     return {"sent": sent}

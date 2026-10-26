@@ -152,7 +152,7 @@
       return `<div class="ac-row" data-i="${i}"><select class="input" data-f="kind" aria-label="Ejercicio">${sel}</select>
         <input class="input" data-f="minutes" type="number" inputmode="numeric" min="5" max="240" placeholder="min" value="${esc(t.minutes)}" aria-label="Minutos por sesión">
         <input class="input" data-f="days" type="number" inputmode="decimal" min="0.5" max="7" step="0.5" placeholder="días" value="${esc(t.days)}" aria-label="Días por semana">
-        <button type="button" class="ac-x" data-del="${i}" aria-label="Quitar">✕</button></div>`;
+        <button type="button" class="ac-x" data-del="${i}" aria-label="Quitar"><i data-ico="x"></i></button></div>`;
     }
     function drawForm() {
       const lv = level();

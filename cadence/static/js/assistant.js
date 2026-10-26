@@ -20,7 +20,7 @@
     sheet.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
         <div><h3 class="disp" style="margin:0;">Pregúntale a cadence</h3>
         <div class="when" style="margin-top:2px;">Responde con tus números · no es consejo médico</div></div>
-        <button type="button" class="ac-round" id="asClose" aria-label="Cerrar" style="width:38px;height:38px;font-size:15px;">✕</button></div>
+        <button type="button" class="ac-round" id="asClose" aria-label="Cerrar" style="width:38px;height:38px;font-size:18px;"><i data-ico="x"></i></button></div>
       <div class="ac" style="margin-top:12px;">
         <div class="ac-msgs" id="asMsgs" aria-live="polite"></div>
         <div class="as-chips" id="asChips">${SUGGESTIONS.map((s) => `<button type="button">${escapeHtml(s)}</button>`).join('')}</div>

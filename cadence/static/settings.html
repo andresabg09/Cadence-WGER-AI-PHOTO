@@ -37,13 +37,13 @@
     <div>
       <div class="section-title">APP</div>
       <div class="menu-card">
-        <button class="menu-row" id="installRow"><span class="ico" style="background:rgba(61,220,132,0.12);">📲</span><span class="label">Instalar app</span><span class="hint" id="installHint"></span><span class="chev">›</span></button>
-        <button class="menu-row" id="unitsRow"><span class="ico" style="background:rgba(45,212,255,0.12);">📏</span><span class="label">Unidades</span><span class="hint" id="unitsHint"></span><span class="chev">›</span></button>
-        <button class="menu-row" id="themeRow"><span class="ico" style="background:rgba(255,138,91,0.12);">🎨</span><span class="label">Apariencia</span><span class="hint" id="themeHint"></span><span class="chev">›</span></button>
-        <div class="menu-row" style="cursor: default;"><span class="ico" style="background:rgba(124,92,255,0.14);">🔊</span><span class="label">Sonidos</span><label class="switch"><input type="checkbox" id="soundOn" aria-label="Sonidos"><i></i></label></div>
-        <div class="menu-row vol-row" id="volRow"><span class="ico" style="background:transparent;">🔉</span><input type="range" id="soundVol" min="0" max="100" step="5" aria-label="Volumen de los sonidos"><span class="hint" id="volHint"></span></div>
-        <button class="menu-row" id="askRow"><span class="ico" style="background:rgba(124,92,255,0.14);">💬</span><span class="label">Pregúntale a cadence</span><span class="hint">DUDAS</span><span class="chev">›</span></button>
-        <a class="menu-row" href="reminders.html"><span class="ico" style="background:rgba(45,212,255,0.12);">🔔</span><span class="label">Recordatorios</span><span class="chev">›</span></a>
+        <button class="menu-row" id="installRow"><span class="ico" style="background:rgba(61,220,132,0.12);"><i data-ico="download-simple"></i></span><span class="label">Instalar app</span><span class="hint" id="installHint"></span><span class="chev">›</span></button>
+        <button class="menu-row" id="unitsRow"><span class="ico" style="background:rgba(45,212,255,0.12);"><i data-ico="ruler"></i></span><span class="label">Unidades</span><span class="hint" id="unitsHint"></span><span class="chev">›</span></button>
+        <button class="menu-row" id="themeRow"><span class="ico" style="background:rgba(255,138,91,0.12);"><i data-ico="palette"></i></span><span class="label">Apariencia</span><span class="hint" id="themeHint"></span><span class="chev">›</span></button>
+        <div class="menu-row" style="cursor: default;"><span class="ico" style="background:rgba(124,92,255,0.14);"><i data-ico="speaker-high"></i></span><span class="label">Sonidos</span><label class="switch"><input type="checkbox" id="soundOn" aria-label="Sonidos"><i></i></label></div>
+        <div class="menu-row vol-row" id="volRow"><span class="ico" style="background:transparent;"><i data-ico="speaker-low"></i></span><input type="range" id="soundVol" min="0" max="100" step="5" aria-label="Volumen de los sonidos"><span class="hint" id="volHint"></span></div>
+        <button class="menu-row" id="askRow"><span class="ico" style="background:rgba(124,92,255,0.14);"><i data-ico="chat-circle-dots"></i></span><span class="label">Pregúntale a cadence</span><span class="hint">DUDAS</span><span class="chev">›</span></button>
+        <a class="menu-row" href="reminders.html"><span class="ico" style="background:rgba(45,212,255,0.12);"><i data-ico="bell"></i></span><span class="label">Recordatorios</span><span class="chev">›</span></a>
       </div>
     </div>
 
@@ -65,9 +65,9 @@
     <div>
       <div class="section-title">CUENTA</div>
       <div class="menu-card">
-        <button class="menu-row" id="passwordRow"><span class="ico" style="background:rgba(127,127,140,0.15);">🔑</span><span class="label">Cambiar contraseña</span><span class="chev">›</span></button>
-        <button class="menu-row" data-soon="Ayuda y soporte"><span class="ico" style="background:rgba(127,127,140,0.15);">❓</span><span class="label">Ayuda y soporte</span><span class="hint">PRONTO</span><span class="chev">›</span></button>
-        <button class="menu-row" data-soon="Términos y privacidad"><span class="ico" style="background:rgba(127,127,140,0.15);">📄</span><span class="label">Términos y privacidad</span><span class="hint">PRONTO</span><span class="chev">›</span></button>
+        <button class="menu-row" id="passwordRow"><span class="ico" style="background:rgba(127,127,140,0.15);"><i data-ico="key"></i></span><span class="label">Cambiar contraseña</span><span class="chev">›</span></button>
+        <button class="menu-row" data-soon="Ayuda y soporte"><span class="ico" style="background:rgba(127,127,140,0.15);"><i data-ico="question"></i></span><span class="label">Ayuda y soporte</span><span class="hint">PRONTO</span><span class="chev">›</span></button>
+        <button class="menu-row" data-soon="Términos y privacidad"><span class="ico" style="background:rgba(127,127,140,0.15);"><i data-ico="file-text"></i></span><span class="label">Términos y privacidad</span><span class="hint">PRONTO</span><span class="chev">›</span></button>
       </div>
     </div>
 
@@ -76,6 +76,7 @@
   </div>
 </div>
 
+<script src="static/js/icons.js"></script>
 <script src="static/js/api.js"></script>
 <script src="static/js/units.js"></script>
 <script src="static/js/sfx.js"></script>
@@ -123,7 +124,7 @@ $('soundVol').addEventListener('change', () => sfx.play('save')); // hear the ne
 function render() {
   renderSound();
   $('themeHint').textContent = LABELS[getStoredTheme()].toUpperCase();
-  $('installHint').textContent = window.cadenceInstall && window.cadenceInstall.isInstalled() ? 'INSTALADA ✓' : '';
+  $('installHint').textContent = window.cadenceInstall && window.cadenceInstall.isInstalled() ? 'INSTALADA' : '';
   $('adminBox').style.display = me.is_admin ? 'block' : 'none';
   const u = cadenceUnits.get();
   $('unitsHint').textContent = `${u.weight === 'lb' ? 'LIBRAS' : 'KG'} · ${u.height === 'ft' ? 'PIES' : 'CM'} · ${u.liquid === 'oz' ? 'ONZAS' : 'ML'}`;

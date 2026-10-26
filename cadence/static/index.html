@@ -36,7 +36,7 @@
         Registrar
       </button>
       <button type="button" class="streak-pill" id="streakBtn" aria-label="Ver mi racha">
-        <span class="flame">🔥</span>
+        <span class="flame"><i data-ico="fire"></i></span>
         <span class="mono" id="streakValue" style="font-weight:700;color:var(--ember);font-size:13px;">–</span>
       </button>
       <button class="icon-btn" id="themeToggle" aria-label="Apariencia">
@@ -100,7 +100,7 @@
       <div class="pace-line" id="paceLine" style="display:none;"></div>
       <a class="pace-line" id="calBanner" href="goals.html" style="display:none;color:var(--accent-to);font-weight:700;text-decoration:none;"></a>
       <div class="insight-chip" id="insightChip" style="display:none;">
-        <span>✨</span>
+        <span><i data-ico="sparkle"></i></span>
         <span><strong>Insight:</strong> <span id="insightText"></span></span>
       </div>
     </div>
@@ -131,7 +131,7 @@
 
     <!-- Ideas to complete the day (today only, while there are calories left) -->
     <a class="card ideas-link" id="ideasLink" href="ideas.html" style="display:none;">
-      <span class="il-ico" aria-hidden="true">✨</span>
+      <span class="il-ico" aria-hidden="true"><i data-ico="sparkle"></i></span>
       <span style="flex:1;min-width:0;"><span class="md-label">IDEAS PARA COMPLETAR TU DÍA</span>
         <span class="il-sub" id="ideasSub"></span></span>
       <span class="chev" aria-hidden="true">›</span>
@@ -209,6 +209,7 @@
   </div>
 </div>
 
+<script src="static/js/icons.js"></script>
 <script src="static/js/api.js"></script>
 <script src="static/js/units.js"></script>
 <script src="static/js/bits.js"></script>
@@ -335,7 +336,7 @@ function tapGlass(data, i) {
   // The sound lands with the last drop; the goal chord waits for the water to settle.
   const drops = Math.max(1, Math.ceil(target / waterStep()) - Math.ceil(now / waterStep()));
   const land = WATER_LAND_MS + (drops - 1) * waterStagger(drops);
-  if (now < goal && target >= goal) setTimeout(() => { sfx.play('goal'); showToast('💧 ¡Meta de agua cumplida!', 'ok'); }, land);
+  if (now < goal && target >= goal) setTimeout(() => { sfx.play('goal'); showToast('¡Meta de agua cumplida!', 'ok'); }, land);
   else setTimeout(() => sfx.play('water'), WATER_LAND_MS);
 }
 
@@ -503,10 +504,10 @@ function mealItemRow(item, mealKey) {
       </button>
       <div class="swipe-content meal-item-row" style="padding:2px 0;">
         <div style="width:44px;height:44px;border-radius:14px;${thumbStyle}flex-shrink:0;position:relative;">
-          <span style="position:absolute;bottom:-4px;right:-4px;background:var(--good);border-radius:100px;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px;border:2px solid var(--card);">✓</span>
+          <span style="position:absolute;bottom:-4px;right:-4px;background:var(--good);border-radius:100px;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px;border:2px solid var(--card);color:#fff;"><i data-ico="check"></i></span>
         </div>
         <div style="flex:1;">
-          <div style="font-size:13px;font-weight:700;">${escapeHtml(item.name)}${(item.note || readNotes()[item.diary_entry_id]) ? '<span class="note-dot" title="Tiene una observación">📝</span>' : ''}</div>
+          <div style="font-size:13px;font-weight:700;">${escapeHtml(item.name)}${(item.note || readNotes()[item.diary_entry_id]) ? '<span class="note-dot" title="Tiene una observación"><i data-ico="note-pencil"></i></span>' : ''}</div>
           <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${cadenceUnits.fmtAmount(item.amount_grams, item.liquid)} · ${Math.round(item.kcal)} kcal</div>
         </div>
         <button class="row-del" aria-label="Borrar ${escapeHtml(item.name)}">
@@ -609,10 +610,10 @@ function renderMeals(meals) {
   if (meals.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        <span style="font-size:36px;">🍽️</span>
+        <span style="font-size:36px;color:var(--accent-to);"><i data-ico="fork-knife"></i></span>
         <h3 class="disp" style="margin:14px 0 6px;font-size:15.5px;font-weight:700;">${isViewingToday() ? 'Aún no registras nada hoy' : 'No hay nada registrado este día'}</h3>
         <p style="margin:0 0 18px;font-size:12px;color:var(--ink-soft);line-height:1.5;">${isViewingToday() ? 'Toma una foto de tu primer plato del día y empieza tu racha.' : 'Usa las flechas para ver otros días. Si subes la foto de un plato de ese día, se guarda en su fecha.'}</p>
-        <button type="button" class="btn-primary" data-register style="display:inline-flex;width:auto;padding:13px 22px;">✨ Registrar un plato</button>
+        <button type="button" class="btn-primary" data-register style="display:inline-flex;width:auto;padding:13px 22px;"><i data-ico="sparkle"></i>&nbsp;Registrar un plato</button>
       </div>`;
     list.appendChild(container);
     return;
@@ -913,7 +914,7 @@ function openLightbox(src, box) {
   box_.className = 'lightbox';
   // The zone is drawn on the frame that wraps the photo exactly, so it stays on the ingredient when zoomed in.
   const zone = box ? `<div class="zone" style="left:${box[0] * 100}%;top:${box[1] * 100}%;width:${box[2] * 100}%;height:${box[3] * 100}%;"></div>` : '';
-  box_.innerHTML = `<button class="lb-close" aria-label="Cerrar">✕</button><div class="lb-scroll"><div class="lb-frame"><img alt="" src="${src}">${zone}</div></div>
+  box_.innerHTML = `<button class="lb-close" aria-label="Cerrar"><i data-ico="x"></i></button><div class="lb-scroll"><div class="lb-frame"><img alt="" src="${src}">${zone}</div></div>
     <div class="lb-hint">Toca la foto para acercar · pellizca para más zoom</div>`;
   document.body.appendChild(box_);
   const scroller = box_.querySelector('.lb-scroll');
@@ -971,9 +972,9 @@ function openEntryDetail(entryId) {
   if (plate) {
     const b = plate.box;
     const zone = b ? `<div class="zone" style="left:${b[0] * 100}%;top:${b[1] * 100}%;width:${b[2] * 100}%;height:${b[3] * 100}%;"></div>` : '';
-    photoHtml = `<div class="plate-photo zoomable" id="sPhoto" role="button" aria-label="Ampliar la foto"><div class="plate-frame"><img alt="Foto del plato" src="${plate.photo}">${zone}</div><span class="zoom-hint">🔍 Toca para ampliar</span></div>`;
+    photoHtml = `<div class="plate-photo zoomable" id="sPhoto" role="button" aria-label="Ampliar la foto"><div class="plate-frame"><img alt="Foto del plato" src="${plate.photo}">${zone}</div><span class="zoom-hint"><i data-ico="magnifying-glass"></i> Toca para ampliar</span></div>`;
   } else if (crop) {
-    photoHtml = `<div class="plate-photo zoomable" id="sPhoto" role="button" aria-label="Ampliar la foto"><img alt="Foto del alimento" src="${crop}" style="max-height:260px;"><span class="zoom-hint">🔍 Toca para ampliar</span></div>`;
+    photoHtml = `<div class="plate-photo zoomable" id="sPhoto" role="button" aria-label="Ampliar la foto"><img alt="Foto del alimento" src="${crop}" style="max-height:260px;"><span class="zoom-hint"><i data-ico="magnifying-glass"></i> Toca para ampliar</span></div>`;
   }
 
   sheet.innerHTML = `
@@ -1342,7 +1343,7 @@ function renderWorkouts(data) {
         <span class="mono" style="font-size:12.5px;font-weight:700;color:var(--good);">−${Math.round(w.kcal)}</span>
         <button class="row-del" data-wo="${w.id}" aria-label="Borrar entrenamiento"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2m-9 0l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
       </div>`).join('')}
-    <button type="button" class="wo-add" id="woAdd">${list.length ? '+ Otro entrenamiento' : '🏋️ Registrar entrenamiento'}</button>
+    <button type="button" class="wo-add" id="woAdd">${list.length ? '+ Otro entrenamiento' : '<i data-ico="barbell"></i> Registrar entrenamiento'}</button>
     ${list.length ? `<div class="wo-note">Estimado por actividad y peso (${Math.round(burned)} kcal en total). No cambia tu meta del día.</div>` : ''}`;
   document.getElementById('woAdd').addEventListener('click', () => cadenceWorkouts.openSearch(data.date, loadToday));
   box.querySelectorAll('[data-open]').forEach((row) => {
@@ -1412,16 +1413,16 @@ function celebrate(data) {
   if (!justSaved || data.today !== data.date) return;
   justSaved = false;
   const lines = [];
-  if (sessionStorage.getItem('cadence_water_goal')) { sessionStorage.removeItem('cadence_water_goal'); lines.push(['goal', {}, '💧 ¡Meta de agua cumplida!']); }
+  if (sessionStorage.getItem('cadence_water_goal')) { sessionStorage.removeItem('cadence_water_goal'); lines.push(['goal', {}, '¡Meta de agua cumplida!']); }
   const ratio = data.goal.kcal > 0 ? data.totals.kcal / data.goal.kcal : 0;
   try {
     if (ratio >= 0.9 && ratio <= 1.1 && localStorage.getItem('cadence_goal_day') !== data.date) {
       localStorage.setItem('cadence_goal_day', data.date);
-      lines.push(['goal', {}, '🎯 ¡Cumpliste tu meta de hoy!']);
+      lines.push(['goal', {}, '¡Cumpliste tu meta de hoy!']);
     }
     const seen = Number(localStorage.getItem('cadence_streak_seen') || 0);
     if (data.streak_days > seen && data.streak_days > 0) {
-      lines.push(['streak', { days: data.streak_days, milestone: MILESTONES.includes(data.streak_days) }, `🔥 ¡Racha de ${data.streak_days} ${data.streak_days === 1 ? 'día' : 'días'}!`]);
+      lines.push(['streak', { days: data.streak_days, milestone: MILESTONES.includes(data.streak_days) }, `¡Racha de ${data.streak_days} ${data.streak_days === 1 ? 'día' : 'días'}!`]);
     }
   } catch { /* no storage: skip the party */ }
   lines.forEach(([sound, opts, text], i) => setTimeout(() => { if (window.sfx) sfx.play(sound, opts); showToast(text, 'ok'); }, 650 + i * 1100));
@@ -1433,7 +1434,7 @@ function celebrateAwards(data) {
   if (!fresh.length || data.today !== data.date) return;
   setTimeout(() => {
     if (window.sfx) sfx.play('award');
-    showToast(fresh.length === 1 ? `🏆 ¡Premio nuevo: ${fresh[0].title}!` : `🏆 ¡${fresh.length} premios nuevos!`, 'ok');
+    showToast(fresh.length === 1 ? `¡Premio nuevo: ${fresh[0].title}!` : `¡${fresh.length} premios nuevos!`, 'ok');
   }, 1900);
 }
 

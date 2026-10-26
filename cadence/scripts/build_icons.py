@@ -14,6 +14,9 @@ check x arrow-right arrow-up arrow-down caret-down plus drop magnifying-glass tr
 chart-line-up clock-counter-clockwise barbell camera chart-bar note-pencil star star:fill clock microphone lock question smiley-meh
 bowl-food cooking-pot prohibit check-circle calendar-blank device-mobile keyboard download-simple ruler palette speaker-high
 speaker-low chat-circle-dots key file-text lightning crown-simple leaf medal sun moon person-simple-run:duotone person-simple-run
+person-simple-walk person-simple-hike person-simple-bike bicycle person-simple-swim person-simple-tai-chi flower-lotus person-arms-spread hand-fist
+soccer-ball basketball tennis-ball volleyball boxing-glove boat broom plant stairs music-notes music-notes-simple sneaker sneaker-move
+speedometer heartbeat baby-carriage mountains timer grains heart house user
 """.split()
 
 root = Path(sys.argv[1]) / "assets"
@@ -39,7 +42,12 @@ target.write_text(HEADER := """// Icons: Phosphor Icons (MIT, (c) 2023 Phosphor 
   function hydrate(root) {
     (root || document).querySelectorAll('i[data-ico]:empty').forEach((el) => { el.innerHTML = icon(el.dataset.ico); });
   }
-  window.cadenceIcons = { icon, hydrate };
+  // Standalone svg with its own size and colour (for drawings that are not text, like the award hexagons).
+  function svg(name, size, color) {
+    const markup = PATHS[name] || '';
+    return `<svg width="${size}" height="${size}" viewBox="0 0 256 256" fill="${color || 'currentColor'}" aria-hidden="true" focusable="false">${markup}</svg>`;
+  }
+  window.cadenceIcons = { icon, svg, hydrate, has: (name) => name in PATHS };
   window.ico = icon;
   const start = () => {
     hydrate();

@@ -406,16 +406,24 @@ function renderRing(data) {
   document.querySelector('.hero-card .seg-toggle').style.display = burnAllowed ? '' : 'none';
   const burn = burnAllowed ? data.burn : null;
   const circumference = 2 * Math.PI * 47; // ~295.3
-  let ratio; let big; let caption;
+  let ratio; let big; let caption; let overGoal = false;
   if (kcalMode === 'burn' && burn) {
     big = burn.kcal; caption = 'KCAL POR QUEMAR';
     ratio = burn.over_kcal > 0 ? Math.min(1, burn.worked_kcal / burn.over_kcal) : 0;
   } else {
-    big = Math.round(Math.max(0, goal.kcal - totals.kcal)); caption = 'KCAL LIBRES';
+    // Past the goal it must SAY by how much (it used to show 0, as if nothing had happened).
+    const over = Math.round(totals.kcal - goal.kcal);
+    overGoal = over > 0 && goal.kcal > 0;
+    big = overGoal ? `+${over}` : Math.round(Math.max(0, goal.kcal - totals.kcal));
+    caption = overGoal ? 'KCAL DE MÁS' : 'KCAL LIBRES';
     ratio = goal.kcal > 0 ? Math.min(1, totals.kcal / goal.kcal) : 0;
   }
-  document.getElementById('ringArc').setAttribute('stroke-dasharray', `${Math.max(4, ratio * circumference).toFixed(1)} ${circumference.toFixed(1)}`);
-  document.getElementById('kcalLeft').textContent = big;
+  const arc = document.getElementById('ringArc');
+  arc.setAttribute('stroke', overGoal ? 'var(--ember)' : 'url(#ringGrad)');
+  arc.setAttribute('stroke-dasharray', `${Math.max(4, ratio * circumference).toFixed(1)} ${circumference.toFixed(1)}`);
+  const num = document.getElementById('kcalLeft');
+  num.textContent = big;
+  num.style.color = overGoal ? 'var(--ember)' : '';
   document.getElementById('kcalCaption').textContent = caption;
   document.getElementById('modeLeft').setAttribute('aria-selected', String(kcalMode === 'left'));
   document.getElementById('modeBurn').setAttribute('aria-selected', String(kcalMode === 'burn'));

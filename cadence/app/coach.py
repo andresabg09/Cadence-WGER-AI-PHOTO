@@ -66,10 +66,31 @@ class InterviewOut(BaseModel):
 
 class AssistantIn(BaseModel):
     history: list[Turn] = Field(min_length=1, max_length=30)
+    chat_id: int | None = None  # the conversation this message belongs to (None = start a new one)
 
 
 class AssistantOut(BaseModel):
     reply: str
+    chat_id: int
+
+
+class ChatBrief(BaseModel):
+    id: int
+    title: str
+    updated_at: str
+    messages: int
+
+
+class ChatMessageOut(BaseModel):
+    role: str
+    text: str
+    at: str
+
+
+class ChatFull(BaseModel):
+    id: int
+    title: str
+    messages: list[ChatMessageOut]
 
 
 # ------------------------------------------------------------------ the interview
@@ -346,12 +367,21 @@ def person_context(user: store.User) -> str:
 
 @router.post("/api/assistant", response_model=AssistantOut)
 def assistant(body: AssistantIn, user: store.User = Depends(auth.current_user)):
-    if body.history[-1].role != "user" or not body.history[-1].text.strip():
+    last = body.history[-1]
+    if last.role != "user" or not last.text.strip():
         raise HTTPException(422, "Escribe tu pregunta")
+    if body.chat_id is not None:
+        # The context is what THIS person already said in THIS chat (kept on the server); a chat that is not theirs does not exist.
+        stored = store.chat_messages(user.id, body.chat_id)
+        if stored is None:
+            raise HTTPException(404, "Ese chat no existe")
+        turns = [{"role": m["role"], "text": m["text"]} for m in stored][-11:] + [{"role": "user", "text": last.text}]
+    else:
+        turns = [{"role": t.role, "text": t.text} for t in body.history[-12:]]
     _spend(user)
     system = _ASSISTANT_PROMPT.format(kb=knowledge_base(), context=person_context(user))
     try:
-        reply = _client().chat_text(system, [{"role": t.role, "text": t.text} for t in body.history[-12:]])
+        reply = _client().chat_text(system, turns)
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -359,4 +389,31 @@ def assistant(body: AssistantIn, user: store.User = Depends(auth.current_user)):
     reply = (reply or "").strip()
     if not reply:
         reply = "No tengo una respuesta segura para eso. Puedes mirar “Por qué este número” en Objetivos o preguntarlo de otra forma."
-    return AssistantOut(reply=reply[:1500])
+    reply = reply[:1500]
+    chat_id = body.chat_id if body.chat_id is not None else store.chat_create(user.id, " ".join(last.text.split())[:50] or "Chat nuevo")
+    store.chat_add(chat_id, "user", last.text)
+    store.chat_add(chat_id, "assistant", reply)
+    return AssistantOut(reply=reply, chat_id=chat_id)
+
+
+# ------------------------------------------------------------------ each person's chat history
+
+@router.get("/api/chats", response_model=list[ChatBrief])
+def list_chats(user: store.User = Depends(auth.current_user)):
+    return store.chat_list(user.id)
+
+
+@router.get("/api/chats/{chat_id}", response_model=ChatFull)
+def open_chat(chat_id: int, user: store.User = Depends(auth.current_user)):
+    messages = store.chat_messages(user.id, chat_id)
+    if messages is None:
+        raise HTTPException(404, "Ese chat no existe")
+    title = next((c["title"] for c in store.chat_list(user.id, 200) if c["id"] == chat_id), "Chat")
+    return ChatFull(id=chat_id, title=title, messages=messages)
+
+
+@router.delete("/api/chats/{chat_id}")
+def delete_chat(chat_id: int, user: store.User = Depends(auth.current_user)):
+    if not store.chat_delete(user.id, chat_id):
+        raise HTTPException(404, "Ese chat no existe")
+    return {"ok": True}

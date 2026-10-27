@@ -758,6 +758,68 @@ def diary_snapshot(user: store.User) -> list[str]:
     return lines
 
 
+@app.get("/api/admin/users/{user_id}/day")
+def admin_user_day(user_id: int, date: str | None = None, admin: store.User = Depends(require_admin)):
+    """The administrator looks at one person's day, READ-ONLY: what they ate, water, workouts. Never their chats, photos or notes.
+
+    Every look is written to `admin_views` (and the person is told in Ajustes that the administrator can see this).
+    """
+    target = store.get_user(user_id)
+    if target is None:
+        raise HTTPException(404, "Esa persona no existe")
+    real_today = local_now().date()
+    try:
+        day = min(date_type.fromisoformat(date), real_today) if date else real_today
+    except ValueError:
+        raise HTTPException(400, "Fecha invalida (usa AAAA-MM-DD)") from None
+    now = local_now()
+    wger = get_wger_client()
+    try:
+        plan_id = plan_for(wger, target, create=False)
+        entries = [e for e in user_entries(wger, target, plan_id, datetime.combine(day, time.min, tzinfo=now.tzinfo),
+                                           datetime.combine(day, time.max, tzinfo=now.tzinfo)) if entry_date(e) == day]
+        foods: dict[int, dict] = {}
+
+        def info(ingredient_id: int) -> dict:
+            if ingredient_id not in foods:
+                try:
+                    foods[ingredient_id] = ingredient_info(wger, target, ingredient_id)
+                except Exception:  # noqa: BLE001
+                    foods[ingredient_id] = {"name": "(alimento no disponible)"}
+            return foods[ingredient_id]
+
+        wanted = {e["ingredient"] for e in entries}
+        if len(wanted) > 1:
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                list(pool.map(info, wanted))
+        meals: dict[str, list[dict]] = {}
+        totals = {"kcal": 0.0, "protein_g": 0.0, "carbs_g": 0.0, "fat_g": 0.0}
+        for entry in entries:
+            food = info(entry["ingredient"])
+            ratio = float(entry["amount"]) / 100.0
+            item = {"name": food.get("name", "?"), "grams": round(float(entry["amount"])),
+                    "kcal": round(float(food.get("energy", 0) or 0) * ratio), "protein_g": round(float(food.get("protein", 0) or 0) * ratio),
+                    "at": entry_datetime(entry).strftime("%H:%M") if entry_datetime(entry) else None}
+            meals.setdefault(meal_key_for_entry(entry), []).append(item)
+            totals["kcal"] += float(food.get("energy", 0) or 0) * ratio
+            totals["protein_g"] += float(food.get("protein", 0) or 0) * ratio
+            totals["carbs_g"] += float(food.get("carbohydrates", 0) or 0) * ratio
+            totals["fat_g"] += float(food.get("fat", 0) or 0) * ratio
+    finally:
+        wger.close()
+    store.log_admin_view(admin.id, target.id, f"day:{day.isoformat()}")
+    day_s = day.isoformat()
+    return {
+        "user": {"id": target.id, "name": target.name, "goal": target.goal, "weight_kg": store.latest_weight(target.id)},
+        "date": day_s, "today": real_today.isoformat(),
+        "goal_kcal": round(target.goal_kcal or 0), "goal_protein_g": round(target.goal_protein or 0),
+        "totals": {k: round(v) for k, v in totals.items()},
+        "meals": [{"key": k, "label": MEAL_LABELS[k], "kcal": sum(i["kcal"] for i in meals[k]), "items": meals[k]} for k in MEAL_ORDER if k in meals],
+        "water_ml": store.water_ml(target.id, day_s), "water_goal_ml": water_goal_for(target)[0],
+        "workouts": [{"kind": w["kind"], "minutes": w["minutes"], "kcal": round(w["kcal"])} for w in store.workouts_between(target.id, day_s, day_s)],
+    }
+
+
 def diary_days(wger: WgerClient, user: store.User, plan_id: int | str | None, now: datetime, start: date_type,
                end: date_type) -> tuple[dict[date_type, int], set[date_type]]:
     """(entries per day, days that count for the streak) between two dates."""

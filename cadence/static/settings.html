@@ -69,6 +69,7 @@
         <button class="menu-row" data-soon="Ayuda y soporte"><span class="ico" style="background:rgba(127,127,140,0.15);"><i data-ico="question"></i></span><span class="label">Ayuda y soporte</span><span class="hint">PRONTO</span><span class="chev">›</span></button>
         <button class="menu-row" data-soon="Términos y privacidad"><span class="ico" style="background:rgba(127,127,140,0.15);"><i data-ico="file-text"></i></span><span class="label">Términos y privacidad</span><span class="hint">PRONTO</span><span class="chev">›</span></button>
       </div>
+      <p class="privacy-note"><i data-ico="shield-check"></i><span>Para ayudarte, el administrador de cadence puede ver tu actividad: lo que registras, tu agua y tus entrenos, solo para leer. Tus chats con cadence y tus fotos son solo tuyos.</span></p>
     </div>
 
     <button id="logout" style="display:flex;align-items:center;justify-content:center;padding:14px;border-radius:16px;border:1px solid rgba(255,92,92,0.35);background:transparent;color:var(--bad);font:inherit;font-size:13px;font-weight:700;cursor:pointer;min-height:48px;">Cerrar sesión</button>
@@ -176,6 +177,67 @@ async function shareInvite(code, note) {
   catch { showToast(`Código: ${code}`, 'warn'); }
 }
 
+// How long ago something happened, in words ("hace 3 h", "ayer", "hace 5 días").
+function ago(iso) {
+  if (!iso) return null;
+  if (iso.length === 10) {  // a whole day (no hour): hoy / ayer / hace N días
+    const n = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(`${iso}T00:00:00`).getTime()) / 86400000);
+    return n <= 0 ? 'hoy' : n === 1 ? 'ayer' : `hace ${n} días`;
+  }
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return null;
+  const mins = Math.round((Date.now() - t.getTime()) / 60000);
+  if (mins < 2) return 'ahora';
+  if (mins < 60) return `hace ${mins} min`;
+  if (mins < 60 * 24) return `hace ${Math.round(mins / 60)} h`;
+  const days = Math.round(mins / 1440);
+  return days === 1 ? 'ayer' : `hace ${days} días`;
+}
+
+// The state of each person at a glance: have they started, are they using it, what do they have logged.
+function personChips(u) {
+  const chip = (text, tone) => `<span class="pp-chip ${tone || ''}">${text}</span>`;
+  const out = [];
+  out.push(u.onboarded ? chip('Primer uso listo', 'ok') : chip('Primer uso pendiente', 'warn'));
+  if (u.onboarded && u.welcome_pending) out.push(chip('Novedades sin ver', 'warn'));
+  if (u.onboarded && u.review_pending) out.push(chip('Revisión de calorías pendiente', 'warn'));
+  out.push(chip(u.last_login ? `Entró ${ago(u.last_login)}` : 'Nunca entró', u.last_login ? '' : 'warn'));
+  out.push(chip(u.entries ? `${u.entries} ${u.entries === 1 ? 'alimento' : 'alimentos'}${u.last_meal_day ? ` · último ${ago(u.last_meal_day)}` : ''}` : 'Sin comidas registradas', u.entries ? '' : 'warn'));
+  if (u.photos) out.push(chip(`${u.photos} ${u.photos === 1 ? 'foto' : 'fotos'}`));
+  if (u.weights) out.push(chip(`${u.weights} ${u.weights === 1 ? 'peso' : 'pesos'}`));
+  if (u.workouts) out.push(chip(`${u.workouts} ${u.workouts === 1 ? 'entreno' : 'entrenos'}`));
+  return out.join('');
+}
+
+// One person's day, read-only. Arrows move between days. Chats and photos are never part of this.
+async function openUserDay(userId, who, date) {
+  let d;
+  try { d = await apiGet(`api/admin/users/${userId}/day${date ? `?date=${date}` : ''}`); } catch (err) { showToast(err.message); return; }
+  const shift = (days) => { const x = new Date(`${d.date}T12:00:00`); x.setDate(x.getDate() + days); return x.toISOString().slice(0, 10); };
+  const pretty = new Date(`${d.date}T12:00:00`).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
+  const over = d.goal_kcal && d.totals.kcal > d.goal_kcal;
+  const html = `<div class="ud-head"><div><h3 class="disp" style="margin:0;">${escapeHtml(who)}</h3><div class="when" style="margin-top:2px;">${escapeHtml(pretty)} · solo lectura</div></div>
+      <button type="button" class="ac-round as-tool" id="udClose" aria-label="Cerrar"><i data-ico="x"></i></button></div>
+    <div class="ud-nav"><button type="button" class="btn-quiet" id="udPrev"><i data-ico="caret-left"></i> Día anterior</button>
+      <button type="button" class="btn-quiet" id="udNext" ${d.date >= d.today ? 'disabled style="opacity:.4;"' : ''}>Día siguiente <i data-ico="caret-left" style="transform:rotate(180deg);"></i></button></div>
+    <div class="ud-total"><span class="mono" style="font-size:26px;font-weight:700;${over ? 'color:var(--ember);' : ''}">${d.totals.kcal}</span>
+      <span class="when">kcal${d.goal_kcal ? ` de ${d.goal_kcal}${over ? ` · +${d.totals.kcal - d.goal_kcal} de más` : ''}` : ''} · ${d.totals.protein_g} g proteína${d.goal_protein_g ? ` de ${d.goal_protein_g}` : ''}</span></div>
+    ${d.meals.length ? d.meals.map((m) => `<div class="ud-meal"><div class="ud-mh"><b>${escapeHtml(m.label)}</b><span class="mono">${m.kcal} kcal</span></div>
+      ${m.items.map((i) => `<div class="ud-item"><span>${escapeHtml(i.name)}</span><span class="when">${i.grams} g · ${i.kcal} kcal</span></div>`).join('')}</div>`).join('')
+      : '<div class="as-empty">No registró comidas este día.</div>'}
+    <div class="ud-extra"><span><i data-ico="drop"></i> ${d.water_ml} / ${d.water_goal_ml} ml</span>
+      ${d.workouts.length ? d.workouts.map((w) => `<span><i data-ico="barbell"></i> ${escapeHtml(w.kind)} ${w.minutes} min</span>`).join('') : ''}
+      ${d.user.weight_kg ? `<span><i data-ico="scales"></i> ${d.user.weight_kg} kg</span>` : ''}</div>
+    <p class="ac-hint" style="margin-top:12px;">Aquí no se ven sus chats con cadence ni sus fotos. Cada vez que abres el día de alguien queda anotado.</p>`;
+  openSheet(html, (sheet, close) => {
+    sheet.classList.add('ud-sheet');
+    sheet.querySelector('#udClose').addEventListener('click', () => close());
+    sheet.querySelector('#udPrev').addEventListener('click', () => close(() => openUserDay(userId, who, shift(-1))));
+    const next = sheet.querySelector('#udNext');
+    if (d.date < d.today) next.addEventListener('click', () => close(() => openUserDay(userId, who, shift(1))));
+  });
+}
+
 async function loadAdmin() {
   if (!me.is_admin) return;
   let overview;
@@ -187,10 +249,15 @@ async function loadAdmin() {
       ${i.used_at ? '' : `<button class="link-btn" data-share="${i.code}" data-note="${escapeHtml(i.note || '')}" style="padding:6px;">Compartir</button><button class="link-btn" data-del="${i.code}" style="padding:6px;color:var(--bad);">Borrar</button>`}
     </div>`).join('') : '<span style="font-size:12px;color:var(--ink-soft);">Aún no hay invitaciones.</span>';
   $('userList').innerHTML = overview.users.map((u) => `
-    <div style="display:flex;align-items:center;gap:10px;font-size:12px;">
-      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><b>${escapeHtml(u.name)}</b> <span style="color:var(--ink-soft);">${escapeHtml(u.email)}${u.is_admin ? ' · admin' : ''}</span></span>
-      ${u.id === me.id ? '' : `<button class="link-btn" data-reset="${u.id}" data-who="${escapeHtml(u.name)}" style="padding:6px;">Restablecer clave</button>`}
+    <div class="person-card">
+      <div class="pc-top"><span class="pc-name"><b>${escapeHtml(u.name)}</b>${u.is_admin ? '<span class="pp-chip">admin</span>' : ''}<small>${escapeHtml(u.email)}</small></span></div>
+      <div class="pp-chips">${personChips(u)}</div>
+      <div class="pc-actions">
+        <button type="button" class="btn-quiet" data-day="${u.id}" data-who="${escapeHtml(u.name)}"><i data-ico="eye"></i> Ver su día</button>
+        ${u.id === me.id ? '' : `<button type="button" class="btn-quiet" data-reset="${u.id}" data-who="${escapeHtml(u.name)}">Restablecer clave</button>`}
+      </div>
     </div>`).join('');
+  $('userList').querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => openUserDay(Number(b.dataset.day), b.dataset.who)));
   $('inviteList').querySelectorAll('[data-share]').forEach((b) => b.addEventListener('click', () => shareInvite(b.dataset.share, b.dataset.note)));
   $('inviteList').querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
     try { await apiDelete(`api/admin/invites/${b.dataset.del}`); loadAdmin(); } catch (err) { showToast(err.message); }

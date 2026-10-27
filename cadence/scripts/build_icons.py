@@ -16,7 +16,7 @@ bowl-food cooking-pot prohibit check-circle calendar-blank device-mobile keyboar
 speaker-low chat-circle-dots key file-text lightning crown-simple leaf medal sun moon person-simple-run:duotone person-simple-run brain:duotone
 person-simple-walk person-simple-hike person-simple-bike bicycle person-simple-swim person-simple-tai-chi flower-lotus person-arms-spread hand-fist
 soccer-ball basketball tennis-ball volleyball boxing-glove boat broom plant stairs music-notes music-notes-simple sneaker sneaker-move
-speedometer heartbeat baby-carriage mountains timer grains heart house user
+speedometer heartbeat baby-carriage mountains timer grains heart house user trash caret-left users eye shield-check
 """.split()
 
 root = Path(sys.argv[1]) / "assets"

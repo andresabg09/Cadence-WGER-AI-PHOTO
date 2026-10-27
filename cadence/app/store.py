@@ -78,6 +78,17 @@ CREATE TABLE IF NOT EXISTS weights (
 CREATE TABLE IF NOT EXISTS usage (
   user_id INTEGER NOT NULL, day TEXT NOT NULL, analyses INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day)
 );
+CREATE TABLE IF NOT EXISTS chats (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS chats_user ON chats (user_id, updated_at);
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL, role TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS chat_messages_chat ON chat_messages (chat_id, id);
+CREATE TABLE IF NOT EXISTS admin_views (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, admin_id INTEGER NOT NULL, user_id INTEGER NOT NULL, what TEXT NOT NULL, at TEXT NOT NULL
+);
 """
 
 
@@ -860,3 +871,93 @@ def avatar_version(user_id: int) -> int | None:
 def delete_avatar(user_id: int) -> None:
     with closing(_connect()) as conn, conn:
         conn.execute("DELETE FROM avatars WHERE user_id = ?", (user_id,))
+
+
+# ------------------------------------------------------------------ chat history (each person's own conversations with cadence)
+
+MAX_CHATS_PER_USER = 100
+
+
+def chat_create(user_id: int, title: str) -> int:
+    """A new conversation. The oldest ones beyond MAX_CHATS_PER_USER are dropped so nobody's history grows without end."""
+    now = _now()
+    with closing(_connect()) as conn, conn:
+        chat_id = conn.execute("INSERT INTO chats (user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                               (user_id, title[:60], now, now)).lastrowid
+        old = [r[0] for r in conn.execute("SELECT id FROM chats WHERE user_id = ? ORDER BY updated_at DESC, id DESC LIMIT -1 OFFSET ?",
+                                          (user_id, MAX_CHATS_PER_USER)).fetchall()]
+        for gone in old:
+            conn.execute("DELETE FROM chat_messages WHERE chat_id = ?", (gone,))
+            conn.execute("DELETE FROM chats WHERE id = ?", (gone,))
+    return chat_id
+
+
+def chat_owner(chat_id: int) -> int | None:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT user_id FROM chats WHERE id = ?", (chat_id,)).fetchone()
+    return row[0] if row else None
+
+
+def chat_add(chat_id: int, role: str, text: str) -> None:
+    now = _now()
+    with closing(_connect()) as conn, conn:
+        conn.execute("INSERT INTO chat_messages (chat_id, role, text, created_at) VALUES (?, ?, ?, ?)", (chat_id, role, text, now))
+        conn.execute("UPDATE chats SET updated_at = ? WHERE id = ?", (now, chat_id))
+
+
+def chat_list(user_id: int, limit: int = 60) -> list[dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute(
+            "SELECT c.id, c.title, c.updated_at, (SELECT COUNT(*) FROM chat_messages m WHERE m.chat_id = c.id) "
+            "FROM chats c WHERE c.user_id = ? ORDER BY c.updated_at DESC, c.id DESC LIMIT ?", (user_id, limit)).fetchall()
+    return [{"id": r[0], "title": r[1], "updated_at": r[2], "messages": r[3]} for r in rows]
+
+
+def chat_messages(user_id: int, chat_id: int, limit: int | None = None) -> list[dict] | None:
+    """The messages of one of THIS person's chats (None when the chat is not theirs or does not exist)."""
+    with closing(_connect()) as conn:
+        if conn.execute("SELECT 1 FROM chats WHERE id = ? AND user_id = ?", (chat_id, user_id)).fetchone() is None:
+            return None
+        rows = conn.execute("SELECT role, text, created_at FROM chat_messages WHERE chat_id = ? ORDER BY id", (chat_id,)).fetchall()
+    out = [{"role": r[0], "text": r[1], "at": r[2]} for r in rows]
+    return out[-limit:] if limit else out
+
+
+def chat_delete(user_id: int, chat_id: int) -> bool:
+    with closing(_connect()) as conn, conn:
+        if conn.execute("SELECT 1 FROM chats WHERE id = ? AND user_id = ?", (chat_id, user_id)).fetchone() is None:
+            return False
+        conn.execute("DELETE FROM chat_messages WHERE chat_id = ?", (chat_id,))
+        conn.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
+    return True
+
+
+# ------------------------------------------------------------------ administrator's view of the people (counts only, never contents)
+
+def admin_stats() -> dict[int, dict]:
+    """How each person is doing, as numbers: no chats, no photos, no notes (those stay private to their owner)."""
+    with closing(_connect()) as conn:
+        rows = conn.execute(
+            "SELECT u.id,"
+            " (SELECT MAX(created_at) FROM sessions s WHERE s.user_id = u.id),"
+            " (SELECT COUNT(*) FROM entry_meta m WHERE m.user_id = u.id) + (SELECT COUNT(*) FROM local_entries l WHERE l.user_id = u.id),"
+            " (SELECT MAX(logged_on) FROM entry_meta m WHERE m.user_id = u.id),"
+            " (SELECT COUNT(*) FROM entry_meta m WHERE m.user_id = u.id AND m.plate_key IS NOT NULL),"
+            " (SELECT COUNT(*) FROM weights w WHERE w.user_id = u.id),"
+            " (SELECT COUNT(*) FROM workouts k WHERE k.user_id = u.id),"
+            " (SELECT COUNT(*) FROM water_log a WHERE a.user_id = u.id AND a.ml > 0)"
+            " FROM users u").fetchall()
+    return {r[0]: {"last_login": r[1], "entries": r[2], "last_meal_day": r[3], "photos": r[4], "weights": r[5], "workouts": r[6], "water_days": r[7]}
+            for r in rows}
+
+
+def log_admin_view(admin_id: int, user_id: int, what: str) -> None:
+    """Every time the administrator opens somebody's day it is written down (who, whose, what, when)."""
+    with closing(_connect()) as conn, conn:
+        conn.execute("INSERT INTO admin_views (admin_id, user_id, what, at) VALUES (?, ?, ?, ?)", (admin_id, user_id, what, _now()))
+
+
+def admin_views_of(user_id: int, limit: int = 20) -> list[dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute("SELECT what, at FROM admin_views WHERE user_id = ? ORDER BY id DESC LIMIT ?", (user_id, limit)).fetchall()
+    return [{"what": r[0], "at": r[1]} for r in rows]

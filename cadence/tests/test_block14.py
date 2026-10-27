@@ -394,6 +394,52 @@ def test_the_assistant_sees_what_you_ate_today_and_only_yours(wger, gemini):
     assert "HOY todavía no ha registrado comida" in stub.calls[1]["system"] and "Arroz" not in stub.calls[1]["system"]
 
 
+def test_each_person_keeps_and_controls_their_own_chats(wger, gemini):
+    ana, luis = new_client(), new_client()
+    register(ana, "ana@example.com")
+    register(luis, "luis@example.com", ana.post("/api/admin/invites", json={}).json()["code"])
+    stub = gemini("Primera respuesta.", "Segunda respuesta.", "Otra respuesta.", "Respuesta de Luis.")
+    first = ana.post("/api/assistant", json={"history": [{"role": "user", "text": "¿Por qué mi meta es tan alta?"}]}).json()
+    chat = first["chat_id"]
+    assert first["reply"] == "Primera respuesta."
+    # the same chat goes on: the server remembers what was said, the browser only sends the new message
+    second = ana.post("/api/assistant", json={"chat_id": chat, "history": [{"role": "user", "text": "¿Y si como menos?"}]}).json()
+    assert second["chat_id"] == chat
+    assert [t["text"] for t in stub.calls[1]["turns"]] == ["¿Por qué mi meta es tan alta?", "Primera respuesta.", "¿Y si como menos?"]
+    listed = ana.get("/api/chats").json()
+    assert [c["id"] for c in listed] == [chat] and listed[0]["title"] == "¿Por qué mi meta es tan alta?" and listed[0]["messages"] == 4
+    full = ana.get(f"/api/chats/{chat}").json()
+    assert [m["role"] for m in full["messages"]] == ["user", "assistant", "user", "assistant"]
+    # a chat can start new at any time, without touching the old one
+    other = ana.post("/api/assistant", json={"history": [{"role": "user", "text": "Otra duda"}]}).json()
+    assert other["chat_id"] != chat and len(ana.get("/api/chats").json()) == 2
+
+    # nobody else can see, continue or delete it
+    assert luis.get("/api/chats").json() == []
+    assert luis.get(f"/api/chats/{chat}").status_code == 404
+    assert luis.post("/api/assistant", json={"chat_id": chat, "history": [{"role": "user", "text": "hola"}]}).status_code == 404
+    assert luis.delete(f"/api/chats/{chat}").status_code == 404
+    assert len(ana.get(f"/api/chats/{chat}").json()["messages"]) == 4  # untouched by his attempts
+    luis.post("/api/assistant", json={"history": [{"role": "user", "text": "Mi duda"}]})
+    assert [c["title"] for c in luis.get("/api/chats").json()] == ["Mi duda"]
+
+    # the owner can delete it
+    assert ana.delete(f"/api/chats/{chat}").status_code == 200
+    assert ana.get(f"/api/chats/{chat}").status_code == 404 and len(ana.get("/api/chats").json()) == 1
+
+
+def test_chat_history_needs_a_login_and_is_capped(wger, gemini, monkeypatch):
+    anon = new_client()
+    assert anon.get("/api/chats").status_code == 401 and anon.get("/api/chats/1").status_code == 401 and anon.delete("/api/chats/1").status_code == 401
+    ana = new_client()
+    register(ana, "ana@example.com")
+    uid = ana.get("/api/auth/me").json()["id"]
+    monkeypatch.setattr(store, "MAX_CHATS_PER_USER", 3)
+    ids = [store.chat_create(uid, f"chat {i}") for i in range(5)]
+    kept = [c["id"] for c in ana.get("/api/chats").json()]
+    assert kept == ids[:1:-1]  # only the 3 newest remain, newest first
+
+
 def test_the_assistant_fails_softly(wger, gemini):
     http = new_client()
     register(http, "a@example.com")

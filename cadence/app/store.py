@@ -892,6 +892,11 @@ def chat_create(user_id: int, title: str) -> int:
     return chat_id
 
 
+def chat_rename(chat_id: int, title: str) -> None:
+    with closing(_connect()) as conn, conn:
+        conn.execute("UPDATE chats SET title = ? WHERE id = ?", (title[:60], chat_id))
+
+
 def chat_owner(chat_id: int) -> int | None:
     with closing(_connect()) as conn:
         row = conn.execute("SELECT user_id FROM chats WHERE id = ?", (chat_id,)).fetchone()

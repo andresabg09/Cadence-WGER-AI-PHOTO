@@ -351,6 +351,12 @@ def test_the_daily_chat_limit_protects_the_ai_bill_but_not_the_administrator(wge
     assert all(admin.post("/api/interview", json=body).status_code == 200 for _ in range(4))
 
 
+@pytest.fixture
+def no_titles(monkeypatch):
+    """The model also names each new chat (one more call): tests about something else switch that off."""
+    monkeypatch.setattr(coach, "make_title", lambda question, answer: None)
+
+
 # ------------------------------------------------------------------ the assistant
 
 def test_the_knowledge_base_has_no_loose_placeholders_and_agrees_with_the_code():
@@ -360,7 +366,7 @@ def test_the_knowledge_base_has_no_loose_placeholders_and_agrees_with_the_code()
     assert f"+{int(nutrition.MUSCLE_RULES['beginner'][0] * 100)} %" in kb and "No hace falta \"quemar calorías\"" in kb
 
 
-def test_the_assistant_knows_your_numbers_and_nobody_elses(wger, gemini):
+def test_the_assistant_knows_your_numbers_and_nobody_elses(wger, gemini, no_titles):
     admin, ana = new_client(), new_client()
     register(admin, "admin@example.com", name="Andrés Pérez")
     register(ana, "ana@example.com", admin.post("/api/admin/invites", json={}).json()["code"], name="Ana Gómez")
@@ -379,7 +385,7 @@ def test_the_assistant_knows_your_numbers_and_nobody_elses(wger, gemini):
     assert admin.post("/api/assistant", json={"history": []}).status_code == 422
 
 
-def test_the_assistant_sees_what_you_ate_today_and_only_yours(wger, gemini):
+def test_the_assistant_sees_what_you_ate_today_and_only_yours(wger, gemini, no_titles):
     admin, ana = new_client(), new_client()
     register(admin, "admin@example.com", name="Andrés Pérez")
     register(ana, "ana@example.com", admin.post("/api/admin/invites", json={}).json()["code"], name="Ana Gómez")
@@ -394,7 +400,7 @@ def test_the_assistant_sees_what_you_ate_today_and_only_yours(wger, gemini):
     assert "HOY todavía no ha registrado comida" in stub.calls[1]["system"] and "Arroz" not in stub.calls[1]["system"]
 
 
-def test_each_person_keeps_and_controls_their_own_chats(wger, gemini):
+def test_each_person_keeps_and_controls_their_own_chats(wger, gemini, no_titles):
     ana, luis = new_client(), new_client()
     register(ana, "ana@example.com")
     register(luis, "luis@example.com", ana.post("/api/admin/invites", json={}).json()["code"])
@@ -426,6 +432,33 @@ def test_each_person_keeps_and_controls_their_own_chats(wger, gemini):
     # the owner can delete it
     assert ana.delete(f"/api/chats/{chat}").status_code == 200
     assert ana.get(f"/api/chats/{chat}").status_code == 404 and len(ana.get("/api/chats").json()) == 1
+
+
+def test_a_new_chat_is_named_by_the_model_from_the_whole_exchange(wger, gemini):
+    ana = new_client()
+    register(ana, "ana@example.com")
+    long_question = "oye ¿qué pasa si me como un arroz frito con un poquito de sal y pimienta, más arroz y carne? ¿eso me sube las calorías?"
+    stub = gemini("No, eso no te va a causar problema: cuenta lo que pesa cada cosa.", '"Arroz frito y calorías."')
+    chat = ana.post("/api/assistant", json={"history": [{"role": "user", "text": long_question}]}).json()["chat_id"]
+    assert [c["title"] for c in ana.get("/api/chats").json()] == ["Arroz frito y calorías"]  # a topic, not the question, no quotes or full stop
+    asked = stub.calls[1]["turns"][0]["text"]  # the naming call saw BOTH the question and the answer
+    assert "arroz frito" in asked and "no te va a causar problema" in asked
+    # the next messages of the same chat do not rename it (and cost no extra call)
+    gemini_more = gemini("Otra respuesta.")
+    ana.post("/api/assistant", json={"chat_id": chat, "history": [{"role": "user", "text": "¿y con pollo?"}]})
+    assert [c["title"] for c in ana.get("/api/chats").json()] == ["Arroz frito y calorías"] and len(gemini_more.calls) == 1
+
+
+def test_when_the_model_cannot_name_a_chat_the_first_question_stays(wger, gemini):
+    ana = new_client()
+    register(ana, "ana@example.com")
+    gemini("Respuesta.", RuntimeError("caído"))
+    ana.post("/api/assistant", json={"history": [{"role": "user", "text": "¿Por qué mi meta es tan alta?"}]})
+    assert [c["title"] for c in ana.get("/api/chats").json()] == ["¿Por qué mi meta es tan alta?"]
+    # a title that is really a paragraph is not accepted either
+    gemini("Respuesta.", "x" * 200)
+    ana.post("/api/assistant", json={"history": [{"role": "user", "text": "Otra duda"}]})
+    assert "Otra duda" in [c["title"] for c in ana.get("/api/chats").json()]
 
 
 def test_chat_history_needs_a_login_and_is_capped(wger, gemini, monkeypatch):

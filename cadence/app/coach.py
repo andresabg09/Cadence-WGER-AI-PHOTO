@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from . import accounts, auth, nutrition, store
@@ -365,8 +365,35 @@ def person_context(user: store.User) -> str:
     return "\n".join(lines)
 
 
+_TITLE_PROMPT = """
+Eres quien le pone nombre a las conversaciones de una app de nutricion. Lees una pregunta y su respuesta y escribes UN titulo
+corto en espanol (de 2 a 6 palabras) que diga DE QUE TRATA la conversacion, como el titulo de un tema: no copies la pregunta ni
+la respuesta, no pongas comillas, ni punto final, ni emojis, ni signos de pregunta. Ejemplos: "Arroz frito y calorias",
+"Por que mi meta es alta", "Musculo sin quemar calorias". Responde SOLO con el titulo.
+"""
+
+
+def make_title(question: str, answer: str) -> str | None:
+    """A short title for a conversation, written by the model from what was asked and what was answered (None when it cannot)."""
+    try:
+        raw = _client().chat_text(_TITLE_PROMPT, [{"role": "user", "text": f"PREGUNTA: {question[:400]}\n\nRESPUESTA: {answer[:600]}"}])
+    except Exception:  # noqa: BLE001 - the chat already has the first question as a title; this is only a nicer name
+        return None
+    title = " ".join((raw or "").strip().splitlines()[0].split()) if (raw or "").strip() else ""
+    title = title.strip("\"'“”«».:;¿?¡! ")
+    if not title or len(title) > 70:
+        return None
+    return title[0].upper() + title[1:]
+
+
+def _title_in_background(chat_id: int, question: str, answer: str) -> None:
+    title = make_title(question, answer)
+    if title:
+        store.chat_rename(chat_id, title)
+
+
 @router.post("/api/assistant", response_model=AssistantOut)
-def assistant(body: AssistantIn, user: store.User = Depends(auth.current_user)):
+def assistant(body: AssistantIn, background: BackgroundTasks, user: store.User = Depends(auth.current_user)):
     last = body.history[-1]
     if last.role != "user" or not last.text.strip():
         raise HTTPException(422, "Escribe tu pregunta")
@@ -390,9 +417,13 @@ def assistant(body: AssistantIn, user: store.User = Depends(auth.current_user)):
     if not reply:
         reply = "No tengo una respuesta segura para eso. Puedes mirar “Por qué este número” en Objetivos o preguntarlo de otra forma."
     reply = reply[:1500]
-    chat_id = body.chat_id if body.chat_id is not None else store.chat_create(user.id, " ".join(last.text.split())[:50] or "Chat nuevo")
+    is_new = body.chat_id is None
+    # Until the model names it, a new chat carries the start of the first question; the real title arrives right after the answer.
+    chat_id = body.chat_id if not is_new else store.chat_create(user.id, " ".join(last.text.split())[:50] or "Chat nuevo")
     store.chat_add(chat_id, "user", last.text)
     store.chat_add(chat_id, "assistant", reply)
+    if is_new:
+        background.add_task(_title_in_background, chat_id, last.text, reply)
     return AssistantOut(reply=reply, chat_id=chat_id)
 
 

@@ -54,7 +54,7 @@ def run_diagnostics(wger: WgerClient | None, deep: bool = False) -> dict:
         def gemini() -> str:
             from google import genai
 
-            reply = genai.Client(api_key=settings.gemini_api_key).models.generate_content(
+            reply = genai.Client(api_key=settings.gemini_api_key, http_options={"timeout": 50}).models.generate_content(
                 model=settings.gemini_model, contents="Responde solo la palabra: ok"
             )
             _require(bool((reply.text or "").strip()), "respuesta vacia")

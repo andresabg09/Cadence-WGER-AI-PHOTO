@@ -101,7 +101,8 @@ Responde UNICAMENTE con un JSON array, sin texto adicional:
 
 class GeminiVisionClient:
     def __init__(self, api_key: str, model: str):
-        self._client = genai.Client(api_key=api_key)
+        # A Gemini call that never answers must not hold a worker forever: give up after 50 s (the person gets a clear error).
+        self._client = genai.Client(api_key=api_key, http_options={"timeout": 50})
         self._model = model
 
     def identify_components(self, image_bytes: bytes, mime_type: str) -> list[DetectedComponent]:

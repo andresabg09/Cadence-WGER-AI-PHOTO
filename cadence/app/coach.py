@@ -235,10 +235,10 @@ class TranscriptOut(BaseModel):
 
 
 @router.post("/api/transcribe", response_model=TranscriptOut)
-async def transcribe(audio: UploadFile = File(...), user: store.User = Depends(auth.current_user)):
+def transcribe(audio: UploadFile = File(...), user: store.User = Depends(auth.current_user)):  # plain def: Gemini blocks (see main.analyze)
     """Dictation for browsers that cannot do it live: the audio comes back as TEXT that the person reads, edits and sends
     themself. Nothing is interpreted here and nothing is saved."""
-    data = await audio.read()
+    data = audio.file.read()
     if not data:
         raise HTTPException(400, "Audio vacío")
     if len(data) > MAX_AUDIO_BYTES:

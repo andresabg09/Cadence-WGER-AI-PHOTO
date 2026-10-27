@@ -1288,11 +1288,13 @@ def match_components(wger: WgerClient, user: store.User, detected: list) -> list
     return components
 
 
+# These three endpoints are plain `def` on purpose: they call Gemini and wger, which block. As `async def` a slow Gemini call
+# froze the whole server (every page, script and API call waited behind it); as `def` they run in a worker thread.
 @app.post("/api/analyze", response_model=AnalyzeResponse)
-async def analyze(image: UploadFile, user: store.User = Depends(current_user)):
+def analyze(image: UploadFile, user: store.User = Depends(current_user)):
     if not user.is_admin and not store.bump_usage(user.id, local_now().date().isoformat(), settings.analyze_daily_limit):
         raise HTTPException(429, f"Llegaste al límite de {settings.analyze_daily_limit} fotos por día. Mañana puedes seguir; mientras tanto, busca el alimento a mano.")
-    image_bytes = await image.read()
+    image_bytes = image.file.read()
     if not image_bytes:
         raise HTTPException(400, "Imagen vacia")
 
@@ -1316,11 +1318,11 @@ _AUDIO_TYPES = {"audio/wav", "audio/x-wav", "audio/wave", "audio/mpeg", "audio/m
 
 
 @app.post("/api/voice", response_model=AnalyzeResponse)
-async def voice(audio: UploadFile, user: store.User = Depends(current_user)):
+def voice(audio: UploadFile, user: store.User = Depends(current_user)):
     """"Registra 200 gramos de pollo a la plancha": the audio is turned into the same list a photo gives."""
     if not user.is_admin and not store.bump_usage(user.id, local_now().date().isoformat(), settings.analyze_daily_limit):
         raise HTTPException(429, f"Llegaste al límite de {settings.analyze_daily_limit} análisis por día. Mañana puedes seguir; mientras tanto, busca el alimento a mano.")
-    data = await audio.read()
+    data = audio.file.read()
     if not data:
         raise HTTPException(400, "Audio vacío")
     if len(data) > 4_000_000:

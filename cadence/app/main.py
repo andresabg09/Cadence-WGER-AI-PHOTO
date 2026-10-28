@@ -399,6 +399,11 @@ def progress_page():
     return FileResponse("static/progress.html")
 
 
+@app.get("/viewas.html")
+def viewas_page():
+    return FileResponse("static/viewas.html")
+
+
 @app.get("/reminders.html")
 def reminders_page():
     return FileResponse("static/reminders.html")
@@ -817,6 +822,85 @@ def admin_user_day(user_id: int, date: str | None = None, admin: store.User = De
         "meals": [{"key": k, "label": MEAL_LABELS[k], "kcal": sum(i["kcal"] for i in meals[k]), "items": meals[k]} for k in MEAL_ORDER if k in meals],
         "water_ml": store.water_ml(target.id, day_s), "water_goal_ml": water_goal_for(target)[0],
         "workouts": [{"kind": w["kind"], "minutes": w["minutes"], "kcal": round(w["kcal"])} for w in store.workouts_between(target.id, day_s, day_s)],
+    }
+
+
+def _attention(target: store.User, stats: dict, usage_today: dict, progress_ok: bool, today_s: str) -> list[dict]:
+    """What the administrator should look at for this person, in plain words. Only facts from numbers, never a judgement of the person."""
+    out: list[dict] = []
+
+    def add(tone: str, text: str) -> None:
+        out.append({"tone": tone, "text": text})
+
+    if not target.onboarded:
+        add("warn", "No terminó el primer uso (la entrevista de peso, estatura y objetivo).")
+    elif not target.welcome_v2:
+        add("warn", "Todavía no ve las novedades: al abrir la app le sale la bienvenida.")
+    elif not target.calc_done:
+        add("warn", "Tiene pendiente la revisión de calorías: al abrir la app le sale primero.")
+    last_login = stats.get("last_login")
+    if not last_login:
+        add("bad", "Nunca ha entrado a su cuenta.")
+    elif last_login[:10] < (date_type.fromisoformat(today_s) - timedelta(days=7)).isoformat():
+        add("warn", f"No entra desde el {last_login[:10]}.")
+    if target.onboarded and not stats.get("entries"):
+        add("warn", "Todavía no registra ninguna comida.")
+    elif stats.get("last_meal_day") and stats["last_meal_day"] < (date_type.fromisoformat(today_s) - timedelta(days=3)).isoformat():
+        add("warn", f"Su última comida registrada fue el {stats['last_meal_day']}.")
+    if target.goal == "lose" and target.onboarded and not stats.get("weights"):
+        add("warn", "Quiere bajar de peso pero no ha registrado ningún peso: sin pesos, cadence no puede calibrar su meta.")
+    limit = settings.analyze_daily_limit
+    if limit and not target.is_admin:
+        used = usage_today.get("analyses", 0)
+        if used >= limit:
+            add("bad", f"Hoy llegó al límite de {limit} análisis con IA; no puede subir más fotos hasta mañana.")
+        elif used >= int(limit * 0.75):
+            add("warn", f"Hoy lleva {used} de {limit} análisis con IA: está cerca del límite.")
+    if not progress_ok:
+        add("bad", "No se pudo leer su diario en wger ahora mismo (puede ser wger y no su cuenta).")
+    if not out:
+        add("ok", "Todo en orden: no se ve ningún problema en sus números.")
+    return out
+
+
+@app.get("/api/admin/users/{user_id}/view")
+def admin_user_view(user_id: int, admin: store.User = Depends(require_admin)):
+    """'Ver como': the administrator looks at one person's app, READ-ONLY: their plan, progress, state and where they are stuck.
+
+    It never signs in as them and it cannot change anything; chats, photos and notes are not part of it. Every look is logged.
+    """
+    target = store.get_user(user_id)
+    if target is None:
+        raise HTTPException(404, "Esa persona no existe")
+    today_s = local_now().date().isoformat()
+    stats = store.admin_stats().get(target.id, {})
+    usage = store.usage_recent(target.id, (local_now().date() - timedelta(days=6)).isoformat())
+    usage_today = next((u for u in usage if u["day"] == today_s), {"analyses": 0, "chats": 0})
+    prog = None
+    try:
+        prog = progress(user=target).model_dump()
+    except Exception:  # noqa: BLE001
+        logger.exception("ver como: no se pudo leer el progreso de %s", target.id)
+    age = None
+    if target.birthdate:
+        try:
+            born = date_type.fromisoformat(target.birthdate)
+            age = local_now().date().year - born.year - ((local_now().date().month, local_now().date().day) < (born.month, born.day))
+        except ValueError:
+            age = None
+    store.log_admin_view(admin.id, target.id, "view")
+    return {
+        "user": {"id": target.id, "name": target.name, "email": target.email, "created_at": target.created_at, "goal": target.goal,
+                 "age": age, "sex": target.sex, "height_cm": target.height_cm, "weight_kg": store.latest_weight(target.id),
+                 "target_weight_kg": target.target_weight_kg, "onboarded": target.onboarded,
+                 "goal_kcal": round(target.goal_kcal or 0), "goal_protein_g": round(target.goal_protein or 0),
+                 "goal_carbs_g": round(target.goal_carbs or 0), "goal_fat_g": round(target.goal_fat or 0),
+                 "pace_lb_month": target.pace_lb, "units": target.units, "last_login": stats.get("last_login")},
+        "stats": stats,
+        "ai": {"today": usage_today, "week": usage, "analyze_limit": settings.analyze_daily_limit, "chat_limit": settings.chat_daily_limit},
+        "progress": prog,
+        "attention": _attention(target, stats, usage_today, prog is not None, today_s),
+        "viewed_by_admin": store.admin_views_of(target.id, 8),
     }
 
 

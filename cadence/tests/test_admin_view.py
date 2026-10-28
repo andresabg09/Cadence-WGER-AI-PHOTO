@@ -67,3 +67,42 @@ def test_chats_never_reach_the_administrators_view(wger, monkeypatch):
     seen = json.dumps([admin.get("/api/admin/overview").json(), admin.get(f"/api/admin/users/{ana_id}/day").json()])
     assert "personal" not in seen and "te explico" not in seen
     assert admin.get("/api/chats").json() == []  # and the admin's own chat list is only the admin's
+
+
+def test_view_as_shows_how_the_person_is_doing_read_only_and_logs_it(wger):
+    admin, ana = _two_people(wger)
+    ana_id = next(u["id"] for u in admin.get("/api/admin/overview").json()["users"] if u["name"] == "Ana")
+    view = admin.get(f"/api/admin/users/{ana_id}/view").json()
+    assert view["user"]["name"] == "Ana" and view["stats"]["entries"] == 1
+    assert view["progress"]["streak_current"] == 1 and len(view["progress"]["days"]) == 28
+    assert {"today", "week", "analyze_limit", "chat_limit"} <= set(view["ai"])
+    assert all({"tone", "text"} <= set(a) for a in view["attention"])
+    assert "view" in [v["what"] for v in store.admin_views_of(ana_id)]
+    assert admin.get("/api/admin/users/9999/view").status_code == 404
+    # it looks, it never signs in as her: the administrator is still the administrator
+    assert admin.get("/api/auth/me").json()["name"] == "Andrés"
+
+
+def test_view_as_is_for_the_administrator_only_and_never_shows_chats(wger, monkeypatch):
+    admin, ana = _two_people(wger)
+    admin_id = admin.get("/api/auth/me").json()["id"]
+    assert ana.get(f"/api/admin/users/{admin_id}/view").status_code == 403
+    assert new_client().get(f"/api/admin/users/{admin_id}/view").status_code == 401
+    monkeypatch.setattr(coach, "_client", lambda: StubGemini("Claro, te explico."))
+    ana.post("/api/assistant", json={"history": [{"role": "user", "text": "algo muy personal sobre mi salud"}]})
+    ana_id = next(u["id"] for u in admin.get("/api/admin/overview").json()["users"] if u["name"] == "Ana")
+    seen = json.dumps(admin.get(f"/api/admin/users/{ana_id}/view").json())
+    assert "personal" not in seen and "te explico" not in seen
+    # it counts how often she used the AI (that is what runs out), not what she wrote
+    assert admin.get(f"/api/admin/users/{ana_id}/view").json()["ai"]["today"]["chats"] == 1
+    people = {u["name"]: u for u in admin.get("/api/admin/overview").json()["users"]}
+    assert people["Ana"]["ai_today"]["chats"] == 1
+
+
+def test_view_as_flags_what_is_wrong(wger):
+    admin, ana = _two_people(wger)
+    carla = new_client()
+    register(carla, "carla@example.com", admin.post("/api/admin/invites", json={}).json()["code"], name="Carla")
+    carla_id = next(u["id"] for u in admin.get("/api/admin/overview").json()["users"] if u["name"] == "Carla")
+    texts = " ".join(a["text"] for a in admin.get(f"/api/admin/users/{carla_id}/view").json()["attention"])
+    assert "primer uso" in texts  # a new account that has not finished the welcome says so

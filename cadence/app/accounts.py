@@ -588,12 +588,13 @@ def log_weight(body: WeightIn, user: store.User = Depends(auth.current_user)):
 @router.get("/api/admin/overview")
 def admin_overview(_: store.User = Depends(auth.require_admin)):
     stats = store.admin_stats()
+    ai_today = store.usage_on(local_now().date().isoformat())
     return {
         "invites": store.list_invites(),
         "users": [{"id": u.id, "name": u.name, "email": u.email, "is_admin": u.is_admin, "created_at": u.created_at,
                    "onboarded": u.onboarded, "goal": u.goal, "welcome_pending": not u.welcome_v2, "review_pending": not u.calc_done,
                    **{"last_login": None, "entries": 0, "last_meal_day": None, "photos": 0, "weights": 0, "workouts": 0, "water_days": 0},
-                   **stats.get(u.id, {})}
+                   **stats.get(u.id, {}), "ai_today": ai_today.get(u.id, {"analyses": 0, "chats": 0})}
                   for u in store.list_users()],
         "open_registration": settings.open_registration,
     }

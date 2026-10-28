@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="cadence">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>cadence · Ver como</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="manifest" href="static/manifest.json">
+<link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
+<link rel="stylesheet" href="static/css/pulse.css">
+<script>
+  (function () {
+    var t = localStorage.getItem('cadence_theme') || 'dark';
+    if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body class="viewas">
+<!-- The administrator looking at someone else's app. Nothing here can change anything: there is not a single write call on this page. -->
+<div class="va-banner" role="status">
+  <i data-ico="eye"></i>
+  <span class="va-banner-text"><b id="vaWho">…</b><small>Estás viendo su cuenta · solo lectura</small></span>
+  <button type="button" class="va-exit" id="vaExit"><i data-ico="x"></i> Salir</button>
+</div>
+
+<div class="app va-app">
+  <div class="seg-toggle va-tabs" role="tablist" aria-label="Qué ver">
+    <button type="button" role="tab" data-tab="day" aria-selected="true">Diario</button>
+    <button type="button" role="tab" data-tab="progress" aria-selected="false">Progreso</button>
+    <button type="button" role="tab" data-tab="plan" aria-selected="false">Su plan</button>
+    <button type="button" role="tab" data-tab="alerts" aria-selected="false">Avisos<i class="va-badge" id="vaBadge" hidden></i></button>
+  </div>
+
+  <div class="app-content va-content" id="vaContent"><div class="skeleton" style="height:140px;border-radius:22px;"></div></div>
+  <p class="ac-hint va-foot">No ves sus chats con cadence, sus fotos ni sus notas. Cada vez que abres su cuenta queda anotado, y ella lo sabe porque lo dice en sus Ajustes.</p>
+</div>
+
+<script src="static/js/icons.js"></script>
+<script src="static/js/api.js"></script>
+<script src="static/js/theme.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const uid = Number(new URLSearchParams(location.search).get('u'));
+const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+let view = null;       // /api/admin/users/{id}/view
+let day = null;        // /api/admin/users/{id}/day
+let dayDate = null;
+let tab = 'day';
+let weightUnitLb = false;
+
+const kg = (v) => (v == null ? '–' : weightUnitLb ? `${Math.round(v * 2.20462 * 10) / 10} lb` : `${Math.round(v * 10) / 10} kg`);
+const pretty = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
+const shift = (iso, n) => { const x = new Date(`${iso}T12:00:00`); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+const GOALS = { lose: 'Bajar de peso', gain: 'Subir de peso', maintain: 'Mantener', muscle: 'Ganar músculo' };
+
+function leave() {
+  if (history.length > 1 && document.referrer.startsWith(location.origin)) history.back();
+  else location.replace('settings.html');
+}
+$('vaExit').addEventListener('click', leave);
+
+document.querySelectorAll('.va-tabs button').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.tab; paint(); }));
+
+function ring(totals, goal) {
+  const c = 2 * Math.PI * 47;
+  const over = Math.round(totals.kcal - goal);
+  const isOver = goal > 0 && over > 0;
+  const ratio = goal > 0 ? Math.min(1, totals.kcal / goal) : 0;
+  const big = isOver ? `+${over}` : Math.round(Math.max(0, goal - totals.kcal));
+  return `<div class="va-ring"><svg width="112" height="112" viewBox="0 0 112 112" aria-hidden="true">
+      <defs><linearGradient id="vaGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="var(--accent-from)"/><stop offset="100%" stop-color="var(--accent-to)"/></linearGradient></defs>
+      <circle cx="56" cy="56" r="47" fill="none" stroke="rgba(127,127,140,0.16)" stroke-width="10"/>
+      <circle cx="56" cy="56" r="47" fill="none" stroke="${isOver ? 'var(--ember)' : 'url(#vaGrad)'}" stroke-width="10" stroke-linecap="round"
+        stroke-dasharray="${Math.max(4, ratio * c).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 56 56)"/></svg>
+    <div class="va-ring-n"><span class="mono" style="font-size:23px;font-weight:700;line-height:1;${isOver ? 'color:var(--ember);' : ''}">${big}</span>
+      <span style="font-size:9.5px;color:var(--ink-soft);font-weight:600;letter-spacing:.05em;">${isOver ? 'KCAL DE MÁS' : 'KCAL LIBRES'}</span></div></div>`;
+}
+
+function bar(label, v, goal, color) {
+  const pct = goal > 0 ? Math.min(100, Math.round((v / goal) * 100)) : 0;
+  return `<div class="va-macro"><div class="va-macro-h"><span>${label}</span><span class="mono">${v}${goal ? ` / ${goal}` : ''} g</span></div>
+    <div class="va-track"><i style="width:${pct}%;background:${color};"></i></div></div>`;
+}
+
+function paintDay() {
+  if (!day) return '<div class="skeleton" style="height:200px;border-radius:22px;"></div>';
+  const t = day.totals;
+  const isToday = day.date >= day.today;
+  const water = day.water_goal_ml ? Math.min(100, Math.round((day.water_ml / day.water_goal_ml) * 100)) : 0;
+  return `
+    <div class="va-daynav">
+      <button type="button" class="btn-quiet" id="vaPrev"><i data-ico="caret-left"></i></button>
+      <div class="va-daytitle"><b class="disp">${isToday ? 'Hoy' : escapeHtml(pretty(day.date))}</b>${isToday ? `<small>${escapeHtml(pretty(day.date))}</small>` : ''}</div>
+      <button type="button" class="btn-quiet" id="vaNext" ${isToday ? 'disabled' : ''}><i data-ico="caret-left" style="transform:rotate(180deg);"></i></button>
+    </div>
+    <div class="hero-card va-hero">
+      <div style="display:flex;align-items:center;gap:16px;position:relative;">
+        ${ring(t, day.goal_kcal)}
+        <div style="flex:1;display:flex;flex-direction:column;gap:10px;">
+          ${bar('Proteína', t.protein_g, day.goal_protein_g, 'var(--accent-to)')}
+          ${bar('Carbohidratos', t.carbs_g, view.user.goal_carbs_g, 'var(--accent-from)')}
+          ${bar('Grasa', t.fat_g, view.user.goal_fat_g, 'var(--ember)')}
+        </div>
+      </div>
+      <div class="va-sub">${t.kcal} kcal registradas${day.goal_kcal ? ` de ${day.goal_kcal}` : ''}</div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;"><span class="md-label">AGUA</span>
+        <span class="mono" style="font-size:12px;font-weight:700;color:var(--accent-to);">${day.water_ml} / ${day.water_goal_ml} ml</span></div>
+      <div class="va-track" style="margin-top:10px;"><i style="width:${water}%;background:var(--accent-to);"></i></div>
+    </div>
+    ${day.workouts.length ? `<div class="card"><span class="md-label">ENTRENAMIENTO</span>${day.workouts.map((w) => `<div class="va-row"><span><i data-ico="barbell"></i> ${escapeHtml(w.kind)}</span><span class="when">${w.minutes} min · ~${w.kcal} kcal</span></div>`).join('')}</div>` : ''}
+    <div class="md-label" style="padding:4px 2px 0;">COMIDAS</div>
+    ${day.meals.length ? day.meals.map((m) => `<div class="card va-meal"><div class="va-mh"><b>${escapeHtml(m.label)}</b><span class="mono">${m.kcal} kcal</span></div>
+        ${m.items.map((i) => `<div class="va-row"><span>${escapeHtml(i.name)}</span><span class="when">${i.at ? `${i.at} · ` : ''}${i.grams} g · ${i.kcal} kcal</span></div>`).join('')}</div>`).join('')
+      : `<div class="empty-state"><span style="font-size:34px;color:var(--ink-soft);"><i data-ico="fork-knife"></i></span><h3 class="disp" style="margin:12px 0 4px;font-size:15px;">${isToday ? 'Aún no registra nada hoy' : 'No registró comida este día'}</h3></div>`}`;
+}
+
+function paintProgress() {
+  const p = view.progress;
+  if (!p) return `<div class="empty-state"><h3 class="disp" style="margin:0 0 6px;font-size:15px;">No se pudo leer su progreso</h3><p style="margin:0;font-size:12px;color:var(--ink-soft);">Probablemente wger no respondió. Vuelve a abrir en un momento.</p></div>`;
+  const n = p.streak_current;
+  const byDate = Object.fromEntries(p.days.map((d) => [d.date, d]));
+  const today = new Date(`${p.today}T12:00:00`);
+  const start = new Date(today); start.setDate(today.getDate() - ((today.getDay() + 6) % 7) - 21);
+  let cells = ''; let logged = 0; let shown = 0;
+  for (let i = 0; i < 28; i += 1) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const info = byDate[iso]; const future = iso > p.today; let level = 0;
+    if (info && info.logged) {
+      const r = p.goal_kcal > 0 ? info.kcal / p.goal_kcal : 0;
+      level = r >= 0.9 && r <= 1.05 ? 4 : r >= 0.6 ? 3 : 2; logged += 1;
+    }
+    if (!future && info) shown += 1;
+    cells += `<button type="button" class="wk-sq l${level}${iso === p.today ? ' today' : ''}${future ? ' future' : ''}" ${future ? 'disabled' : `data-go="${iso}"`} title="${d.getDate()} ${MONTHS[d.getMonth()]}${info && info.logged ? ` · ${Math.round(info.kcal)} kcal` : ''}"><span>${d.getDate()}</span></button>`;
+  }
+  const w = p.weights;
+  let chart = '<div class="when" style="padding:6px 0;">Aún no ha registrado su peso.</div>';
+  if (w.length) {
+    const vals = w.map((x) => x.kg).concat(p.target_weight_kg ? [p.target_weight_kg] : []);
+    const lo = Math.min(...vals) - 1; const hi = Math.max(...vals) + 1;
+    const W = 300; const H = 110;
+    const x = (i) => (w.length === 1 ? W / 2 : 8 + (i / (w.length - 1)) * (W - 16));
+    const y = (v) => H - 10 - ((v - lo) / (hi - lo || 1)) * (H - 24);
+    const line = w.map((pt, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(pt.kg).toFixed(1)}`).join(' ');
+    chart = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="Peso en el tiempo">
+      ${p.target_weight_kg ? `<line x1="0" x2="${W}" y1="${y(p.target_weight_kg)}" y2="${y(p.target_weight_kg)}" stroke="var(--good)" stroke-dasharray="4 4" opacity=".7"/>` : ''}
+      <path d="${line}" fill="none" stroke="var(--accent-to)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      ${w.map((pt, i) => `<circle cx="${x(i)}" cy="${y(pt.kg)}" r="3" fill="var(--accent-to)"/>`).join('')}</svg>
+      <div class="va-row"><span class="when">${w[0].day}</span><span class="when">${w[w.length - 1].day}</span></div>`;
+  }
+  return `
+    <div class="streak-card"><div style="font-size:30px;color:var(--ember);"><i data-ico="fire"></i></div>
+      <div><div class="disp streak-days">${n} ${n === 1 ? 'día' : 'días'}</div>
+      <div class="streak-note">Mejor racha: ${p.streak_best} · ${p.logged_today ? 'ya registró hoy' : 'todavía no registra hoy'}</div></div></div>
+    ${p.pace ? `<div class="card"><div class="md-label">ESTA SEMANA</div><div class="va-row"><span>Promedio de los últimos ${p.pace.days} días</span><span class="mono">${p.pace.avg_kcal} kcal</span></div>
+      <div class="va-row"><span>Su meta</span><span class="mono">${p.pace.goal_kcal} kcal</span></div></div>` : ''}
+    <div class="card"><div class="card-head"><b>Últimas 4 semanas</b><span class="mono">${logged}/${shown} días</span></div>
+      <div class="week-labels"><span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+      <div class="week-grid">${cells}</div>
+      <div class="when" style="margin-top:10px;font-size:11px;">Toca un día para verlo en el Diario.</div></div>
+    <div class="card"><div class="card-head"><b>Peso</b><span class="mono">${p.weight_change_30d == null ? '' : `${p.weight_change_30d > 0 ? '+' : ''}${p.weight_change_30d} kg en 30 días`}</span></div>${chart}</div>
+    <div class="card"><div class="card-head"><b>Logros</b><span class="mono" style="color:var(--accent-to);">${p.unlocked} / ${p.achievements.length}</span></div></div>`;
+}
+
+function paintPlan() {
+  const u = view.user;
+  const row = (a, b) => `<div class="va-row"><span class="when">${a}</span><span>${b}</span></div>`;
+  return `
+    <div class="card"><div class="md-label">QUIÉN ES</div>
+      ${row('Nombre', escapeHtml(u.name))}${row('Correo', escapeHtml(u.email))}
+      ${u.age != null ? row('Edad', `${u.age} años`) : ''}${u.height_cm ? row('Estatura', `${Math.round(u.height_cm)} cm`) : ''}
+      ${row('Peso actual', kg(u.weight_kg))}${u.target_weight_kg ? row('Peso objetivo', kg(u.target_weight_kg)) : ''}
+      ${row('En cadence desde', u.created_at ? u.created_at.slice(0, 10) : '–')}</div>
+    <div class="card"><div class="md-label">SU META</div>
+      ${row('Objetivo', GOALS[u.goal] || 'Sin elegir')}
+      ${row('Calorías al día', u.goal_kcal ? `${u.goal_kcal} kcal` : 'Sin calcular')}
+      ${row('Proteína', u.goal_protein_g ? `${u.goal_protein_g} g` : '–')}
+      ${row('Carbohidratos', u.goal_carbs_g ? `${u.goal_carbs_g} g` : '–')}
+      ${row('Grasa', u.goal_fat_g ? `${u.goal_fat_g} g` : '–')}</div>`;
+}
+
+function paintAlerts() {
+  const icon = { ok: 'check-circle', warn: 'warning', bad: 'warning-circle' };
+  const ai = view.ai;
+  const maxA = Math.max(ai.analyze_limit || 1, ...ai.week.map((d) => d.analyses), 1);
+  return `
+    <div class="card"><div class="md-label">LO QUE SE VE</div>
+      ${view.attention.map((a) => `<div class="va-alert ${a.tone}"><i data-ico="${icon[a.tone] || 'info'}"></i><span>${escapeHtml(a.text)}</span></div>`).join('')}</div>
+    <div class="card"><div class="md-label">USO DE LA IA (GEMINI)</div>
+      <div class="va-row"><span>Hoy: fotos, voz e ideas</span><span class="mono">${ai.today.analyses}${ai.analyze_limit ? ` / ${ai.analyze_limit}` : ''}</span></div>
+      <div class="va-row"><span>Hoy: mensajes al chat</span><span class="mono">${ai.today.chats}${ai.chat_limit ? ` / ${ai.chat_limit}` : ''}</span></div>
+      ${ai.week.length ? `<div class="va-spark">${ai.week.map((d) => `<div title="${d.day}: ${d.analyses} análisis, ${d.chats} mensajes"><i style="height:${Math.max(4, Math.round((d.analyses / maxA) * 44))}px;"></i><span>${d.day.slice(8)}</span></div>`).join('')}</div>` : '<div class="when" style="padding-top:8px;font-size:12px;">Sin uso de IA esta semana.</div>'}
+      <div class="when" style="margin-top:8px;font-size:11px;">Cuenta las veces que usó la IA, no lo que escribió. Los administradores no tienen límite.</div></div>
+    <div class="card"><div class="md-label">ACTIVIDAD EN CADENCE</div>
+      <div class="va-row"><span>Último ingreso</span><span class="when">${view.user.last_login ? view.user.last_login.slice(0, 16).replace('T', ' ') : 'Nunca'}</span></div>
+      <div class="va-row"><span>Alimentos registrados</span><span class="mono">${view.stats.entries || 0}</span></div>
+      <div class="va-row"><span>Fotos</span><span class="mono">${view.stats.photos || 0}</span></div>
+      <div class="va-row"><span>Pesos</span><span class="mono">${view.stats.weights || 0}</span></div>
+      <div class="va-row"><span>Entrenamientos</span><span class="mono">${view.stats.workouts || 0}</span></div>
+      <div class="va-row"><span>Días con agua</span><span class="mono">${view.stats.water_days || 0}</span></div></div>
+    <div class="card"><div class="md-label">VECES QUE TE ASOMASTE</div>
+      ${view.viewed_by_admin.map((v) => `<div class="va-row"><span class="when">${v.what === 'view' ? 'Abriste su cuenta' : `Viste su día ${v.what.replace('day:', '')}`}</span><span class="when">${v.at.slice(0, 16).replace('T', ' ')}</span></div>`).join('')}</div>`;
+}
+
+function paint() {
+  document.querySelectorAll('.va-tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+  if (!view) return;
+  $('vaContent').innerHTML = tab === 'day' ? paintDay() : tab === 'progress' ? paintProgress() : tab === 'plan' ? paintPlan() : paintAlerts();
+  if (window.cadenceIcons) cadenceIcons.hydrate($('vaContent'));
+  const prev = $('vaPrev'); const next = $('vaNext');
+  if (prev) prev.addEventListener('click', () => loadDay(shift(day.date, -1)));
+  if (next && !next.disabled) next.addEventListener('click', () => loadDay(shift(day.date, 1)));
+  $('vaContent').querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => { tab = 'day'; loadDay(b.dataset.go); }));
+  window.scrollTo({ top: 0 });
+}
+
+async function loadDay(date) {
+  try {
+    day = await apiGet(`api/admin/users/${uid}/day${date ? `?date=${date}` : ''}`);
+    dayDate = day.date;
+  } catch (err) { showToast(err.message); }
+  paint();
+}
+
+(async function init() {
+  let me;
+  try { me = await ensureSession(); } catch { return; }
+  if (!me.is_admin || !uid) { location.replace('index.html'); return; }
+  try {
+    view = await apiGet(`api/admin/users/${uid}/view`);
+  } catch (err) {
+    $('vaContent').innerHTML = `<div class="empty-state"><h3 class="disp" style="margin:0 0 6px;font-size:15px;">No pude abrir esa cuenta</h3><p style="margin:0;font-size:12px;color:var(--ink-soft);">${escapeHtml(err.message)}</p></div>`;
+    return;
+  }
+  try { weightUnitLb = JSON.parse(view.user.units || '{}').weight === 'lb'; } catch { weightUnitLb = false; }
+  $('vaWho').textContent = view.user.name;
+  const n = view.attention.filter((a) => a.tone !== 'ok').length;
+  if (n) { $('vaBadge').textContent = n; $('vaBadge').hidden = false; }
+  if (window.cadenceIcons) cadenceIcons.hydrate(document.body);
+  paint();
+  await loadDay(new URLSearchParams(location.search).get('date'));
+})();
+</script>
+</body>
+</html>

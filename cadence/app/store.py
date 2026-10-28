@@ -956,6 +956,19 @@ def admin_stats() -> dict[int, dict]:
             for r in rows}
 
 
+def usage_on(day: str) -> dict[int, dict]:
+    """How much of the AI each person used on a day (counts only): photos/voice/ideas and chat messages."""
+    with closing(_connect()) as conn:
+        rows = conn.execute("SELECT user_id, analyses, chats FROM usage WHERE day = ?", (day,)).fetchall()
+    return {r[0]: {"analyses": r[1], "chats": r[2]} for r in rows}
+
+
+def usage_recent(user_id: int, since_day: str) -> list[dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute("SELECT day, analyses, chats FROM usage WHERE user_id = ? AND day >= ? ORDER BY day", (user_id, since_day)).fetchall()
+    return [{"day": r[0], "analyses": r[1], "chats": r[2]} for r in rows]
+
+
 def log_admin_view(admin_id: int, user_id: int, what: str) -> None:
     """Every time the administrator opens somebody's day it is written down (who, whose, what, when)."""
     with closing(_connect()) as conn, conn:

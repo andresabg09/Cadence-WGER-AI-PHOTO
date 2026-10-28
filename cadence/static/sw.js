@@ -23,6 +23,7 @@ const SHELL_FILES = [
   'voice.html',
   'static/css/pulse.css',
   'static/js/icons.js',
+  'static/js/splash.js',
   'static/js/api.js',
   'static/js/units.js',
   'static/js/units-ui.js',

@@ -25,7 +25,7 @@
     return d.toLocaleDateString('es', { day: 'numeric', month: 'short' });
   }
 
-  function open({ prompt } = {}) {
+  function open({ prompt, from } = {}) {
     const scrim = document.createElement('div');
     scrim.className = 'sheet-scrim';
     const sheet = document.createElement('div');
@@ -33,8 +33,10 @@
     sheet.setAttribute('role', 'dialog');
     sheet.setAttribute('aria-label', 'Pregúntale a cadence');
     sheet.innerHTML = `<div class="as-head">
-        <div class="as-title"><h3 class="disp" id="asTitle" style="margin:0;">Pregúntale a cadence</h3>
-        <div class="when" id="asSub" style="margin-top:2px;">Responde con tus números · no es consejo médico</div></div>
+        <div class="as-title" style="display:flex;align-items:center;gap:12px;">
+          <span class="as-orb" id="asOrb" aria-hidden="true"><i class="as-think"></i><span class="as-orb-core">${ico('brain:duotone')}</span></span>
+          <div style="min-width:0;"><h3 class="disp" id="asTitle" style="margin:0;">Pregúntale a cadence</h3>
+          <div class="when" id="asSub" style="margin-top:2px;">Responde con tus números · no es consejo médico</div></div></div>
         <div class="as-tools">
           <button type="button" class="ac-round as-tool" id="asBack" aria-label="Volver al chat" style="display:none;">${ico('caret-left')}</button>
           <button type="button" class="ac-round as-tool" id="asHistory" aria-label="Mis chats anteriores">${ico('clock-counter-clockwise')}</button>
@@ -53,7 +55,25 @@
       </div>
       <div class="as-history" id="asList" style="display:none;"></div>`;
     document.body.append(scrim, sheet);
-    pushOverlay(() => { scrim.remove(); sheet.remove(); });
+    // Opened from the orb, the window grows out of it and goes back into it (not with "reduce motion").
+    const motion = !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const grow = motion && from && from.isConnected;
+    if (grow) {
+      const r = from.getBoundingClientRect();
+      const desk = window.matchMedia('(min-width: 700px)').matches;
+      const top = sheet.offsetTop - (desk ? sheet.offsetHeight / 2 : 0);
+      sheet.style.transformOrigin = `${Math.round(r.left + r.width / 2 - sheet.offsetLeft)}px ${Math.round(r.top + r.height / 2 - top)}px`;
+      sheet.classList.add('from-orb');
+      scrim.classList.add('fade');
+    }
+    pushOverlay(() => {
+      if (!grow) { scrim.remove(); sheet.remove(); return; }
+      sheet.classList.add('closing');
+      scrim.classList.add('closing');
+      setTimeout(() => { scrim.remove(); sheet.remove(); }, 230);
+      from.classList.add('pop');
+      setTimeout(() => from.classList.remove('pop'), 600);
+    });
     scrim.addEventListener('click', () => dismissOverlay());
     sheet.querySelector('#asClose').addEventListener('click', () => dismissOverlay());
 
@@ -167,6 +187,7 @@
       const t = text.trim();
       if (!t || busy) return;
       busy = true;
+      $('asOrb').classList.add('thinking');
       dict.stop();
       $('asChips').style.display = 'none';
       input.value = ''; cadenceDictation.grow(input);
@@ -184,6 +205,7 @@
         add('bot', err.message || 'No pude responder ahora. Prueba de nuevo en un momento.');
       }
       busy = false;
+      $('asOrb').classList.remove('thinking');
     }
 
     add('bot', GREETING);

@@ -18,7 +18,7 @@
     });
   }
 
-  async function openChat() {
+  async function openChat(orb) {
     try {
       if (!window.cadenceAssistant) {
         for (const src of SCRIPTS) {
@@ -26,7 +26,7 @@
           if (!window[name]) await loadScript(src);
         }
       }
-      window.cadenceAssistant.open();
+      window.cadenceAssistant.open({ from: orb });
     } catch (err) {
       showToast(err.message);
     }
@@ -46,7 +46,9 @@
       hideTip();
       try { localStorage.setItem(SEEN, '1'); } catch {}
       if (window.sfx) sfx.play('pick');
-      openChat();
+      orb.classList.add('tap');
+      setTimeout(() => orb.classList.remove('tap'), 800);
+      openChat(orb);
     });
 
     let seen = false;

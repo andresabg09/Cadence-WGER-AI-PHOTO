@@ -111,6 +111,7 @@
 <script src="static/js/api.js"></script>
 <script src="static/js/units.js"></script>
 <script src="static/js/units-ui.js"></script>
+<script src="static/js/portions.js"></script>
 <script src="static/js/recorder.js"></script>
 <script src="static/js/dictation.js"></script>
 <script src="static/js/activity.js"></script>
@@ -133,13 +134,14 @@ let plan = null;       // what the server calculated for the answers so far
 let nudged = null;     // calories typed by hand in "Mueve y mira" (null = keep the calculation)
 let paceLb = 4;        // pounds per month towards the goal (what the server speaks)
 let unitsPick = null;  // what the units step shows
+let portionRead = null; // reads what the portion step shows
 let keepCurrent = true; // update mode: leave the saved goal as it is
 let exploreKcal = null;
 let paceTouched = false; // false: the recommended pace follows the units and the goal
 let recPace = null;    // the server's recommended pace (lb a month) for these answers
 let planNow = null;    // what their CURRENT goal means once the new answers are taken into account (review only)
 
-const SECTION = { intro: 'Bienvenida', units: 'Empezamos', goal: 'Objetivos', about: 'Sobre ti', body: 'Sobre ti', activity: 'Tu día a día', health: 'Cuidado',
+const SECTION = { intro: 'Bienvenida', units: 'Empezamos', portion: 'Empezamos', goal: 'Objetivos', about: 'Sobre ti', body: 'Sobre ti', activity: 'Tu día a día', health: 'Cuidado',
   scoff: 'Cuidado', promise: 'Tu plan', pace: 'Tu plan', calorie: 'Tu plan', plan: 'Tu plan', explore: 'Tu plan', changed: 'Novedades', compare: 'Tu meta' };
 const TONED = new Set(['promise', 'changed']); // gradient message screens
 
@@ -150,10 +152,11 @@ const asksScoff = () => goalNow() === 'lose' && (data.scoffDone || !(data.edRisk
 const movesAtAll = () => goalNow() && goalNow() !== 'maintain' && !(goalNow() === 'lose' && noDeficit());
 function steps() {
   if (MODE === 'update') {
-    return ['changed', ...(me && me.units && !me.units.chosen ? ['units'] : []), ...(me && me.needs_welcome ? ['calorie'] : []), 'activity', 'health',
+    return ['changed', ...(me && me.units && !me.units.chosen ? ['units'] : []), ...(me && me.units && !me.units.portion ? ['portion'] : []),
+      ...(me && me.needs_welcome ? ['calorie'] : []), 'activity', 'health',
       ...(asksScoff() ? ['scoff'] : []), 'compare', ...(movesAtAll() && !keepCurrent ? ['pace'] : []), 'plan'];
   }
-  return ['intro', 'units', 'goal', 'about', 'body', 'activity', 'health', ...(asksScoff() ? ['scoff'] : []), 'promise',
+  return ['intro', 'units', 'portion', 'goal', 'about', 'body', 'activity', 'health', ...(asksScoff() ? ['scoff'] : []), 'promise',
     ...(movesAtAll() ? ['pace'] : []), 'calorie', 'plan'];
 }
 const name = () => { const list = steps(); return step === -1 ? 'explore' : list[Math.min(step, list.length - 1)]; };
@@ -247,6 +250,10 @@ const VIEWS = {
     <h1 class="disp ob-title">¿Cómo prefieres ver tus medidas?</h1>
     <p class="ob-sub">Lo dejamos como se usa en Panamá. Puedes cambiarlo cuando quieras en Ajustes.</p>
     <div id="unBox"></div>`,
+  portion: () => `
+    <h1 class="disp ob-title">¿Cómo prefieres medir lo que comes?</h1>
+    <p class="ob-sub">Casi nadie pesa su comida. Elige lo más sencillo para ti; lo puedes cambiar cuando quieras en Ajustes.</p>
+    <div id="pmBox" class="pm-box"></div>`,
   goal: () => `
     <h1 class="disp ob-title">¿Qué quieres lograr?</h1>
     <p class="ob-sub">Elige lo más importante para ti. Después te decimos cómo llegar, en ${unitWord()} y en comida.</p>
@@ -524,6 +531,7 @@ function bind() {
   const setFt = () => { data.height_cm = ft.value === '' && inch.value === '' ? '' : U.heightToCm(Number(ft.value || 0), Number(inch.value || 0)); };
   if (ft) { ft.addEventListener('input', setFt); inch.addEventListener('input', setFt); }
   const weight = $('weight'); if (weight) weight.addEventListener('input', () => { data.weight_kg = weight.value === '' ? '' : Math.round(U.weightToKg(Number(weight.value)) * 100) / 100; });
+  if ($('pmBox')) portionRead = cadencePortions.mount($('pmBox'), cadencePortions.mode() || 'home');
   if ($('unBox')) {
     const read = cadenceUnitsUI.mount($('unBox'), U.get().chosen ? U.get() : U.PANAMA, (v) => { unitsPick = v; });
     unitsPick = read();
@@ -672,6 +680,9 @@ $('next').addEventListener('click', async () => {
       cadenceUnits.set(saved.units); // the next screens already speak in these units
     } catch (err) { showError(err.message); return; }
     plan = null;
+  }
+  if (n === 'portion') {
+    try { await cadencePortions.save(portionRead ? portionRead() : 'home'); } catch (err) { showError(err.message); return; }
   }
   if (n === 'explore') { nudged = exploreKcal; history.back(); return; } // back to the plan, now with those calories
   if (n === 'scoff' && !data.scoffDone) {

@@ -41,3 +41,7 @@ def is_liquid(name: str, flagged: bool | None = None) -> bool:
         return bool(flagged)
     plain = _plain(name)
     return bool(_LIQUID.search(plain)) and not _NOT_LIQUID.search(plain)
+
+# How each person prefers to say how much they ate (only how it is SHOWN and entered; it is always stored in grams):
+# home = cups, spoons, units and slices; photo = a hand, a card or a fork next to the plate gives the photo a scale; grams.
+PORTION_MODES = ("home", "photo", "grams")

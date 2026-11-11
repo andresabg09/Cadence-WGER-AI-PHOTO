@@ -40,6 +40,7 @@
       <div class="menu-card">
         <button class="menu-row" id="installRow"><span class="ico" style="background:rgba(61,220,132,0.12);"><i data-ico="download-simple"></i></span><span class="label">Instalar app</span><span class="hint" id="installHint"></span><span class="chev">›</span></button>
         <button class="menu-row" id="unitsRow"><span class="ico" style="background:rgba(45,212,255,0.12);"><i data-ico="ruler"></i></span><span class="label">Unidades</span><span class="hint" id="unitsHint"></span><span class="chev">›</span></button>
+        <button class="menu-row" id="portionRow"><span class="ico" style="background:rgba(124,92,255,0.14);"><i data-ico="cooking-pot"></i></span><span class="label">Cómo medir tus porciones</span><span class="hint" id="portionHint"></span><span class="chev">›</span></button>
         <button class="menu-row" id="themeRow"><span class="ico" style="background:rgba(255,138,91,0.12);"><i data-ico="palette"></i></span><span class="label">Apariencia</span><span class="hint" id="themeHint"></span><span class="chev">›</span></button>
         <div class="menu-row" style="cursor: default;"><span class="ico" style="background:rgba(124,92,255,0.14);"><i data-ico="speaker-high"></i></span><span class="label">Sonidos</span><label class="switch"><input type="checkbox" id="soundOn" aria-label="Sonidos"><i></i></label></div>
         <div class="menu-row vol-row" id="volRow"><span class="ico" style="background:transparent;"><i data-ico="speaker-low"></i></span><input type="range" id="soundVol" min="0" max="100" step="5" aria-label="Volumen de los sonidos"><span class="hint" id="volHint"></span></div>
@@ -87,6 +88,7 @@
 <script src="static/js/shell.js"></script>
 <script src="static/js/install.js"></script>
 <script src="static/js/units-ui.js"></script>
+<script src="static/js/portions.js"></script>
 <script src="static/js/recorder.js"></script>
 <script src="static/js/dictation.js"></script>
 <script src="static/js/assistant.js"></script>
@@ -129,9 +131,11 @@ function render() {
   $('installHint').textContent = window.cadenceInstall && window.cadenceInstall.isInstalled() ? 'INSTALADA' : '';
   $('adminBox').style.display = me.is_admin ? 'block' : 'none';
   const u = cadenceUnits.get();
+  $('portionHint').textContent = cadencePortions.title(cadencePortions.mode()).toUpperCase();
   $('unitsHint').textContent = `${u.weight === 'lb' ? 'LIBRAS' : 'KG'} · ${u.height === 'ft' ? 'PIES' : 'CM'} · ${u.liquid === 'oz' ? 'ONZAS' : 'ML'}`;
 }
 $('unitsRow').addEventListener('click', () => cadenceUnitsUI.openSheet(() => render()));
+$('portionRow').addEventListener('click', () => cadencePortions.choose(() => render()));
 $('askRow').addEventListener('click', () => cadenceAssistant.open());
 
 // ---- password ----

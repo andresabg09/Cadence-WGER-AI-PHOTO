@@ -64,9 +64,9 @@ def test_units_are_a_display_choice_saved_per_person(wger):
     register(admin, "admin@example.com")
     code = admin.post("/api/admin/invites", json={}).json()["code"]
     register(ana, "ana@example.com", code)
-    assert admin.get("/api/auth/me").json()["units"] == {"weight": "kg", "height": "cm", "liquid": "ml", "chosen": False}
+    assert admin.get("/api/auth/me").json()["units"] == {"weight": "kg", "height": "cm", "liquid": "ml", "chosen": False, "portion": None}
     out = admin.put("/api/units", json={"weight": "lb", "height": "ft", "liquid": "oz"}).json()
-    assert out["units"] == {"weight": "lb", "height": "ft", "liquid": "oz", "chosen": True}
+    assert out["units"] == {"weight": "lb", "height": "ft", "liquid": "oz", "chosen": True, "portion": None}
     assert ana.get("/api/auth/me").json()["units"]["chosen"] is False  # nobody else's choice changes
     assert admin.put("/api/units", json={"weight": "stone", "height": "cm", "liquid": "ml"}).status_code == 422
     assert new_client().put("/api/units", json={"weight": "lb"}).status_code == 401
@@ -119,3 +119,18 @@ def test_the_model_can_say_a_component_is_a_liquid():
     from app import vision
     parsed = vision._parse_components('[{"name": "sopa de pollo", "liquid": true, "estimated_grams": 300}, {"name": "arroz", "liquid": false}, {"name": "pan"}]')
     assert [c.liquid for c in parsed] == [True, False, None]  # None: decided later from the name of the food it matches
+
+
+def test_each_person_chooses_how_to_measure_portions_without_losing_their_units(wger):
+    from tests.test_foods import two_people
+
+    admin, ana = two_people()
+    assert admin.get("/api/auth/me").json()["units"]["portion"] is None  # not chosen: asked the first time a meal is logged
+    out = admin.put("/api/portion", json={"mode": "home"}).json()["units"]
+    assert out["portion"] == "home" and out["chosen"] is False  # choosing the portion does not choose the units
+    out = admin.put("/api/units", json={"weight": "lb", "height": "ft", "liquid": "oz"}).json()["units"]
+    assert (out["weight"], out["portion"], out["chosen"]) == ("lb", "home", True)  # saving the units keeps the portion
+    out = admin.put("/api/portion", json={"mode": "photo"}).json()["units"]
+    assert (out["weight"], out["liquid"], out["portion"]) == ("lb", "oz", "photo")
+    assert admin.put("/api/portion", json={"mode": "ojo"}).status_code == 422
+    assert ana.get("/api/auth/me").json()["units"]["portion"] is None  # each person their own

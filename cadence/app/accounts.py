@@ -128,6 +128,7 @@ class UnitsOut(BaseModel):
     height: str = "cm"
     liquid: str = "ml"
     chosen: bool = False  # False = never picked: shown in metric as before; the welcome offers the choice
+    portion: str | None = None  # home | photo | grams; None = not chosen yet (asked the first time a meal is logged)
 
 
 class ProfileOut(BaseModel):
@@ -181,7 +182,10 @@ def _units_of(user: store.User) -> UnitsOut:
     weight = raw.get("weight") if raw.get("weight") in foodunits.WEIGHT_UNITS else "kg"
     height = raw.get("height") if raw.get("height") in foodunits.HEIGHT_UNITS else "cm"
     liquid = raw.get("liquid") if raw.get("liquid") in foodunits.LIQUID_UNITS else "ml"
-    return UnitsOut(weight=weight, height=height, liquid=liquid, chosen=True)
+    portion = raw.get("portion") if raw.get("portion") in foodunits.PORTION_MODES else None
+    if not any(key in raw for key in ("weight", "height", "liquid")):
+        return UnitsOut(portion=portion)  # only the portion was chosen: the units are still the default ones
+    return UnitsOut(weight=weight, height=height, liquid=liquid, chosen=True, portion=portion)
 
 
 def _json(raw, default):
@@ -519,7 +523,27 @@ def save_units(body: UnitsIn, user: store.User = Depends(auth.current_user)):
     """How this person wants to SEE measures. Data stays metric: this only changes the display."""
     if body.weight not in foodunits.WEIGHT_UNITS or body.height not in foodunits.HEIGHT_UNITS or body.liquid not in foodunits.LIQUID_UNITS:
         raise HTTPException(422, "Unidad no válida")
-    store.update_user(user.id, units=json.dumps({"weight": body.weight, "height": body.height, "liquid": body.liquid}))
+    portion = _units_of(user).portion
+    store.update_user(user.id, units=json.dumps({"weight": body.weight, "height": body.height, "liquid": body.liquid,
+                                                 **({"portion": portion} if portion else {})}))
+    return me_out(store.get_user(user.id))
+
+
+class PortionIn(BaseModel):
+    mode: str
+
+
+@router.put("/api/portion", response_model=MeOut)
+def save_portion(body: PortionIn, user: store.User = Depends(auth.current_user)):
+    """How this person prefers to measure portions. Only the display and the way amounts are entered change: data stays in grams."""
+    if body.mode not in foodunits.PORTION_MODES:
+        raise HTTPException(422, "Modo no válido")
+    try:
+        raw = json.loads(user.units) if user.units else {}
+    except ValueError:
+        raw = {}
+    raw = raw if isinstance(raw, dict) else {}
+    store.update_user(user.id, units=json.dumps({**raw, "portion": body.mode}))
     return me_out(store.get_user(user.id))
 
 

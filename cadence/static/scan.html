@@ -102,6 +102,7 @@
         <div class="tip"><span class="k">~45°</span><span class="t">Fotografía el plato en diagonal: ni desde arriba ni al ras de la mesa.</span></div>
         <div class="tip"><span class="k">LUZ</span><span class="t">Plato completo dentro del encuadre y con buena luz.</span></div>
         <div class="tip"><span class="k">1 : 1</span><span class="t">Un plato por foto. La IA lista cada componente por separado y tú confirmas cuál es.</span></div>
+        <div class="tip" id="refTip" hidden><span class="k">ESCALA</span><span class="t">Pon tu mano, una tarjeta o un tenedor junto al plato: así la foto calcula mejor cuánto hay.</span></div>
       </div>
       <div style="background:rgba(127,127,140,0.06);border:1px solid var(--card-border);border-radius:18px;padding:14px 16px;display:flex;gap:10px;align-items:flex-start;">
         <span style="font-size:15px;color:var(--accent-to);"><i data-ico="device-mobile"></i></span>
@@ -114,6 +115,9 @@
 <div class="scan-root">
   <video id="video" autoplay playsinline muted></video>
   <div class="veil"></div>
+
+  <!-- With "referencia en la foto": a hand, a card or a fork next to the plate gives the photo a scale -->
+  <div class="pm-tip" id="refTipCam" hidden style="position:absolute;left:20px;right:20px;top:calc(44% + 165px);z-index:3;"><i data-ico="hand-fist"></i><span>Pon tu mano, una tarjeta o un tenedor junto al plato para medir mejor.</span></div>
 
   <!-- Scan brackets -->
   <div style="position:absolute;left:32px;right:32px;top:calc(44% - 150px);height:300px;">
@@ -160,6 +164,7 @@
 <script src="static/js/icons.js"></script>
 <script src="static/js/api.js"></script>
 <script src="static/js/units.js"></script>
+<script src="static/js/portions.js"></script>
 <script src="static/js/sfx.js"></script>
 <script src="static/js/shell.js"></script>
 <script src="static/js/food-sheet.js"></script>
@@ -312,6 +317,7 @@ function afterSheet() {
 async function setBarcodeMode(on) {
   barcodeMode = on;
   if (stopBarcode) { stopBarcode(); stopBarcode = null; }
+  document.getElementById('refTipCam').hidden = on || cadencePortions.mode() !== 'photo';
   document.body.classList.toggle('barcode-mode', on);
   captureBtn.style.visibility = on ? 'hidden' : 'visible';
   document.getElementById('typeCode').style.display = on ? 'inline-block' : 'none';
@@ -475,6 +481,15 @@ function renderLiveChips(components) {
     wrap.appendChild(chip);
   });
 }
+
+// How portions are measured: chosen once (the first time, here); with "referencia en la foto" the camera reminds it.
+function showRefTips() {
+  const on = cadencePortions.mode() === 'photo' && !BARCODE_FIRST;
+  document.getElementById('refTip').hidden = !on;
+  document.getElementById('refTipCam').hidden = !on;
+}
+showRefTips();
+if (!cadencePortions.mode() && !BARCODE_FIRST) cadencePortions.ensureChosen().then(showRefTips);
 
 // On a desktop layout the camera only starts when the user picks "Usar webcam";
 // asking for it on load would trigger a permission prompt next to a drop zone.

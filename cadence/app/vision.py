@@ -23,6 +23,8 @@ Reglas estrictas:
   en la foto (entero). Si el plato es una sola unidad (una paleta, una barra,
   una manzana), reparte su peso total entre los componentes que la forman.
   Es solo una estimacion de porcion: NO es un dato nutricional.
+- ESCALA: si junto al plato hay una mano, una tarjeta (8,5 x 5,4 cm, como una tarjeta de credito) o un tenedor
+  (unos 19 cm), usalos como regla para estimar mejor el tamano y los gramos. No los listes como alimentos.
 - "box_2d": donde esta ESE componente en la foto, como [ymin, xmin, ymax, xmax]
   con valores enteros de 0 a 1000 (0,0 es la esquina superior izquierda de la
   foto, 1000,1000 la inferior derecha). Encierra solo ese componente, ajustado,

@@ -12,7 +12,8 @@ Este archivo es el contexto que Claude Code lee al iniciar un chat nuevo: lo hec
   salen de `app/data/recipes_es.json` (traducido UNA vez por Claude; 131 de Latinoamerica y Espana; lo que no esta en el archivo no se muestra;
   al agregar recetas subir `recipes.PREP_VERSION`). FALTA: (a) traducir las del Caribe/Filipinas (~80 en `scratchpad latin.json`, ids sin
   traducir), (b) otra fuente de recetas latinas: MyPlate (USDA, >1.000 en espanol, dominio publico) es la mejor candidata pero su servidor no
-  responde desde la nube de Claude (502); (c) punto 3: fotos de alimentos (fotos de ingredientes de TheMealDB emparejadas por nombre).
+  responde desde la nube de Claude (502); (c) HECHO punto 3: fotos reales de alimentos (`js/food-photo.js` + `/api/food-photos`; emparejado estricto, sin foto si no corresponde).
+  SIN VERIFICAR en produccion: cuantas recetas quedan listas con el catalogo real (diagnostico profundo) y las fotos en el telefono.
 - **Seguridad:** Andres ya roto la clave de Gemini y el token de wger (28 oct). Nunca repetirlas ni ponerlas en el repo.
 - **Bloque 15 (entrenador personal), parte hecha:** historial de chats por persona (nuevo, lista, borrar, titulos por IA), el chat ve el diario de hoy (solo lectura). **FALTA, espera el "go" de Andres:** mandar fotos al chat (reusa el analisis y pasa por Confirmar), y acciones con confirmacion de un toque (agua, mover una comida; nunca borrar ni tocar reglas de salud).
 - **Panel del administrador:** hecho (numeros + "Ver como" en solo lectura `viewas.html` + registro de accesos + uso de IA por persona). Ver FOTOS de otros: no hecho, decision pendiente (recomendado: no sin avisar).

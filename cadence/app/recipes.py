@@ -36,7 +36,8 @@ logger = logging.getLogger("cadence.recipes")
 
 HOST = "https://www.themealdb.com"
 CREDIT = "Receta y fotos: TheMealDB"
-PREP_VERSION = 1  # raise it when the preparation rules change: everything is prepared again in the background
+PREP_VERSION = 2  # raise it when the preparation rules change: everything is prepared again in the background
+# 2: the Spanish text and the grams come from a file translated once (app/data/recipes_es.json), not from Gemini on the server.
 SYNC_EVERY = timedelta(days=7)
 MEALS = ("desayuno", "almuerzo", "merienda", "cena")
 # The part of the day's calories each meal usually brings (the same shares the meal score uses).
@@ -73,6 +74,48 @@ NEAR = {"spanish", "mexican", "argentina", "venezuela", "uruguayan", "colombia",
 
 class Unusable(Exception):
     """This recipe cannot be shown with honest numbers (too little of it is in the catalog, or the result makes no sense)."""
+
+
+class NotTranslated(Unusable):
+    """No Spanish version of this recipe in the file: it is not shown (nothing is asked of Gemini on the server)."""
+
+
+TRANSLATIONS_FILE = Path(__file__).parent / "data" / "recipes_es.json"
+_translations: dict | None = None
+
+
+def translations() -> dict[str, dict]:
+    """The recipes translated ONCE into Spanish, with servings and the grams of each ingredient (never calories), kept in the
+    repository: {id: {name, servings, minutes, meals, steps, items: {"1": {name, measure, grams, search_name, ...}}}}.
+    The free Gemini quota is for people's photos, not for preparing a recipe book."""
+    global _translations
+    if _translations is None:
+        try:
+            import json
+            _translations = json.loads(TRANSLATIONS_FILE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            logger.exception("no se pudo leer el archivo de recetas traducidas")
+            _translations = {}
+    return _translations
+
+
+class _FromFile:
+    """Answers like the old Gemini editor, from the translated file."""
+
+    def prepare_recipe(self, *, recipe_id: str, **_) -> dict:
+        said = translations().get(recipe_id)
+        if not said:
+            raise NotTranslated("sin traduccion")
+        items = {}
+        for key, part in (said.get("items") or {}).items():
+            items[int(key)] = {"name": part.get("name") or "", "measure": part.get("measure") or "", "grams": part.get("grams"),
+                               "search_name": part.get("search_name"), "search_alternatives": part.get("search_alternatives") or [],
+                               "liquid": bool(part.get("liquid")), "skip": bool(part.get("skip"))}
+        return {"name": said["name"], "servings": int(said["servings"]), "minutes": said.get("minutes"), "meals": said.get("meals") or [],
+                "steps": said["steps"], "items": items}
+
+
+FROM_FILE = _FromFile()
 
 
 # ------------------------------------------------------------------ reading the source
@@ -281,7 +324,7 @@ def prepare_one(recipe: dict, ai, wger) -> bool:
         return _foods[key]
 
     try:
-        said = ai.prepare_recipe(name=recipe["name"], category=recipe["category"] or "", area=recipe["area"] or "",
+        said = ai.prepare_recipe(recipe_id=recipe["id"], name=recipe["name"], category=recipe["category"] or "", area=recipe["area"] or "",
                                  ingredients=recipe["raw"]["ingredients"], instructions=recipe["raw"]["instructions"])
         prepared = build(recipe, said, find)
     except Unusable as exc:
@@ -317,7 +360,7 @@ def tick() -> float:
             if not store.recipes_counts()["total"]:
                 return 900
             store.set_kv("recipes_synced_at", (datetime.now(timezone.utc) - SYNC_EVERY + timedelta(hours=6)).isoformat())
-    if not settings.gemini_api_key or not settings.wger_api_token:
+    if not settings.wger_api_token:
         return 600
     recipe = store.recipe_next_raw()
     if recipe is None:
@@ -326,7 +369,7 @@ def tick() -> float:
 
     wger = main.get_wger_client()
     try:
-        ok = prepare_one(recipe, main.get_vision_client(), wger)
+        ok = prepare_one(recipe, FROM_FILE, wger)
     finally:
         wger.close()
     _fails = 0 if ok else _fails + 1

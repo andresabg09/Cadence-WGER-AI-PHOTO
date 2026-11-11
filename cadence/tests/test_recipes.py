@@ -167,19 +167,20 @@ def test_a_recipe_the_catalog_cannot_cover_is_set_aside_and_a_silent_model_is_re
     assert store.recipes_counts()["waiting"] == 3
 
 
-def test_the_models_answer_is_checked(wger):
-    good = ('```json\n{"name": " Arroz  con pollo ", "servings": 4, "minutes": 9999, "meals": ["cena", "brunch"], "steps": ["Uno", "", 3],'
-            ' "items": [{"i": 1, "name": "arroz", "measure": "1 taza", "grams": 185, "search_name": "white rice",'
-            ' "search_alternatives": ["rice", "x", "y"]}, {"i": 2, "name": "sal", "skip": true}, {"i": 9, "name": "de mas", "grams": 5},'
-            ' {"i": 1, "name": "repetido", "grams": 1}, {"i": 2, "kcal": 500}]}\n```')
-    parsed = vision._parse_recipe(good, 2)
-    assert (parsed["name"], parsed["servings"], parsed["minutes"], parsed["meals"], parsed["steps"]) == ("Arroz con pollo", 4, None, ["cena"], ["Uno"])
-    assert set(parsed["items"]) == {1, 2} and parsed["items"][1]["grams"] == 185 and parsed["items"][1]["search_alternatives"] == ["rice", "x"]
-    assert parsed["items"][2]["skip"] is True and "kcal" not in parsed["items"][2]
-    for bad in ('{"name": "x", "servings": 40, "steps": ["a"]}', '{"name": "", "servings": 2, "steps": ["a"]}',
-                '{"name": "x", "servings": 2, "steps": []}', "no es json", "[1, 2]"):
-        with pytest.raises(ValueError):
-            vision._parse_recipe(bad, 2)
+def test_the_translated_file_is_complete_and_never_carries_calories():
+    book = recipes.translations()
+    assert len(book) >= 50
+    for recipe_id, said in book.items():
+        assert recipe_id.isdigit() and said["name"].strip() and said["steps"] and 1 <= said["servings"] <= 40, recipe_id
+        assert set(said.get("meals") or []) <= set(recipes.MEALS), recipe_id
+        assert said["items"] and all(k.isdigit() for k in said["items"]), recipe_id
+        for part in said["items"].values():
+            assert not {"kcal", "calories", "energy"} & set(part), recipe_id  # the catalog gives calories, never this file
+            assert part.get("skip") or (part.get("grams") and part.get("search_name")), (recipe_id, part)
+    first = next(iter(book))
+    assert recipes.FROM_FILE.prepare_recipe(recipe_id=first)["items"]
+    with pytest.raises(recipes.NotTranslated):
+        recipes.FROM_FILE.prepare_recipe(recipe_id="0")
 
 
 def test_each_person_gets_the_portion_for_their_own_day_and_their_own_saved_list(wger):
@@ -307,15 +308,15 @@ def test_the_background_turn_syncs_once_prepares_one_recipe_and_rests_longer_whe
         return 2
 
     monkeypatch.setattr(recipes, "sync_catalog", sync)
-    monkeypatch.setattr(main, "get_vision_client", lambda: Editor({"Spicy Arrabiata Penne": ARRABIATA}))
+    monkeypatch.setattr(recipes, "FROM_FILE", Editor({"Spicy Arrabiata Penne": ARRABIATA}))
     monkeypatch.setattr(recipes.settings, "recipes_prep_seconds", 20)
     monkeypatch.setattr(recipes, "_fails", 0)
     rests = [recipes.tick() for _ in range(3)]
     assert synced == [1]  # the catalog is read once (then once a week), not on every turn
     counts = store.recipes_counts()
     assert counts["ready"] == 1 and sorted(rests)[0] == 20 and max(rests) >= 120  # a failure waits longer before the next try
-    monkeypatch.setattr(recipes.settings, "gemini_api_key", "")
-    assert recipes.tick() == 600  # without the model nothing is prepared (and nothing is marked as failed)
+    monkeypatch.setattr(recipes.settings, "wger_api_token", "")
+    assert recipes.tick() == 600  # without the catalog nothing is prepared (and nothing is marked as failed)
     assert store.recipes_counts() == counts
 
 

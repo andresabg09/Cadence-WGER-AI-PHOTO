@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # "1" is the free development key; a public release needs their one-off supporter key.
     mealdb_api_key: str = "1"
     recipes_sync: bool = True  # False = never call TheMealDB nor prepare recipes in the background
-    recipes_prep_seconds: int = 20  # pause between recipes while the catalog is being prepared (one Gemini call each)
+    recipes_prep_seconds: int = 2  # pause between recipes while their calories are worked out (only catalog lookups, no AI)
 
     # Behavior
     user_name: str = "Andrés"  # shown in the dashboard greeting

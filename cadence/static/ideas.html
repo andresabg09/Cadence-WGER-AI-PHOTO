@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="cadence">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>cadence · Ideas</title>
+<title>cadence · Recetas</title>
 <meta name="theme-color" content="#0A0A0F">
 <link rel="manifest" href="static/manifest.json">
 <link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
@@ -33,10 +33,10 @@
     </a>
     <div style="flex:1;min-width:0;">
       <div style="font-size:10.5px;color:var(--ink-soft);font-weight:700;letter-spacing:.06em;">PARA COMPLETAR TU DÍA</div>
-      <h1 class="disp" style="margin:0;font-size:20px;font-weight:700;">Ideas de comidas</h1>
+      <h1 class="disp" style="margin:0;font-size:20px;font-weight:700;">Recetas</h1>
     </div>
   </div>
-  <div class="app-content progress-grid" style="padding-bottom:60px;">
+  <div class="app-content progress-grid rc-layout" style="padding-bottom:60px;">
     <div class="col">
       <div class="card id-left" id="leftCard"><div class="skeleton" style="height:96px;"></div></div>
       <div class="id-meals" id="mealChips" role="tablist" aria-label="Comida"></div>
@@ -46,8 +46,14 @@
       </div>
     </div>
     <div class="col">
-      <div class="card" id="ideasCard"><div class="skeleton" style="height:260px;"></div></div>
-      <div class="rule-note"><span><i data-ico="check"></i></span><span>La IA solo propone nombres de platos e ingredientes. Las calorías salen siempre de la base de alimentos, como con una foto.</span></div>
+      <div class="card" id="recipesCard">
+        <label class="rc-search"><i data-ico="magnifying-glass"></i>
+          <input id="q" type="search" inputmode="search" autocomplete="off" placeholder="Busca un plato o un ingrediente" aria-label="Buscar recetas"></label>
+        <div class="rc-filters" id="filters"></div>
+        <div id="recipes"></div>
+      </div>
+      <div class="card" id="ideasCard" style="display:none;"></div>
+      <div class="rule-note"><span><i data-ico="check"></i></span><span>Recetas y fotos reales de TheMealDB. Las calorías de cada porción salen siempre de la base de alimentos, nunca de la IA.</span></div>
     </div>
   </div>
 </div>
@@ -61,26 +67,43 @@
 <script src="static/js/shell.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
+const esc = bits.esc;
 const MEALS = [['desayuno', 'Desayuno'], ['almuerzo', 'Almuerzo'], ['merienda', 'Merienda'], ['cena', 'Cena']];
 const LABEL = Object.fromEntries(MEALS);
 const params = new URLSearchParams(location.search);
 let meal = params.get('meal');
-let left = { kcal: 0, protein: 0 };
+let left = { kcal: null, protein: null };
+let view = { q: '', category: null, saved: false };
+let shown = [];      // the recipe cards on screen
+let total = 0;
 let loadSeq = 0;
+let ideasSeq = 0;
 
+$('recipes').innerHTML = `<div class="rc-grid">${'<div class="skeleton rc-skel"></div>'.repeat(4)}</div>`;
+
+function hue(name) { let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; }
 function tile(name, size) {
-  let h = 0;
-  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
-  const initial = bits.esc((name.trim()[0] || '?').toUpperCase());
+  const h = hue(name);
+  const initial = esc((name.trim()[0] || '?').toUpperCase());
   return `<span class="id-tile" style="width:${size}px;height:${size}px;background:linear-gradient(135deg,hsl(${h} 55% 30%),hsl(${(h + 50) % 360} 60% 45%));">${initial}</span>`;
+}
+function portionText(p) {
+  const whole = Math.floor(p), half = p - whole >= 0.5;
+  const number = `${whole || ''}${half ? '½' : ''}`;
+  return `${number} ${p > 1 ? 'porciones' : 'porción'}`;
 }
 
 function paintLeft(d) {
   left = { kcal: d.kcal_left, protein: d.protein_left };
+  const what = LABEL[d.meal] ? LABEL[d.meal].toLowerCase() : 'ahora';
+  if (d.kcal_left === null || d.kcal_left === undefined) {
+    $('leftCard').innerHTML = `<div class="id-left-in"><div><div class="md-label">TU DÍA</div><div class="md-big disp" style="font-size:22px;">Recetas para tu ${what}</div><div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">No pude leer tu diario de hoy; las porciones van según tu meta.</div></div></div>`;
+    return;
+  }
   const inner = `<b class="mono" style="font-size:15px;">${d.kcal_left}</b><span style="font-size:9.5px;color:var(--ink-soft);">kcal</span>`;
   $('leftCard').innerHTML = d.done
-    ? `<div class="id-left-in">${bits.ring(76, 100, '<span style="font-size:24px;"><i data-ico="check"></i></span>', 7)}<div><div class="md-label">TU DÍA</div><div class="md-big disp" style="font-size:22px;">¡Meta cumplida!</div><div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">Ya llegaste a tus calorías de hoy. No hace falta comer más.</div></div></div>`
-    : `<div class="id-left-in">${bits.ring(76, 100, inner, 7)}<div><div class="md-label">TE FALTAN</div><div class="md-big disp" style="font-size:22px;">${d.kcal_left} kcal · ${d.protein_left} g proteína</div><div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">Ideas para ${LABEL[d.meal] ? LABEL[d.meal].toLowerCase() : 'ahora'}, según lo que te queda de hoy.</div></div></div>`;
+    ? `<div class="id-left-in">${bits.ring(76, 100, '<span style="font-size:24px;"><i data-ico="check"></i></span>', 7)}<div><div class="md-label">TU DÍA</div><div class="md-big disp" style="font-size:22px;">¡Meta cumplida!</div><div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">Ya llegaste a tus calorías de hoy. Puedes guardar recetas para otro día.</div></div></div>`
+    : `<div class="id-left-in">${bits.ring(76, 100, inner, 7)}<div><div class="md-label">TE FALTAN</div><div class="md-big disp" style="font-size:22px;">${d.kcal_left} kcal · ${d.protein_left} g proteína</div><div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">Recetas para ${what}, con la porción que mejor encaja en lo que te queda de hoy.</div></div></div>`;
 }
 
 function paintMeals() {
@@ -88,39 +111,264 @@ function paintMeals() {
   $('mealChips').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.meal === meal) return;
     meal = b.dataset.meal;
+    view.category = null;
     if (window.sfx) sfx.play('pick');
     paintMeals();
-    loadIdeas(false);
+    load();
   }));
 }
 
-function itemsLine(items) { return items.map((i) => `${bits.esc(i.name)} ${cadenceUnits.fmtAmount(i.grams, i.liquid)}`).join(' · '); }
+function itemsLine(items) { return items.map((i) => `${esc(i.name)} ${cadenceUnits.fmtAmount(i.grams, i.liquid)}`).join(' · '); }
 
 function paintFavorites(list) {
   $('favCard').style.display = list.length ? '' : 'none';
   $('favRow').innerHTML = list.map((f, idx) => {
+    const fromRecipe = f.photo && f.photo.includes('-recipe-');  // logged from a recipe: the photo is the recipe's, not theirs
     const photo = f.photo
-      ? `<span class="id-photo" style="background-image:url('${f.photo}')"><em class="id-own">TU FOTO</em></span>`
+      ? `<span class="id-photo" style="background-image:url('${f.photo}')">${fromRecipe ? '' : '<em class="id-own">TU FOTO</em>'}</span>`
       : tile(f.items[0].name, 112).replace('class="id-tile"', 'class="id-tile id-photo"');
     return `<div class="id-fav"><div class="id-fav-pic">${photo}</div>
-      <div class="id-fav-name">${bits.esc(f.items.slice(0, 2).map((i) => i.name).join(' + '))}</div>
+      <div class="id-fav-name">${esc(f.items.slice(0, 2).map((i) => i.name).join(' + '))}</div>
       <div class="id-sub mono">${f.kcal} kcal · ${f.times} ${f.times === 1 ? 'vez' : 'veces'}</div>
       <button type="button" class="id-add" data-fav="${idx}">Repetir</button></div>`;
   }).join('');
   $('favRow').querySelectorAll('[data-fav]').forEach((b) => b.addEventListener('click', () => add(b, list[+b.dataset.fav].items, list[+b.dataset.fav].kcal, list[+b.dataset.fav].protein_g)));
 }
 
-function paintIdeas(d) {
-  if (d.done) { $('ideasCard').innerHTML = '<p class="id-empty">Hoy ya cubriste tus calorías. Mañana habrá ideas nuevas.</p>'; return; }
-  if (!d.ideas.length) {
-    $('ideasCard').innerHTML = `<p class="id-empty">No encontré ideas que pueda calcular con tu base de alimentos.</p><button type="button" class="btn-secondary" id="again">Probar de nuevo</button>`;
-    $('again').addEventListener('click', () => loadIdeas(true));
+// ---------------------------------------------------------------- recipes: the list
+
+function paintFilters(d) {
+  const chips = [`<button type="button" class="chip-soft${view.saved ? ' active' : ''}" data-saved="1"><i data-ico="${view.saved ? 'heart:fill' : 'heart'}"></i> Guardadas</button>`]
+    .concat(d.categories.map((c) => `<button type="button" class="chip-soft${view.category === c.key ? ' active' : ''}" data-cat="${esc(c.key)}">${esc(c.label)}</button>`));
+  $('filters').innerHTML = chips.join('');
+  $('filters').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.saved) { view.saved = !view.saved; view.category = null; } else view.category = view.category === b.dataset.cat ? null : b.dataset.cat;
+    if (window.sfx) sfx.play('pick');
+    load();
+  }));
+}
+
+function cardHtml(r, idx) {
+  const kcal = Math.round(r.kcal * r.portions);
+  const h = hue(r.name);
+  const where = [r.area, r.minutes ? `${r.minutes} min` : null].filter(Boolean).join(' · ');
+  return `<div class="rc-card" role="button" tabindex="0" data-idx="${idx}" aria-label="${esc(r.name)}">
+    <span class="rc-pic" style="background:linear-gradient(135deg,hsl(${h} 55% 30%),hsl(${(h + 50) % 360} 60% 45%));">
+      <span class="rc-initial">${esc((r.name.trim()[0] || '?').toUpperCase())}</span>
+      <img loading="lazy" decoding="async" alt="" src="${r.photo}?size=m" onerror="this.remove()">
+      ${r.fits ? '<em class="rc-fit"><i data-ico="check"></i> Encaja hoy</em>' : ''}
+      <button type="button" class="rc-heart${r.saved ? ' on' : ''}" data-save="${idx}" aria-label="${r.saved ? 'Quitar de guardadas' : 'Guardar receta'}" aria-pressed="${r.saved}"><i data-ico="${r.saved ? 'heart:fill' : 'heart'}"></i></button>
+    </span>
+    <span class="rc-name">${esc(r.name)}</span>
+    <span class="rc-meta"><b class="mono">${kcal} kcal</b><span>${Math.round(r.protein_g * r.portions)} g prot</span></span>
+    <span class="id-sub">${portionText(r.portions)}${where ? ` · ${esc(where)}` : ''}</span>
+  </div>`;
+}
+
+function paintRecipes(d, append) {
+  shown = append ? shown.concat(d.recipes) : d.recipes;
+  total = d.total;
+  const cat = d.catalog;
+  const preparing = cat.waiting > 0 ? `<p class="rc-note"><span class="spin"></span>Preparando el recetario: ${cat.ready} de ${cat.ready + cat.waiting} recetas listas. Cada rato aparecen más.</p>` : '';
+  if (!shown.length) {
+    const why = view.saved ? 'Todavía no has guardado recetas. Toca el corazón de una para tenerla aquí.'
+      : view.q ? `No encontré recetas con “${esc(view.q)}”.`
+      : cat.ready ? `Aún no hay recetas listas para ${LABEL[meal].toLowerCase()}${view.category ? ' de ese tipo' : ''}.`
+      : cat.total ? 'Tu recetario se está preparando por primera vez. En unos minutos empiezan a aparecer las recetas con sus fotos.'
+      : 'El recetario todavía no se ha descargado. Vuelve en unos minutos.';
+    $('recipes').innerHTML = `<p class="id-empty" style="margin-top:14px;">${why}</p>${preparing}`;
     return;
   }
-  $('ideasCard').innerHTML = `<div class="card-head"><b>Ideas para ti</b><button type="button" class="link-btn" id="again">Otras ideas</button></div>` + d.ideas.map((idea, idx) => {
+  $('recipes').innerHTML = `<div class="rc-grid">${shown.map(cardHtml).join('')}</div>
+    ${shown.length < total ? '<button type="button" class="btn-secondary" id="more" style="width:100%;margin-top:14px;">Ver más recetas</button>' : ''}${preparing}`;
+  $('recipes').querySelectorAll('.rc-card').forEach((el) => {
+    const open = () => openRecipe(shown[+el.dataset.idx]);
+    el.addEventListener('click', (e) => { if (!e.target.closest('.rc-heart')) open(); });
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.target.closest('.rc-heart')) open(); });
+  });
+  $('recipes').querySelectorAll('[data-save]').forEach((b) => b.addEventListener('click', () => toggleSave(shown[+b.dataset.save], b)));
+  if ($('more')) $('more').addEventListener('click', () => load(shown.length));
+}
+
+async function toggleSave(recipe, btn) {
+  const saved = !recipe.saved;
+  try {
+    await apiPut(`api/recipes/${recipe.id}/save`, { saved });
+    recipe.saved = saved;
+    if (window.sfx) sfx.play(saved ? 'add' : 'pick');
+    document.querySelectorAll(`[data-heart="${recipe.id}"], [data-save]`).forEach((el) => {
+      if (el.dataset.save !== undefined && shown[+el.dataset.save] !== recipe) return;
+      el.classList.toggle('on', saved);
+      el.setAttribute('aria-pressed', saved);
+      el.innerHTML = `<i data-ico="${saved ? 'heart:fill' : 'heart'}"></i>`;
+    });
+    if (btn) btn.blur();
+  } catch (err) { showToast(err.message); }
+}
+
+function query(offset) {
+  const q = new URLSearchParams({ meal });
+  if (view.q) q.set('q', view.q);
+  if (view.category) q.set('category', view.category);
+  if (view.saved) q.set('saved', 'true');
+  if (offset) q.set('offset', offset);
+  return `api/recipes?${q}`;
+}
+
+async function load(offset = 0) {
+  const seq = ++loadSeq;
+  const paint = (d) => {
+    if (seq !== loadSeq) return;
+    if (!offset) { paintLeft(d); paintFilters(d); }
+    paintRecipes(d, offset > 0);
+    // Nothing prepared yet (first hours after installing it, or the source is down): the ideas of before keep the page useful.
+    const fallback = d.catalog.ready === 0 && !d.done;
+    $('ideasCard').style.display = fallback ? '' : 'none';
+    if (fallback && !offset) loadIdeas(false);
+  };
+  try {
+    if (offset || view.q) paint(await apiGet(query(offset)));
+    else await apiGetSWR(query(0), paint);
+  } catch (err) {
+    if (seq !== loadSeq) return;
+    $('recipes').innerHTML = `<p class="id-empty" style="color:var(--bad);margin-top:14px;">${esc(err.message)}</p><button type="button" class="btn-secondary" id="again">Reintentar</button>`;
+    $('again').addEventListener('click', () => load());
+  }
+}
+
+let typing = null;
+$('q').addEventListener('input', () => {
+  clearTimeout(typing);
+  typing = setTimeout(() => { view.q = $('q').value.trim(); view.category = null; load(); }, 320);
+});
+
+// ---------------------------------------------------------------- recipes: the sheet of one
+
+function sheetLayer(html) {
+  const scrim = document.createElement('div');
+  scrim.className = 'sheet-scrim';
+  const sheet = document.createElement('div');
+  sheet.className = 'entry-sheet rc-sheet';
+  sheet.setAttribute('role', 'dialog');
+  sheet.innerHTML = html;
+  document.body.append(scrim, sheet);
+  pushOverlay(() => { scrim.remove(); sheet.remove(); });
+  scrim.addEventListener('click', () => dismissOverlay());
+  return sheet;
+}
+
+async function openRecipe(card) {
+  const h = hue(card.name);
+  const sheet = sheetLayer(`
+    <div class="rc-hero" style="background:linear-gradient(135deg,hsl(${h} 55% 30%),hsl(${(h + 50) % 360} 60% 45%));">
+      <img alt="Foto de ${esc(card.name)}" src="${card.photo}?size=l" onerror="this.remove()">
+      <button type="button" class="icon-btn rc-close" id="rcClose" aria-label="Cerrar">${bits.icon('x', 18)}</button>
+      <button type="button" class="rc-heart${card.saved ? ' on' : ''}" data-heart="${card.id}" id="rcSave" aria-label="Guardar receta" aria-pressed="${card.saved}"><i data-ico="${card.saved ? 'heart:fill' : 'heart'}"></i></button>
+    </div>
+    <h3 class="disp" style="font-size:20px;">${esc(card.name)}</h3>
+    <div class="when">${esc([card.area, card.category, card.minutes ? `${card.minutes} min` : null, `rinde ${card.servings}`].filter(Boolean).join(' · '))}</div>
+    <div id="rcBody"><div class="skeleton" style="height:220px;margin-top:14px;"></div></div>`);
+  sheet.querySelector('#rcClose').addEventListener('click', () => dismissOverlay());
+  sheet.querySelector('#rcSave').addEventListener('click', () => toggleSave(card));
+  let detail;
+  try { detail = await apiGet(`api/recipes/${card.id}`); } catch (err) {
+    if (!sheet.isConnected) return;
+    sheet.querySelector('#rcBody').innerHTML = `<p class="id-empty" style="color:var(--bad);margin-top:14px;">${esc(err.message)}</p>`;
+    return;
+  }
+  if (!sheet.isConnected) return;
+
+  let portions = card.portions;
+  let target = meal;
+  const body = sheet.querySelector('#rcBody');
+  const ingredients = detail.ingredients.map((i) => `<div class="rc-ing">
+      <span class="rc-ing-pic">${i.photo ? `<img loading="lazy" alt="" src="${esc(i.photo)}" onerror="this.remove()">` : ''}</span>
+      <span class="rc-ing-name">${esc(i.name)}</span><span class="rc-ing-measure">${esc(i.measure)}</span></div>`).join('');
+  const steps = detail.steps.map((t) => `<li>${esc(t)}</li>`).join('');
+  const links = [detail.source ? `<a class="chip-btn" href="${esc(detail.source)}" target="_blank" rel="noopener noreferrer">Receta original</a>` : '',
+    detail.youtube ? `<a class="chip-btn" href="${esc(detail.youtube)}" target="_blank" rel="noopener noreferrer">Ver video</a>` : ''].join('');
+  body.innerHTML = `
+    <div class="md-card">
+      <div class="md-head" style="align-items:center;"><div><div class="md-label">TU PORCIÓN</div><div class="md-big disp" id="rcPortion" style="font-size:21px;"></div></div>
+        <div class="rc-stepper"><button type="button" id="rcLess" aria-label="Menos">${bits.icon('minus', 16)}</button><button type="button" id="rcMore" aria-label="Más">${bits.icon('plus', 16)}</button></div></div>
+      <div class="rc-macros" id="rcMacros"></div>
+      <div class="rc-after" id="rcAfter"></div>
+    </div>
+    <div class="id-meals" id="rcMeals" role="tablist" aria-label="Registrar en" style="margin-top:12px;"></div>
+    <div class="sheet-actions"><button type="button" class="btn-primary" id="rcLog"></button></div>
+    <div class="md-card"><div class="md-label">INGREDIENTES · RECETA COMPLETA PARA ${detail.servings}</div><div class="rc-ings">${ingredients}</div></div>
+    <div class="md-card"><div class="md-label">PREPARACIÓN</div><ol class="rc-steps">${steps}</ol></div>
+    <details class="md-card rc-logged"><summary class="md-label">LO QUE SE REGISTRA EN TU DIARIO</summary><div id="rcItems"></div>
+      ${detail.missing.length ? `<p class="rc-note" style="margin-top:10px;">No se contaron (no están en la base de alimentos): ${esc(detail.missing.join(', '))}.</p>` : ''}
+      <p class="rc-note" style="margin-top:10px;">Las calorías son una estimación: cada ingrediente se busca en la base de alimentos tal como entra a la receta.</p></details>
+    <div class="rc-credit">${links}<span>${esc(detail.credit)}</span></div>`;
+
+  const paint = () => {
+    const kcal = Math.round(detail.kcal * portions);
+    sheet.querySelector('#rcPortion').textContent = portionText(portions);
+    sheet.querySelector('#rcMacros').innerHTML = [[kcal, 'kcal'], [Math.round(detail.protein_g * portions), 'g proteína'], [Math.round(detail.carbs_g * portions), 'g carbos'], [Math.round(detail.fat_g * portions), 'g grasa']]
+      .map(([n, l]) => `<div><b class="mono">${n}</b><span>${l}</span></div>`).join('');
+    const after = sheet.querySelector('#rcAfter');
+    if (left.kcal === null || left.kcal === undefined) after.textContent = '';
+    else if (kcal <= left.kcal) { after.className = 'rc-after'; after.textContent = `Te quedan ${left.kcal} kcal hoy: después de esto te quedarían ${left.kcal - kcal}.`; }
+    else { after.className = 'rc-after over'; after.textContent = `Te quedan ${left.kcal} kcal hoy: esta porción se pasa por ${kcal - left.kcal}.`; }
+    sheet.querySelector('#rcItems').innerHTML = detail.items.map((i) => `<div class="rc-item"><span>${esc(i.label)}<small>${esc(i.name)}</small></span><b class="mono">${cadenceUnits.fmtAmount(Math.max(1, i.grams * portions), i.liquid)}</b></div>`).join('');
+    sheet.querySelector('#rcLess').disabled = portions <= 0.5;
+    sheet.querySelector('#rcMore').disabled = portions >= 4;
+    sheet.querySelector('#rcMeals').innerHTML = MEALS.map(([k, l]) => `<button type="button" role="tab" class="chip-soft${k === target ? ' active' : ''}" aria-selected="${k === target}" data-meal="${k}">${l}</button>`).join('');
+    sheet.querySelectorAll('#rcMeals button').forEach((b) => b.addEventListener('click', () => { target = b.dataset.meal; if (window.sfx) sfx.play('pick'); paint(); }));
+    sheet.querySelector('#rcLog').textContent = `Registrar en ${LABEL[target].toLowerCase()}`;
+  };
+  sheet.querySelector('#rcLess').addEventListener('click', () => { portions = Math.max(0.5, portions - 0.5); if (window.sfx) sfx.play('pick'); paint(); });
+  sheet.querySelector('#rcMore').addEventListener('click', () => { portions = Math.min(4, portions + 0.5); if (window.sfx) sfx.play('pick'); paint(); });
+  sheet.querySelector('#rcLog').addEventListener('click', (e) => logRecipe(detail, portions, target, e.currentTarget));
+  paint();
+}
+
+// The recipe's own photo is filed as the plate of what was logged, so the diary shows it as one dish (and can delete it whole).
+// Each food keeps the picture of its ingredient, as a photographed plate keeps the crop of each food.
+async function pictureOf(path) {
+  if (!path) return null;
+  try {
+    const response = await fetch(path);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return await new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(blob); });
+  } catch { return null; }
+}
+
+async function attachPhoto(detail, created) {
+  const [plate, ...crops] = await Promise.all([pictureOf(`${detail.photo}?size=l`), ...detail.items.map((i) => pictureOf(i.photo))]);
+  if (!plate) return;
+  // `created` comes back in the order the foods were sent
+  await apiPost('api/entry-media', { plate_id: `recipe-${detail.id}-${Date.now()}`, photos: [plate],
+    items: created.map((c, n) => ({ entry_id: c.diary_entry_id, photo: 0, crop: crops[n] || null })) });
+}
+
+async function logRecipe(detail, portions, target, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Registrando…';
+  try {
+    const saved = await apiPost('api/confirm', { meal: target, items: detail.items.map((i) => ({ ingredient_id: i.ingredient_id, amount_grams: Math.max(1, Math.round(i.grams * portions * 10) / 10), liquid: !!i.liquid })) });
+    try { await attachPhoto(detail, saved.created); } catch { /* the food is logged; only the photo of the dish is missing */ }
+    swrClear();
+    if (window.sfx) sfx.play('save');
+    dismissOverlay(() => { showToast(`${detail.name}: agregado a ${LABEL[target].toLowerCase()}`, 'ok'); load(); apiGet('api/favorites').then(paintFavorites).catch(() => {}); });
+  } catch (err) {
+    showToast(err.message);
+    btn.disabled = false;
+    btn.textContent = `Registrar en ${LABEL[target].toLowerCase()}`;
+  }
+}
+
+// ---------------------------------------------------------------- the ideas of before (only while no recipe is ready)
+
+function paintIdeas(d) {
+  if (d.done || !d.ideas.length) { $('ideasCard').style.display = 'none'; return; }
+  $('ideasCard').innerHTML = `<div class="card-head"><b>Mientras tanto, ideas rápidas</b><button type="button" class="link-btn" id="again">Otras ideas</button></div>` + d.ideas.map((idea, idx) => {
     const more = idea.protein_g >= 15 ? `<span class="id-tag good">+${Math.round(idea.protein_g)} g proteína</span>` : '';
-    const tag = idea.tag ? `<span class="id-tag">${bits.esc(idea.tag)}</span>` : '';
-    return `<div class="id-idea">${tile(idea.name, 64)}<div class="id-main"><div class="id-name">${bits.esc(idea.name)}</div>
+    const tag = idea.tag ? `<span class="id-tag">${esc(idea.tag)}</span>` : '';
+    return `<div class="id-idea">${tile(idea.name, 64)}<div class="id-main"><div class="id-name">${esc(idea.name)}</div>
       <div class="id-sub">${itemsLine(idea.items)}</div>
       <div class="id-meta"><span class="mono">${idea.kcal} kcal</span>${tag}${more}</div></div>
       <button type="button" class="id-add" data-idea="${idx}">Agregar</button></div>`;
@@ -137,24 +385,18 @@ async function add(btn, items, kcal, protein) {
     if (window.sfx) sfx.play('save');
     btn.textContent = 'Agregado';
     btn.classList.add('done');
-    left = { kcal: Math.max(0, left.kcal - kcal), protein: Math.max(0, left.protein - protein) };
     showToast(`Agregado a ${LABEL[meal] || 'tu día'}`, 'ok');
+    load();
   } catch (err) { showToast(err.message); btn.disabled = false; }
 }
 
 async function loadIdeas(refresh) {
-  const seq = ++loadSeq;
+  const seq = ++ideasSeq;
   $('ideasCard').innerHTML = '<div class="id-thinking"><span class="spin"></span><span>Pensando ideas para ti…</span></div>';
   try {
     const d = await apiGet(`api/ideas?meal=${meal}${refresh ? '&refresh=true' : ''}`);
-    if (seq !== loadSeq) return;
-    paintLeft(d);
-    paintIdeas(d);
-  } catch (err) {
-    if (seq !== loadSeq) return;
-    $('ideasCard').innerHTML = `<p class="id-empty" style="color:var(--bad);">${bits.esc(err.message)}</p><button type="button" class="btn-secondary" id="again">Reintentar</button>`;
-    $('again').addEventListener('click', () => loadIdeas(false));
-  }
+    if (seq === ideasSeq) paintIdeas(d);
+  } catch { if (seq === ideasSeq) $('ideasCard').style.display = 'none'; }
 }
 
 (async function start() {
@@ -163,7 +405,7 @@ async function loadIdeas(refresh) {
   }
   paintMeals();
   apiGet('api/favorites').then(paintFavorites).catch(() => {});
-  loadIdeas(false);
+  load();
 })();
 </script>
 <script>

@@ -77,6 +77,10 @@ es una estimación y no cambia tu meta.
 **¿La IA calcula mis calorías?** No. La IA reconoce los alimentos de la foto o de tu voz; las calorías vienen de la base de datos.
 **¿Qué tan exacta es la foto?** La identificación es buena, pero la porción es lo más difícil: es normal equivocarse entre 10 y 35 %. Por eso
 siempre confirmas la cantidad.
+**Recetas:** en Recetas hay platos reales con su foto, sus ingredientes (cada uno con su foto) y los pasos para prepararlos. Para cada
+persona se ordenan según las calorías que le quedan ese día y se sugiere la porción que mejor encaja; puedes cambiarla, guardar la
+receta y registrarla en tu diario con un toque. Las calorías de cada porción salen de la base de alimentos (ingrediente por ingrediente,
+tal como entra a la receta) y son una estimación. Las recetas y fotos vienen de TheMealDB.
 **Agua:** el vaso es de 250 ml (8 oz si usas onzas); la meta diaria sale de tu peso y la puedes cambiar.
 **Rachas:** un día cuenta para tu racha solo si registras algo ese mismo día; subir una foto vieja no la recupera.
 **Límite diario de IA:** hasta {{ANALYZE_LIMIT}} fotos o análisis por día.

@@ -19,7 +19,7 @@
   const ITEMS = [
     { key: 'diario', label: 'Diario', href: 'index.html' },
     { key: 'scan', label: 'Escanear con IA', href: 'scan.html' },
-    { key: 'ideas', label: 'Ideas de comidas', href: 'ideas.html' },
+    { key: 'ideas', label: 'Recetas', href: 'ideas.html' },
     { key: 'progreso', label: 'Progreso', href: 'progress.html' },
     { key: 'retos', label: 'Retos', href: 'challenges.html' },
     { key: 'premios', label: 'Premios', href: 'awards.html' },

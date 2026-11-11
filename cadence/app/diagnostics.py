@@ -83,7 +83,51 @@ def run_diagnostics(wger: WgerClient | None, deep: bool = False) -> dict:
         _run(checks, "Entrevista de actividad entiende un caso de prueba",
              "Gemini no devolvio una lectura valida de la entrevista: copiame este mensaje completo y ajusto el prompt.", interview)
 
+    if deep:
+        _recipe_checks(checks)
+
     return {"ok": all(c["ok"] for c in checks), "checks": checks}
+
+
+def _recipe_checks(checks: list[dict]) -> None:
+    """The recipe book: its source answers, the catalog is filed, and the model can prepare a recipe (never with calories)."""
+    from . import recipes, store
+
+    def source() -> str:
+        reply = httpx.get(f"{recipes.HOST}/api/json/v1/{settings.mealdb_api_key}/categories.php", timeout=15)
+        reply.raise_for_status()
+        _require(bool(reply.json().get("categories")), "respuesta sin categorias")
+        return "TheMealDB responde"
+
+    _run(checks, "Recetario: la fuente responde",
+         "El servidor no llega a www.themealdb.com (o MEALDB_API_KEY no es valida). Las recetas ya guardadas siguen funcionando.", source)
+
+    def filed() -> str:
+        counts = store.recipes_counts()
+        _require(settings.recipes_sync, "RECIPES_SYNC esta apagado")
+        _require(counts["total"] > 0, "aun no se ha descargado ninguna receta (tarda un minuto tras el primer arranque)")
+        return f"{counts['ready']} recetas listas, {counts['waiting']} por preparar, {counts['skipped']} apartadas (de {counts['total']})"
+
+    _run(checks, "Recetario: descargado", "Espera unos minutos y vuelve a abrir este informe; si sigue igual, revisa el registro del contenedor cadence.", filed)
+
+    if settings.gemini_api_key:
+        def prepares() -> str:
+            from .vision import GeminiVisionClient
+
+            said = GeminiVisionClient(settings.gemini_api_key, settings.gemini_model).prepare_recipe(
+                name="Spicy Arrabiata Penne", category="Vegetarian", area="Italian",
+                ingredients=[{"name": "penne rigate", "measure": "1 pound"}, {"name": "olive oil", "measure": "1/4 cup"},
+                             {"name": "chopped tomatoes", "measure": "1 tin"}, {"name": "salt", "measure": "to taste"}],
+                instructions="Bring a large pot of water to a boil and cook the penne. Heat the oil, add the tomatoes and simmer "
+                             "for 10 minutes. Toss the pasta with the sauce and serve.")
+            pasta, oil = said["items"].get(1) or {}, said["items"].get(2) or {}
+            _require(bool(pasta.get("search_name")) and bool(oil.get("grams")), "no devolvio los ingredientes con su nombre de busqueda y gramos")
+            _require(2 <= said["servings"] <= 8, f"porciones inesperadas para una libra de pasta: {said['servings']}")
+            _require(20 <= (oil.get("grams") or 0) <= 90, f"1/4 de taza de aceite no son {oil.get('grams')} g")
+            return f"prepara una receta de prueba ({said['name']}, {said['servings']} porciones, {len(said['steps'])} pasos)"
+
+        _run(checks, "Recetario: la IA prepara una receta de prueba",
+             "Gemini no devolvio la receta en el formato esperado: copiame este mensaje completo y ajusto el prompt.", prepares)
 
 
 def _wger_checks(checks: list[dict], found: dict[str, int], wger: WgerClient, deep: bool) -> None:

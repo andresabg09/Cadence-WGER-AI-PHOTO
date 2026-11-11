@@ -89,6 +89,15 @@ CREATE INDEX IF NOT EXISTS chat_messages_chat ON chat_messages (chat_id, id);
 CREATE TABLE IF NOT EXISTS admin_views (
   id INTEGER PRIMARY KEY AUTOINCREMENT, admin_id INTEGER NOT NULL, user_id INTEGER NOT NULL, what TEXT NOT NULL, at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS recipes (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT, area TEXT, thumb TEXT NOT NULL, raw TEXT NOT NULL,
+  prio INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'raw', tries INTEGER NOT NULL DEFAULT 0,
+  prep_v INTEGER NOT NULL DEFAULT 0, prepared TEXT, updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS recipes_status ON recipes (status, prio);
+CREATE TABLE IF NOT EXISTS recipe_saves (
+  user_id INTEGER NOT NULL, recipe_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (user_id, recipe_id)
+);
 """
 
 
@@ -979,3 +988,101 @@ def admin_views_of(user_id: int, limit: int = 20) -> list[dict]:
     with closing(_connect()) as conn:
         rows = conn.execute("SELECT what, at FROM admin_views WHERE user_id = ? ORDER BY id DESC LIMIT ?", (user_id, limit)).fetchall()
     return [{"what": r[0], "at": r[1]} for r in rows]
+
+
+# ------------------------------------------------------------------ recipes (the same catalog for everyone; saved ones per person)
+
+def set_kv(key: str, value: str) -> None:
+    with closing(_connect()) as conn, conn:
+        conn.execute("INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+
+
+def recipes_upsert(rows: list[dict]) -> int:
+    """File the recipes read from the source. A recipe already here keeps its prepared version unless its text changed."""
+    added = 0
+    with closing(_connect()) as conn, conn:
+        known = {row[0]: row[1] for row in conn.execute("SELECT id, raw FROM recipes")}
+        for row in rows:
+            raw = json.dumps(row["raw"], ensure_ascii=False, sort_keys=True)
+            if row["id"] not in known:
+                conn.execute("INSERT INTO recipes (id, name, category, area, thumb, raw, prio, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                             (row["id"], row["name"], row["category"], row["area"], row["thumb"], raw, row["prio"], _now()))
+                added += 1
+            elif known[row["id"]] != raw:
+                conn.execute("UPDATE recipes SET name = ?, category = ?, area = ?, thumb = ?, raw = ?, prio = ?, status = 'raw', tries = 0,"
+                             " updated_at = ? WHERE id = ?",
+                             (row["name"], row["category"], row["area"], row["thumb"], raw, row["prio"], _now(), row["id"]))
+            else:
+                conn.execute("UPDATE recipes SET thumb = ?, prio = ? WHERE id = ?", (row["thumb"], row["prio"], row["id"]))
+    return added
+
+
+def _recipe(row) -> dict:
+    return {"id": row[0], "name": row[1], "category": row[2], "area": row[3], "thumb": row[4], "raw": json.loads(row[5]),
+            "status": row[6], "prepared": json.loads(row[7]) if row[7] else None}
+
+
+_RECIPE_COLUMNS = "id, name, category, area, thumb, raw, status, prepared"
+
+
+def recipe_get(recipe_id: str) -> dict | None:
+    with closing(_connect()) as conn:
+        row = conn.execute(f"SELECT {_RECIPE_COLUMNS} FROM recipes WHERE id = ?", (recipe_id,)).fetchone()
+    return _recipe(row) if row else None
+
+
+def recipe_next_raw() -> dict | None:
+    """The next recipe waiting to be prepared: the ones people here are likelier to cook first."""
+    with closing(_connect()) as conn:
+        row = conn.execute(f"SELECT {_RECIPE_COLUMNS} FROM recipes WHERE status = 'raw' ORDER BY prio, tries, id LIMIT 1").fetchone()
+    return _recipe(row) if row else None
+
+
+def recipe_set_prepared(recipe_id: str, prepared: dict | None, version: int) -> None:
+    """Ready to show (with its Spanish text and its foods), or set aside when its calories cannot be worked out."""
+    with closing(_connect()) as conn, conn:
+        conn.execute("UPDATE recipes SET status = ?, prepared = ?, prep_v = ?, updated_at = ? WHERE id = ?",
+                     ("ready" if prepared else "skipped", json.dumps(prepared, ensure_ascii=False) if prepared else None,
+                      version, _now(), recipe_id))
+
+
+def recipe_failed(recipe_id: str, max_tries: int = 3) -> None:
+    """Something outside the recipe failed (the model, the catalog): try again later, a few times."""
+    with closing(_connect()) as conn, conn:
+        conn.execute("UPDATE recipes SET tries = tries + 1, updated_at = ? WHERE id = ?", (_now(), recipe_id))
+        conn.execute("UPDATE recipes SET status = 'failed' WHERE id = ? AND tries >= ?", (recipe_id, max_tries))
+
+
+def recipes_requeue(version: int) -> None:
+    """Prepare again what an older version of the rules prepared, and give another chance to what failed for outside reasons."""
+    with closing(_connect()) as conn, conn:
+        conn.execute("UPDATE recipes SET status = 'raw', tries = 0 WHERE status = 'failed'"
+                     " OR (status IN ('ready', 'skipped') AND prep_v != ?)", (version,))
+
+
+def recipes_ready() -> list[dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute(f"SELECT {_RECIPE_COLUMNS} FROM recipes WHERE status = 'ready'").fetchall()
+    return [_recipe(row) for row in rows]
+
+
+def recipes_counts() -> dict[str, int]:
+    with closing(_connect()) as conn:
+        counts = dict(conn.execute("SELECT status, COUNT(*) FROM recipes GROUP BY status").fetchall())
+    return {"total": sum(counts.values()), "ready": counts.get("ready", 0), "waiting": counts.get("raw", 0),
+            "skipped": counts.get("skipped", 0) + counts.get("failed", 0)}
+
+
+def recipe_save(user_id: int, recipe_id: str, saved: bool) -> None:
+    with closing(_connect()) as conn, conn:
+        if saved:
+            conn.execute("INSERT OR IGNORE INTO recipe_saves (user_id, recipe_id, created_at) VALUES (?, ?, ?)", (user_id, recipe_id, _now()))
+        else:
+            conn.execute("DELETE FROM recipe_saves WHERE user_id = ? AND recipe_id = ?", (user_id, recipe_id))
+
+
+def recipes_saved(user_id: int) -> list[str]:
+    """This person's saved recipes, the latest first."""
+    with closing(_connect()) as conn:
+        return [row[0] for row in conn.execute("SELECT recipe_id FROM recipe_saves WHERE user_id = ? ORDER BY created_at DESC, rowid DESC",
+                                               (user_id,))]

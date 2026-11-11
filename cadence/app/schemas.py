@@ -521,3 +521,76 @@ class IdeasResponse(BaseModel):
     protein_left: int
     ideas: list[IdeaOut]
     done: bool = False  # the day's goal is already reached: nothing to complete
+
+
+class RecipeCard(BaseModel):
+    id: str
+    name: str
+    category: str | None = None  # in Spanish, as shown
+    area: str | None = None  # the country it comes from, in Spanish
+    photo: str  # path of the dish photo (add ?size=s|m|l)
+    servings: int  # how many the recipe as written serves
+    minutes: int | None = None
+    # Per serving, from the food catalog (never from the model).
+    kcal: float
+    protein_g: float
+    carbs_g: float
+    fat_g: float
+    portions: float  # how many servings land closest to what this meal should bring for THIS person today
+    fits: bool  # that portion fits what is left of their day
+    saved: bool = False
+
+
+class RecipeCategory(BaseModel):
+    key: str
+    label: str
+    count: int
+
+
+class RecipesResponse(BaseModel):
+    meal: str
+    kcal_left: int | None = None  # None when today's diary could not be read
+    protein_left: int | None = None
+    done: bool = False  # the day's goal is already reached
+    total: int  # recipes matching (the list is one page of them)
+    catalog: dict[str, int]  # {total, ready, waiting, skipped}: the catalog is prepared little by little
+    categories: list[RecipeCategory]
+    recipes: list[RecipeCard]
+
+
+class RecipeIngredient(BaseModel):
+    name: str
+    measure: str  # for the whole recipe, as the recipe says it
+    photo: str | None = None
+
+
+class RecipeItem(FavoriteItem):  # grams are per serving
+    label: str  # the ingredient as the recipe calls it, in Spanish (`name` is the catalog food it is logged as)
+    photo: str | None = None  # the ingredient's own picture
+
+
+class RecipeDetail(BaseModel):
+    id: str
+    name: str
+    original_name: str
+    category: str | None = None
+    area: str | None = None
+    photo: str
+    servings: int
+    minutes: int | None = None
+    kcal: float
+    protein_g: float
+    carbs_g: float
+    fat_g: float
+    ingredients: list[RecipeIngredient]
+    items: list[RecipeItem]  # what one serving logs: foods of the catalog with their grams
+    missing: list[str]  # ingredients that are not in the catalog and so are not counted
+    steps: list[str]
+    source: str | None = None
+    youtube: str | None = None
+    credit: str
+    saved: bool = False
+
+
+class RecipeSaveIn(BaseModel):
+    saved: bool

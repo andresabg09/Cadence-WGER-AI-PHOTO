@@ -3,6 +3,7 @@ import tempfile
 
 os.environ.setdefault("GEMINI_API_KEY", "x")
 os.environ.setdefault("WGER_API_TOKEN", "x")
+os.environ.setdefault("RECIPES_SYNC", "false")  # no background thread calling TheMealDB during tests
 
 import pytest
 

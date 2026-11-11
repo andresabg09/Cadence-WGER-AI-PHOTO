@@ -13,7 +13,10 @@ Este archivo es el contexto que Claude Code lee al iniciar un chat nuevo: lo hec
 - **Red social:** idea, no implementar hasta afinarla con Andres (ver la seccion de ideas).
 - **Icono de la app (PWA):** Andres no ha elegido; no cambiarlo.
 - **Bloques 6 y 7 pospuestos** (rebranding wger -> cadence, deploy automatico, terminos/privacidad reales, correo para recuperar clave, respaldo del volumen `cadence-data`, AGPL).
-- **Fotos para "Ideas de comidas" (comunidad):** sin decidir.
+- **Recetas reales con fotos (Bloque 16): HECHO el 11 nov, SIN VERIFICAR en produccion.** Falta que Andres lo vea en el servidor: tras desplegar,
+  el recetario se descarga solo y se va preparando (~790 recetas, unas 4-5 horas, una llamada a Gemini por receta, una sola vez); revisar
+  `/api/diagnostics?deep=1` (3 lineas "Recetario"). Decisiones abiertas: comprar la clave de apoyo de TheMealDB (pago unico) antes de publicar
+  en una tienda; revisar derechos de las fotos antes de vender (Bloque 7); tablero del canvas sin hacer.
 - **Sin verificar en la realidad:** Gemini real en entrevista / voz / ideas / titulos; push en telefono; iPhone/Safari; subir foto real y cajas `box_2d`; pasar `/api/diagnostics?deep=1` tras cada despliegue grande.
 - **Canvas de diseno:** faltan tableros de Tablet/Escritorio de Objetivos y Bienvenida, del historial de chats y del panel del administrador (los disenos nuevos se prueban primero en la pagina "Pruebas").
 - **Animaciones (28 oct): HECHAS y aprobadas por Andres** (disenadas en la pagina "Pruebas" del canvas, tableros `Prueba-Entrada` y `Prueba-Orbe`). Ver la seccion "Animaciones" mas abajo. Sin probar en un telefono real.
@@ -484,6 +487,46 @@ fotos de stock, tienda de monedas con dinero.
 - **Aviso de calorias de mas (27 oct 2026).** El anillo del diario ya no se queda en 0 al pasarse de la meta: muestra `+N` / "KCAL DE MAS" en ambar (`renderRing`, index.html).
 - **Panel del administrador: ver a las personas (27 oct 2026, decision de Andres).** `GET /api/admin/overview` ahora trae por persona: primer uso listo, novedades/revision pendientes, ultima entrada, cuantos alimentos y la fecha del ultimo, fotos, pesos, entrenos (`store.admin_stats`: SOLO numeros). `GET /api/admin/users/{id}/day?date=` abre el dia de esa persona en SOLO LECTURA (comidas, kcal, agua, entrenos, peso): NUNCA chats, fotos ni notas. Cada vez queda anotado en `admin_views`. Todas las personas ven en Ajustes -> Cuenta el aviso de que el administrador puede ver su actividad (`.privacy-note`): MANTENERLO. Para vender/alquilar hay que ponerlo tambien en los terminos y privacidad (Bloque 7). Pruebas: `tests/test_admin_view.py`. Ver las FOTOS de otros: NO hecho (decision pendiente de Andres).
   **"Ver como" (28 oct 2026, decision de Andres):** en Ajustes -> Invitaciones -> Personas, tocar el nombre o "Ver como X" abre `viewas.html?u=<id>`: una pantalla de SOLO LECTURA con banda "Estas viendo su cuenta" y pestanas Diario (aro, macros, agua, comidas, entrenos, flechas de dia), Progreso (racha, 4 semanas, peso), Su plan (perfil y metas) y Avisos (problemas detectados por `_attention` en main.py + uso de IA de la semana + actividad + tus accesos). NO es suplantar: no inicia sesion como la persona, la sesion sigue siendo la del admin y la pagina no hace ningun POST/PUT/DELETE. Endpoint `GET /api/admin/users/{id}/view` (require_admin, anota `admin_views` con `view`); el diario sale de `/api/admin/users/{id}/day`. Sin chats, fotos ni notas. `/api/admin/overview` trae `ai_today` por persona (`store.usage_on`, `usage_recent`). Pruebas en `tests/test_admin_view.py`.
+- **Bloque 16 - Recetas reales con fotos reales (HECHO, 11 nov 2026; pedido de Andres: "que las recetas y las fotos sean reales").**
+  INVESTIGACION (comprobada contra las fuentes, no de memoria): (a) wger NO tiene recetas (solo alimentos, comidas y planes) y sus fotos de
+  alimentos son fotos de EMPAQUE de Open Food Facts que solo se bajan con celery (apagado aqui): no sirve. (b) Spoonacular: descartado, sus
+  terminos prohiben guardar nada mas de 1 hora (solo id, titulo y URL de la imagen), es de pago para uso real y solo en ingles. (c) Edamam y
+  FatSecret: de pago / con limites de guardado; no se probaron. (d) MyPlate (USDA) y Wikilibros: no se pudieron leer desde el entorno de
+  trabajo (502 / 429); quedan como alternativa SIN verificar. (e) ELEGIDO: **TheMealDB** (https://www.themealdb.com): 791 recetas, TODAS con
+  foto del plato, y 992 ingredientes con foto; sus terminos dicen "You can scrape, copy and modify any content returned from the API, as long
+  as you use the official end points" y piden nombrarlos como fuente. La clave "1" es de desarrollo: "You cannot publish apps to an appstore
+  unless you are a paid subscriber" (pago unico de por vida -> `MEALDB_API_KEY`). RIESGO que Andres debe conocer: el campo
+  `strCreativeCommonsConfirmed` viene vacio en las 791 y 278 recetas citan a bbcgoodfood.com: para uso personal no hay problema; ANTES DE
+  VENDER O ALQUILAR hay que revisar los derechos de textos y fotos (Bloque 7). Limite real: es un recetario en INGLES y con mucha cocina
+  britanica; lo latino existe (Espana 48, Colombia 13, Brasil 11, Argentina 10, Venezuela 10, Chile 9, Uruguay 9, Costa Rica 8, Cuba 6,
+  Mexico 6) y se prepara primero (`recipes.priority`).
+  COMO FUNCIONA (`app/recipes.py`, sin pasos en el servidor): un hilo (`start_worker`, apagable con `RECIPES_SYNC=false`) (1) lee todo el
+  catalogo por la API oficial una vez por semana (`sync_catalog`, 36 peticiones) y lo guarda en la tabla `recipes` (estado `raw`); (2) prepara
+  UNA receta cada `RECIPES_PREP_SECONDS` (20 s): Gemini (`vision.prepare_recipe`) la pasa al espanol, da pasos, porciones y los GRAMOS de cada
+  ingrediente (NUNCA calorias; el texto de la receta va como dato, no como instruccion) y cada ingrediente se busca en el catalogo de wger
+  TAL COMO ENTRA A LA OLLA (`find_food`: se excluyen los basicos "cocidos" salvo que la receta diga cocido; 200 g de arroz crudo no son 200 g
+  de arroz cocido). Un peso escrito en la receta ("200g", "1 lb") manda sobre el estimado de la IA (`explicit_grams`). Las calorias por porcion
+  = valor del catalogo x gramos. La receta se APARTA (`skipped`, no se muestra) si menos del 70 % de su peso esta en el catalogo, si quedan menos
+  de 2 alimentos o si salen menos de 60 o mas de 1.500 kcal por porcion (porciones o datos mal). Si falla Gemini o wger se reintenta (3 veces,
+  luego `failed`, y se vuelve a intentar al reiniciar). `PREP_VERSION`: subirlo cuando cambien las reglas = todo se prepara de nuevo solo.
+  (3) Las fotos se piden a TheMealDB la primera vez y se guardan en el volumen (`/data/recipe-photos`); la direccion de la foto se valida al
+  guardar la receta (solo su sitio) y la de ingrediente se arma con una clave validada: el cliente nunca manda una URL.
+  POR PERSONA: `GET /api/recipes?meal=&q=&category=&saved=&offset=` ordena las recetas de esa comida por cercania a lo que ESA persona debe
+  comer ahi (`target_kcal` = la parte de su meta para esa comida, 25/35/10/30 %, sin pasar de lo que le queda hoy) y sugiere la porcion en
+  medios entre 0,5 y 2 (`portion_for`); proteina desempata y el orden rota cada dia. `fits` = "Encaja hoy". Buscar (`q`) mira todas las comidas,
+  nombres en espanol y en ingles e ingredientes. `GET /api/recipes/{id}` (ingredientes con foto, pasos, alimentos que se registran por porcion,
+  lo que no se pudo contar), `PUT /api/recipes/{id}/save` (guardadas POR PERSONA, tabla `recipe_saves`), `GET /api/recipes/{id}/photo?size=s|m|l`,
+  `GET /api/recipe-ingredient/{clave}`. Todo exige sesion. Registrar = `POST /api/confirm` de siempre con los alimentos x porciones (decimas de
+  gramo para que el diario sume lo mismo que mostraba la receta) y luego `POST /api/entry-media` con la foto de la receta como "plato" y la
+  foto de cada ingrediente como recorte: en el diario sale como un plato con su foto y se puede borrar entero (`plate_id` empieza por `recipe-`).
+  PANTALLA: `ideas.html` ahora es "Recetas" (misma ruta y mismo item de la barra): buscador, filtros (Guardadas + tipos), tarjetas con foto,
+  hoja con foto grande, porcion (+/-), macros, "te quedarian X kcal", comida, Registrar, ingredientes con foto, preparacion, receta original y
+  credito a TheMealDB (MANTENER el credito: lo piden sus terminos). Las "ideas" de la IA del Bloque 12 quedan SOLO como respaldo mientras no
+  haya ninguna receta lista (primeras horas o fuente caida). Iconos nuevos: `heart:fill`, `minus`. `/api/diagnostics?deep=1` revisa la fuente,
+  el recetario y que Gemini prepare una receta de prueba. Pruebas: `tests/test_recipes.py` (11) + Playwright con fotos reales.
+  SIN VERIFICAR: Gemini real preparando recetas (calidad de la traduccion y de los gramos) y el emparejamiento contra el catalogo REAL de wger
+  (cuantas recetas quedan apartadas): mirar el conteo en el diagnostico tras el primer dia. NO HECHO: recetas propias de la persona, fotos en
+  la busqueda de alimentos, tablero del canvas.
 - **Idea futura: red social dentro de cadence (27 oct 2026, NO implementar; falta afinarla con Andres).** Que las personas se vean entre si (historias, fotos, como van). Preguntas abiertas: quien ve a quien (amigos por invitacion o todos), que se comparte (solo lo que la persona publique, nunca el diario por defecto), moderacion/reportar, privacidad y terminos (Bloque 7 antes de esto), y que no premie comer de menos.
 - **El chat ve tu diario (25 oct 2026).** `person_context` (coach.py) ahora incluye `main.diary_snapshot(user)`: lo comido HOY por comida (kcal/macros contra la meta, lo que queda), kcal de los 6 dias anteriores, agua, entrenos de hoy y pesos de 30 dias. Es de SOLO LECTURA (no usa `/api/today`, que registra premios) y si falla se lo dice al modelo para que no invente. Antes el asistente solo recibia perfil y meta y no sabia cuantas calorias llevaba la persona: error mio. Prueba: `test_the_assistant_sees_what_you_ate_today_and_only_yours`.
 - **Infra (25 oct 2026): consumo del servidor.** `config/prod.env` tenia encendidas las tareas SEMANALES de wger (sincronizar ejercicios,

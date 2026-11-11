@@ -1032,6 +1032,64 @@ html { -webkit-text-size-adjust: 100%; }
 .id-thinking { display: flex; align-items: center; gap: 12px; padding: 30px 6px; font-size: 13px; color: var(--ink-soft); }
 .id-thinking .spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(127,127,140,.3); border-top-color: var(--accent-from); animation: id-spin .8s linear infinite; }
 @keyframes id-spin { to { transform: rotate(360deg); } }
+
+/* ---- Recipes: real ones, each with its photo (ideas.html) ---- */
+@media (min-width: 900px) { .progress-grid.rc-layout { grid-template-columns: minmax(300px, 0.8fr) 1.6fr; } }
+.rc-search { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--card-border); background: var(--bg); color: var(--ink-soft); font-size: 17px; }
+.rc-search input { flex: 1; min-width: 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: 16px; outline: none; -webkit-appearance: none; appearance: none; }
+.rc-search:focus-within { border-color: rgba(45,212,255,0.55); }
+.rc-filters { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0; margin-top: 12px; scrollbar-width: none; }
+.rc-filters::-webkit-scrollbar { display: none; }
+.rc-filters .chip-soft { flex-shrink: 0; min-height: 36px; padding: 0 13px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; font-family: inherit; }
+.rc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; margin-top: 14px; }
+@media (min-width: 600px) { .rc-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1500px) { .rc-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.rc-skel { aspect-ratio: 1 / 1.3; }
+.rc-card { display: flex; flex-direction: column; gap: 5px; min-width: 0; cursor: pointer; outline: none; }
+.rc-card:focus-visible .rc-pic { box-shadow: 0 0 0 2px var(--accent-to); }
+.rc-pic { position: relative; display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: 18px; overflow: hidden; margin-bottom: 3px; }
+.rc-pic img, .rc-hero > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.rc-initial { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255,255,255,.9); font: 800 34px 'Space Grotesk', sans-serif; }
+.rc-fit { position: absolute; left: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 4px; font-style: normal; font-size: 10px; font-weight: 800; padding: 4px 8px; border-radius: 100px; background: rgba(10,10,15,.74); color: #7CF0B2; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.rc-heart { position: absolute; right: 8px; top: 8px; width: 36px; height: 36px; border-radius: 50%; border: 0; display: grid; place-items: center; font-size: 18px; cursor: pointer; background: rgba(10,10,15,.58); color: #fff; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.rc-heart.on { color: #FF6B8B; }
+.rc-name { font-size: 13.5px; font-weight: 700; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rc-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 11.5px; color: var(--ink-soft); font-weight: 600; }
+.rc-meta b { font-size: 12.5px; color: var(--ink); }
+.rc-note { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--ink-soft); line-height: 1.5; margin: 14px 0 0; }
+.rc-note .spin { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; border: 2px solid rgba(127,127,140,.3); border-top-color: var(--accent-from); animation: id-spin .8s linear infinite; }
+.rc-sheet { padding-top: 0; }
+.rc-hero { position: relative; margin: 0 -20px 14px; height: min(64vw, 280px); overflow: hidden; border-radius: 26px 26px 0 0; }
+.rc-hero .rc-close { position: absolute; left: 12px; top: 12px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(10,10,15,.58); color: #fff; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.rc-hero .rc-heart { right: 12px; top: 12px; width: 40px; height: 40px; }
+.rc-stepper { display: flex; gap: 8px; flex-shrink: 0; }
+.rc-stepper button { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; border: 1px solid var(--card-border); background: var(--card); color: var(--ink); }
+.rc-stepper button:disabled { opacity: .35; cursor: default; }
+.rc-macros { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
+.rc-macros div { display: flex; flex-direction: column; gap: 2px; }
+.rc-macros b { font-size: 16px; }
+.rc-macros span { font-size: 10.5px; color: var(--ink-soft); font-weight: 600; }
+.rc-after { font-size: 12px; color: var(--ink-soft); line-height: 1.5; margin-top: 12px; }
+.rc-after.over { color: #FFB454; }
+.rc-ings { margin-top: 6px; }
+.rc-ing { display: flex; align-items: center; gap: 12px; padding: 7px 0; }
+.rc-ing + .rc-ing { border-top: 1px solid var(--card-border); }
+.rc-ing-pic { width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; background: rgba(127,127,140,.12); display: grid; place-items: center; overflow: hidden; }
+.rc-ing-pic img { width: 100%; height: 100%; object-fit: contain; }
+.rc-ing-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; }
+.rc-ing-measure { font-size: 12px; color: var(--ink-soft); text-align: right; max-width: 45%; }
+.rc-steps { margin: 10px 0 0; padding: 0; list-style: none; counter-reset: paso; display: flex; flex-direction: column; gap: 12px; }
+.rc-steps li { counter-increment: paso; display: flex; gap: 12px; font-size: 13.5px; line-height: 1.55; }
+.rc-steps li::before { content: counter(paso); flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: 700 11px 'Space Mono', monospace; background: color-mix(in srgb, var(--accent-from) 16%, transparent); color: var(--accent-from); }
+.rc-logged summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+.rc-logged summary::-webkit-details-marker { display: none; }
+.rc-logged summary::after { content: '+'; font-size: 16px; font-weight: 600; }
+.rc-logged[open] summary::after { content: '–'; }
+.rc-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; font-size: 13px; font-weight: 600; }
+.rc-item small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-soft); margin-top: 1px; }
+.rc-item b { font-size: 12.5px; flex-shrink: 0; }
+.rc-credit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; font-size: 11px; color: var(--ink-soft); }
+.rc-credit a { text-decoration: none; }
 @media (prefers-reduced-motion: reduce) { .id-thinking .spin { animation-duration: 3s; } }
 
 /* water: surface that sways, a drop that falls into the glass, a pop when it lands, a wave when the goal is met */

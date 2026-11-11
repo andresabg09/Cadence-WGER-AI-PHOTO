@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import accounts, auth, calibration, coach, foodunits, gamify, nutrition, reminders, scoring, store
+from . import accounts, auth, calibration, coach, foodunits, gamify, nutrition, recipes, reminders, scoring, store
 from .config import settings
 from .diagnostics import run_diagnostics
 from .progress import achievements as build_achievements, day_totals, streak_runs
@@ -93,6 +93,13 @@ from .schemas import (
     WorkoutIn,
     WorkoutOut,
     WgerStatus,
+    RecipeCard,
+    RecipeCategory,
+    RecipeDetail,
+    RecipeIngredient,
+    RecipeItem,
+    RecipeSaveIn,
+    RecipesResponse,
 )
 from .vision import GeminiVisionClient
 from .wger_client import WgerClient, WgerError
@@ -107,6 +114,7 @@ app.include_router(coach.router)
 @app.on_event("startup")
 def _start_reminder_scheduler():
     reminders.start_scheduler()
+    recipes.start_worker()
 app.add_middleware(GZipMiddleware, minimum_size=800)  # pages and scripts are ~45 KB of text: send them squeezed
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -1983,6 +1991,27 @@ def _idea_item(wger: WgerClient, user: store.User, component: DetectedComponent)
     return FavoriteItem(ingredient_id=top.id, name=top.name, grams=float(component.estimated_grams or 100), liquid=matched.liquid)
 
 
+def _left_today(wger: WgerClient, user: store.User, goal: scoring.Goal) -> tuple[int, int, list[str]]:
+    """(kcal, grams of protein) this person can still eat today, and the names of what they already ate."""
+    now = local_now()
+    plan_id = plan_for(wger, user, create=False)
+    start = datetime.combine(now.date(), time.min, tzinfo=now.tzinfo)
+    day_entries = [e for e in user_entries(wger, user, plan_id, start, datetime.combine(now.date(), time.max, tzinfo=now.tzinfo))
+                   if entry_date(e) == now.date()]
+    eaten_kcal = eaten_protein = 0.0
+    eaten_names: list[str] = []
+    for entry in day_entries:
+        try:
+            data = ingredient_info(wger, user, entry["ingredient"])
+        except Exception:  # noqa: BLE001
+            continue
+        grams = float(entry["amount"])
+        eaten_kcal += (scoring.number(data.get("energy")) or 0.0) * grams / 100
+        eaten_protein += (scoring.number(data.get("protein")) or 0.0) * grams / 100
+        eaten_names.append(data.get("name", ""))
+    return max(0, round(goal.kcal - eaten_kcal)), max(0, round(goal.protein_g - eaten_protein)), eaten_names
+
+
 @app.get("/api/ideas", response_model=IdeasResponse)
 def ideas(meal: str | None = None, refresh: bool = False, user: store.User = Depends(current_user)):
     """Ideas to complete the day. The model only proposes names and grams: every calorie comes from the catalog."""
@@ -1991,23 +2020,7 @@ def ideas(meal: str | None = None, refresh: bool = False, user: store.User = Dep
     goal = _goal_obj(user)
     wger = get_wger_client()
     try:
-        plan_id = plan_for(wger, user, create=False)
-        start = datetime.combine(now.date(), time.min, tzinfo=now.tzinfo)
-        day_entries = [e for e in user_entries(wger, user, plan_id, start, datetime.combine(now.date(), time.max, tzinfo=now.tzinfo))
-                       if entry_date(e) == now.date()]
-        eaten_kcal = eaten_protein = 0.0
-        eaten_names: list[str] = []
-        for entry in day_entries:
-            try:
-                data = ingredient_info(wger, user, entry["ingredient"])
-            except Exception:  # noqa: BLE001
-                continue
-            grams = float(entry["amount"])
-            eaten_kcal += (scoring.number(data.get("energy")) or 0.0) * grams / 100
-            eaten_protein += (scoring.number(data.get("protein")) or 0.0) * grams / 100
-            eaten_names.append(data.get("name", ""))
-        kcal_left = max(0, round(goal.kcal - eaten_kcal))
-        protein_left = max(0, round(goal.protein_g - eaten_protein))
+        kcal_left, protein_left, eaten_names = _left_today(wger, user, goal)
         if kcal_left < IDEAS_MIN_KCAL:
             return IdeasResponse(meal=meal, kcal_left=kcal_left, protein_left=protein_left, ideas=[], done=True)
 
@@ -2070,3 +2083,110 @@ def ideas(meal: str | None = None, refresh: bool = False, user: store.User = Dep
         raise HTTPException(502, str(exc)) from exc
     finally:
         wger.close()
+
+
+# ------------------------------------------------------------------ recipes: real ones, with real photos, for each person's numbers
+RECIPE_PAGE = 24
+_PHOTO_CACHE = {"Cache-Control": "private, max-age=2592000"}  # a recipe's photo never changes
+
+
+def _recipe_card(item: dict, portion: float, fits: bool, saved: bool) -> RecipeCard:
+    return RecipeCard(id=item["id"], name=item["name"], category=recipes.CATEGORY_ES.get(item["category"] or ""), area=item["area"],
+                      photo=f"api/recipes/{item['id']}/photo", servings=item["servings"], minutes=item["minutes"], kcal=item["kcal"],
+                      protein_g=item["protein"], carbs_g=item["carbs"], fat_g=item["fat"], portions=portion, fits=fits, saved=saved)
+
+
+@app.get("/api/recipes", response_model=RecipesResponse)
+def recipes_list(meal: str | None = None, q: str = "", category: str | None = None, saved: bool = False, offset: int = 0,
+                 user: store.User = Depends(current_user)):
+    """Recipes for this person: the ones for that meal, best fit to what is left of THEIR day first. With `q` it searches the
+    whole catalog (names and ingredients); with `saved`, only the ones they kept."""
+    now = local_now()
+    meal = meal if meal in recipes.MEALS else meal_key_for_entry({"datetime": now.isoformat()})
+    meal = meal if meal in recipes.MEALS else "cena"
+    goal = _goal_obj(user)
+    kcal_left = protein_left = None
+    try:
+        wger = get_wger_client()
+        try:
+            kcal_left, protein_left, _ = _left_today(wger, user, goal)
+        finally:
+            wger.close()
+    except Exception:  # noqa: BLE001 - the recipes are worth showing even when today's diary cannot be read
+        logger.exception("no se pudo leer lo que falta de hoy")
+    done = kcal_left is not None and kcal_left < IDEAS_MIN_KCAL
+
+    items = recipes.ready()
+    mine = store.recipes_saved(user.id)
+    if saved:
+        items = [item for item in items if item["id"] in mine]
+    elif q.strip():
+        items = recipes.search(items, q)
+    else:
+        items = [item for item in items if meal in item["slots"]]
+    counts: dict[str, int] = {}
+    for item in items:
+        counts[item["category"] or ""] = counts.get(item["category"] or "", 0) + 1
+    if category:
+        items = [item for item in items if item["category"] == category]
+
+    target = recipes.target_kcal(goal.kcal, None if done else kcal_left, meal)
+    ranked = recipes.rank(items, target, kcal_left, now.date().isoformat())
+    if saved:
+        ranked.sort(key=lambda row: mine.index(row[0]["id"]))  # the latest kept first
+    start = max(0, offset)
+    return RecipesResponse(
+        meal=meal, kcal_left=kcal_left, protein_left=protein_left, done=done, total=len(ranked), catalog=store.recipes_counts(),
+        categories=sorted((RecipeCategory(key=key, label=recipes.CATEGORY_ES[key], count=n) for key, n in counts.items()
+                           if key in recipes.CATEGORY_ES), key=lambda c: -c.count),
+        recipes=[_recipe_card(item, portion, fits, item["id"] in mine) for item, portion, fits in ranked[start:start + RECIPE_PAGE]])
+
+
+def _ready_recipe(recipe_id: str) -> dict:
+    row = store.recipe_get(recipe_id) if recipe_id.isdigit() else None
+    if row is None or row["status"] != "ready":
+        raise HTTPException(404, "Esa receta no existe")
+    return row
+
+
+@app.get("/api/recipes/{recipe_id}", response_model=RecipeDetail)
+def recipe_detail(recipe_id: str, user: store.User = Depends(current_user)):
+    """A recipe to cook and to log: ingredients with their photos, steps, and the catalog foods one serving is logged as."""
+    row = _ready_recipe(recipe_id)
+    prepared = row["prepared"]
+    return RecipeDetail(
+        id=row["id"], name=prepared["name"], original_name=row["name"], category=recipes.CATEGORY_ES.get(row["category"] or ""),
+        area=recipes.AREA_ES.get((row["area"] or "").lower()), photo=f"api/recipes/{row['id']}/photo", servings=prepared["servings"],
+        minutes=prepared.get("minutes"), kcal=prepared["kcal"], protein_g=prepared["protein"], carbs_g=prepared["carbs"],
+        fat_g=prepared["fat"],
+        ingredients=[RecipeIngredient(name=i["name"], measure=i["measure"], photo=f"api/recipe-ingredient/{i['img']}" if i.get("img") else None)
+                     for i in prepared["ingredients"]],
+        items=[RecipeItem(ingredient_id=i["ingredient_id"], name=i["name"], label=i["label"], grams=i["grams"], liquid=bool(i.get("liquid")),
+                          photo=f"api/recipe-ingredient/{i['img']}" if i.get("img") else None)
+               for i in prepared["items"]],
+        missing=prepared.get("missing") or [], steps=prepared["steps"], source=row["raw"].get("source"), youtube=row["raw"].get("youtube"),
+        credit=recipes.CREDIT, saved=row["id"] in store.recipes_saved(user.id))
+
+
+@app.put("/api/recipes/{recipe_id}/save")
+def recipe_save(recipe_id: str, body: RecipeSaveIn, user: store.User = Depends(current_user)):
+    """Keep a recipe in (or take it out of) this person's own list."""
+    store.recipe_save(user.id, _ready_recipe(recipe_id)["id"], body.saved)
+    return {"saved": body.saved}
+
+
+@app.get("/api/recipes/{recipe_id}/photo")
+def recipe_photo(recipe_id: str, size: str = "m", _: store.User = Depends(current_user)):
+    row = store.recipe_get(recipe_id) if recipe_id.isdigit() else None
+    found = recipes.recipe_photo(row, size) if row else None
+    if found is None:
+        raise HTTPException(404, "Foto no disponible")
+    return Response(found[0], media_type=found[1], headers=_PHOTO_CACHE)
+
+
+@app.get("/api/recipe-ingredient/{key}")
+def recipe_ingredient_photo(key: str, _: store.User = Depends(current_user)):
+    found = recipes.ingredient_photo(key)
+    if found is None:
+        raise HTTPException(404, "Foto no disponible")
+    return Response(found[0], media_type=found[1], headers=_PHOTO_CACHE)

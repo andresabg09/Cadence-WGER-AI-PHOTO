@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     analyze_daily_limit: int = 40  # photo analyses per person per day (the administrator is exempt); 0 = no limit
     chat_daily_limit: int = 60  # messages to the interview and the assistant per person per day (administrator exempt); 0 = no limit
 
+    # Recipes: real recipes and photos from TheMealDB, kept and prepared (Spanish, grams, foods of the catalog) on this server.
+    # "1" is the free development key; a public release needs their one-off supporter key.
+    mealdb_api_key: str = "1"
+    recipes_sync: bool = True  # False = never call TheMealDB nor prepare recipes in the background
+    recipes_prep_seconds: int = 20  # pause between recipes while the catalog is being prepared (one Gemini call each)
+
     # Behavior
     user_name: str = "Andrés"  # shown in the dashboard greeting
     # IANA zone used to decide "today" and which meal slot an entry falls in.

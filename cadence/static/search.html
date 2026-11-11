@@ -93,6 +93,7 @@
 <script src="static/js/icons.js"></script>
 <script src="static/js/api.js"></script>
 <script src="static/js/units.js"></script>
+<script src="static/js/food-photo.js"></script>
 <script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/shell.js"></script>
@@ -159,7 +160,7 @@ function foodRow(food, subtitle) {
   const row = document.createElement('div');
   row.className = 'food-row';
   row.innerHTML = `
-    <div class="thumb"></div>
+    <div class="thumb" data-food="${escapeHtml(food.name)}"></div>
     <div style="flex:1;min-width:0;">
       <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(food.name)}</div>
       <div style="font-size:11px;color:var(--ink-soft);margin-top:1px;">${escapeHtml(subtitle)}</div>

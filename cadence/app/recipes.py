@@ -168,6 +168,10 @@ def sync_catalog(minimum: int = 50) -> int:
             clock.sleep(0.25)  # a guest on a free service: no hurry
     if len(rows) < minimum:
         raise RuntimeError(f"TheMealDB devolvio solo {len(rows)} recetas")  # a broken answer is not the catalog
+    try:
+        sync_ingredient_names()
+    except Exception:  # noqa: BLE001 - food pictures are a bonus: the recipes still count
+        logger.exception("no se pudo leer la lista de ingredientes con foto")
     added = store.recipes_upsert(list(rows.values()))
     store.set_kv("recipes_synced_at", datetime.now(timezone.utc).isoformat())
     _ready.update(at=0.0)
@@ -360,6 +364,11 @@ def tick() -> float:
             if not store.recipes_counts()["total"]:
                 return 900
             store.set_kv("recipes_synced_at", (datetime.now(timezone.utc) - SYNC_EVERY + timedelta(hours=6)).isoformat())
+    if not store.get_kv("mealdb_ingredients"):
+        try:
+            sync_ingredient_names()  # installs that already had the recipes: the pictures of foods come once
+        except Exception:  # noqa: BLE001
+            logger.exception("no se pudo leer la lista de ingredientes con foto")
     if not settings.wger_api_token:
         return 600
     recipe = store.recipe_next_raw()
@@ -496,3 +505,31 @@ def ingredient_photo(key: str) -> tuple[bytes, str] | None:
     if not _KEY.fullmatch(key):
         return None
     return _cached(f"ingredient:{key}", f"{HOST}/images/ingredients/{quote(key, safe='')}-small.png")
+
+
+# ------------------------------------------------------------------ pictures of foods (diary, search, Confirmar)
+
+def sync_ingredient_names() -> int:
+    """The names of the ~990 ingredients TheMealDB has a clean picture of (read once a week with the recipes)."""
+    import json
+
+    with httpx.Client(timeout=25, headers={"User-Agent": "cadence"}) as http:
+        response = http.get(f"{HOST}/api/json/v1/{quote(settings.mealdb_api_key, safe='')}/list.php", params={"i": "list"})
+        response.raise_for_status()
+        meals = response.json().get("meals") or []
+    names = sorted({" ".join(str(m.get("strIngredient") or "").split()) for m in meals if isinstance(m, dict)} - {""})
+    if len(names) < 100:
+        raise RuntimeError(f"TheMealDB devolvio solo {len(names)} ingredientes")
+    store.set_kv("mealdb_ingredients", json.dumps(names))
+    return len(names)
+
+
+def ingredient_names() -> list[str]:
+    import json
+
+    raw = store.get_kv("mealdb_ingredients")
+    try:
+        names = json.loads(raw) if raw else []
+    except ValueError:
+        names = []
+    return [n for n in names if isinstance(n, str) and _KEY.fullmatch(image_key(n))]

@@ -26,6 +26,8 @@ const SHELL_FILES = [
   'static/js/splash.js',
   'static/js/api.js',
   'static/js/units.js',
+  'static/js/portions.js',
+  'static/js/food-photo.js',
   'static/js/units-ui.js',
   'static/js/recorder.js',
   'static/js/dictation.js',

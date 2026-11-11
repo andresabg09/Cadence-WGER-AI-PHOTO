@@ -2184,6 +2184,12 @@ def recipe_photo(recipe_id: str, size: str = "m", _: store.User = Depends(curren
     return Response(found[0], media_type=found[1], headers=_PHOTO_CACHE)
 
 
+@app.get("/api/food-photos")
+def food_photos(_: store.User = Depends(current_user)):
+    """The foods that have a real picture (by English name): the app matches them to what is on screen, never inventing one."""
+    return {"names": recipes.ingredient_names()}
+
+
 @app.get("/api/recipe-ingredient/{key}")
 def recipe_ingredient_photo(key: str, _: store.User = Depends(current_user)):
     found = recipes.ingredient_photo(key)

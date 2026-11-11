@@ -334,3 +334,24 @@ def test_deep_diagnostics_check_the_recipe_book(wger, monkeypatch):
     checks.clear()
     diagnostics._recipe_checks(checks)
     assert checks[1]["ok"] and checks[1]["detail"].startswith("1 recetas listas")
+
+
+def test_the_list_of_foods_with_a_picture_is_read_once_and_served_only_with_a_session(wger, monkeypatch):
+    from tests.test_accounts import new_client
+
+    class Http:
+        def __init__(self): self.calls = 0
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def get(self, url, params=None):
+            self.calls += 1
+            names = [{"strIngredient": n} for n in ["Chicken Breast", "Rice", "Olive Oil", "Hispi (sweetheart) Cabbage", ""] + [f"Food {i}" for i in range(120)]]
+            return type("R", (), {"raise_for_status": lambda self: None, "json": lambda self: {"meals": names}})()
+
+    http = Http()
+    monkeypatch.setattr(recipes.httpx, "Client", lambda **_: http)
+    assert recipes.sync_ingredient_names() == 124
+    assert new_client().get("/api/food-photos").status_code == 401
+    admin, _ = two_people()
+    names = admin.get("/api/food-photos").json()["names"]
+    assert {"Chicken Breast", "Rice", "Olive Oil"} <= set(names) and "Hispi (sweetheart) Cabbage" not in names  # no picture address for that one

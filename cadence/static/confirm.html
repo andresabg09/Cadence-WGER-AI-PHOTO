@@ -93,6 +93,7 @@
 <script src="static/js/icons.js"></script>
 <script src="static/js/api.js"></script>
 <script src="static/js/units.js"></script>
+<script src="static/js/food-photo.js"></script>
 <script src="static/js/portions.js"></script>
 <script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
@@ -250,7 +251,7 @@ function thumbHtml(item, idx) {
   const color = zoneColor(idx);
   const body = item.photo != null && photos[item.photo]
     ? `<div class="thumb-photo"${item.crop ? ` style="background-image:url('${item.crop}')"` : ''}></div>`
-    : '<div class="thumb-empty"></div>';
+    : `<div class="thumb-empty" data-food="${escapeHtml(((item.candidates.find((c) => c.id === item.selectedId) || {}).name) || item.detected_name)}"></div>`;
   const num = item.photo != null ? `<span class="tnum">${idx + 1}</span>` : '';
   return `<div class="thumb-wrap" data-idx="${idx}" style="--c:${color};">${body}${num}</div>`;
 }

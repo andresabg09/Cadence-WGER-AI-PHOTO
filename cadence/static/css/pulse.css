@@ -1451,3 +1451,7 @@ body.viewas { padding-top: 0; }
 .pm-grams { margin-left: auto; font-size: 11px; color: var(--ink-soft); font-weight: 600; }
 .pm-tip { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 14px; font-size: 12.5px; line-height: 1.4; color: #fff; background: rgba(10,10,15,0.62); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 .pm-tip i { font-size: 20px; flex-shrink: 0; }
+
+/* A real picture of the food (js/food-photo.js): the ingredient on a soft tile, never stretched */
+.food-pic { background-color: rgba(127,127,140,0.14) !important; background-size: 82% !important; background-position: center !important;
+  background-repeat: no-repeat !important; opacity: 1 !important; }

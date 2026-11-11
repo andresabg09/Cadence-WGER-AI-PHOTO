@@ -52,7 +52,6 @@
         <div class="rc-filters" id="filters"></div>
         <div id="recipes"></div>
       </div>
-      <div class="card" id="ideasCard" style="display:none;"></div>
       <div class="rule-note"><span><i data-ico="check"></i></span><span>Recetas y fotos reales de TheMealDB. Las calorías de cada porción salen siempre de la base de alimentos, nunca de la IA.</span></div>
     </div>
   </div>
@@ -77,7 +76,6 @@ let view = { q: '', category: null, saved: false };
 let shown = [];      // the recipe cards on screen
 let total = 0;
 let loadSeq = 0;
-let ideasSeq = 0;
 
 $('recipes').innerHTML = `<div class="rc-grid">${'<div class="skeleton rc-skel"></div>'.repeat(4)}</div>`;
 
@@ -221,10 +219,6 @@ async function load(offset = 0) {
     if (seq !== loadSeq) return;
     if (!offset) { paintLeft(d); paintFilters(d); }
     paintRecipes(d, offset > 0);
-    // Nothing prepared yet (first hours after installing it, or the source is down): the ideas of before keep the page useful.
-    const fallback = d.catalog.ready === 0 && !d.done;
-    $('ideasCard').style.display = fallback ? '' : 'none';
-    if (fallback && !offset) loadIdeas(false);
   };
   try {
     if (offset || view.q) paint(await apiGet(query(offset)));
@@ -361,22 +355,6 @@ async function logRecipe(detail, portions, target, btn) {
   }
 }
 
-// ---------------------------------------------------------------- the ideas of before (only while no recipe is ready)
-
-function paintIdeas(d) {
-  if (d.done || !d.ideas.length) { $('ideasCard').style.display = 'none'; return; }
-  $('ideasCard').innerHTML = `<div class="card-head"><b>Mientras tanto, ideas rápidas</b><button type="button" class="link-btn" id="again">Otras ideas</button></div>` + d.ideas.map((idea, idx) => {
-    const more = idea.protein_g >= 15 ? `<span class="id-tag good">+${Math.round(idea.protein_g)} g proteína</span>` : '';
-    const tag = idea.tag ? `<span class="id-tag">${esc(idea.tag)}</span>` : '';
-    return `<div class="id-idea">${tile(idea.name, 64)}<div class="id-main"><div class="id-name">${esc(idea.name)}</div>
-      <div class="id-sub">${itemsLine(idea.items)}</div>
-      <div class="id-meta"><span class="mono">${idea.kcal} kcal</span>${tag}${more}</div></div>
-      <button type="button" class="id-add" data-idea="${idx}">Agregar</button></div>`;
-  }).join('');
-  $('again').addEventListener('click', () => loadIdeas(true));
-  $('ideasCard').querySelectorAll('[data-idea]').forEach((b) => b.addEventListener('click', () => { const i = d.ideas[+b.dataset.idea]; add(b, i.items, i.kcal, i.protein_g); }));
-}
-
 async function add(btn, items, kcal, protein) {
   btn.disabled = true;
   try {
@@ -388,15 +366,6 @@ async function add(btn, items, kcal, protein) {
     showToast(`Agregado a ${LABEL[meal] || 'tu día'}`, 'ok');
     load();
   } catch (err) { showToast(err.message); btn.disabled = false; }
-}
-
-async function loadIdeas(refresh) {
-  const seq = ++ideasSeq;
-  $('ideasCard').innerHTML = '<div class="id-thinking"><span class="spin"></span><span>Pensando ideas para ti…</span></div>';
-  try {
-    const d = await apiGet(`api/ideas?meal=${meal}${refresh ? '&refresh=true' : ''}`);
-    if (seq === ideasSeq) paintIdeas(d);
-  } catch { if (seq === ideasSeq) $('ideasCard').style.display = 'none'; }
 }
 
 (async function start() {

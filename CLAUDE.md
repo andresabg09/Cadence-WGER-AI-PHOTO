@@ -7,6 +7,22 @@ en una sesion de Claude Code, ya tienes el contexto completo.
 ## PENDIENTES Y DECISIONES ABIERTAS (revisar al empezar cada chat; actualizar al terminar)
 
 Este archivo es el contexto que Claude Code lee al iniciar un chat nuevo: lo hecho esta en "Plan por bloques" y las secciones de abajo; lo que FALTA o espera decision de Andres esta aqui.
+- **TRABAJO EN CURSO (11 nov, "go" de Andres; retomar aqui sin preguntar):**
+  1. RECETAS: el recetario de TheMealDB no mostro NADA en produccion y Andres lo rechaza (790 recetas, mucha comida britanica, "no le gusta a
+     nadie"). Pedir/leer `/cadence/api/diagnostics?deep=1` si Andres lo pego. Investigar OTRAS fuentes de recetas REALES con FOTO, de preferencia
+     latinas/espanol y muchas mas de 790 (licencia que permita guardarlas). REGLA NUEVA: NO gastar Gemini en traducir/preparar recetas (es
+     gratuito y se agota): traducir UNA SOLA VEZ fuera de produccion (lo hace Claude en la sesion y se sube como archivo de datos al repo) o
+     elegir una fuente ya en espanol; en el servidor nada de llamadas a Gemini por receta. Las calorias siguen saliendo del catalogo. Si la
+     mejor fuente exige pago o tiene riesgo legal, preguntar a Andres antes.
+  2. Quitar las "ideas rapidas" de la IA de la pantalla Recetas (sin foto no sirven).
+  3. FOTOS EN TODOS LOS ALIMENTOS: que cada alimento del catalogo/busqueda/diario tenga foto real (investigar: fotos de ingredientes de
+     TheMealDB emparejadas por nombre, Open Food Facts para productos con codigo de barras, otras fuentes libres). Sin foto = no inventar.
+  4. COMO MEDIR LA PORCION (para gente que no sabe gramos). Tres modos, la persona elige: (a) medidas de casa (taza, cucharada, unidad,
+     rebanada; tabla fija de gramos por medida y alimento), (b) referencia en la foto (la app sugiere poner la mano, una tarjeta o un tenedor
+     junto al plato para que la IA calcule mejor el tamaño), (c) gramos. Se elige en: la bienvenida/primer uso (`onboarding.html`, tambien en
+     `?mode=update` para quien ya existe), Ajustes, y la primera vez que toma una foto o registra una comida si aun no eligio. Guardar por
+     persona en el servidor (como `users.units`). Confirmar muestra la porcion en el modo elegido; por dentro todo sigue en gramos.
+  Probar (pytest + Playwright), actualizar este archivo y publicar a master como siempre. Andres tiene pocos tokens: respuestas cortas.
 - **Seguridad:** Andres ya roto la clave de Gemini y el token de wger (28 oct). Nunca repetirlas ni ponerlas en el repo.
 - **Bloque 15 (entrenador personal), parte hecha:** historial de chats por persona (nuevo, lista, borrar, titulos por IA), el chat ve el diario de hoy (solo lectura). **FALTA, espera el "go" de Andres:** mandar fotos al chat (reusa el analisis y pasa por Confirmar), y acciones con confirmacion de un toque (agua, mover una comida; nunca borrar ni tocar reglas de salud).
 - **Panel del administrador:** hecho (numeros + "Ver como" en solo lectura `viewas.html` + registro de accesos + uso de IA por persona). Ver FOTOS de otros: no hecho, decision pendiente (recomendado: no sin avisar).

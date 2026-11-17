@@ -71,6 +71,8 @@
 
   <div class="app-content grid-2">
     <div class="col">
+    <!-- Fasting first (17 nov 2026): the plan's ring, start/end and the body stages. Only shown for today. -->
+    <section class="fast-card" id="fastCard" aria-label="Tu ayuno" hidden></section>
     <!-- Hero: ring + macros -->
     <div class="hero-card">
       <div class="blob-wrap"><div class="blob"></div></div>
@@ -169,6 +171,7 @@
 <script src="static/js/bits.js"></script>
 <script src="static/js/meal-detail.js"></script>
 <script src="static/js/workouts.js"></script>
+<script src="static/js/fasting.js"></script>
 <script src="static/js/sfx.js"></script>
 <script src="static/js/theme.js"></script>
 <script src="static/js/shell.js"></script>
@@ -1401,7 +1404,9 @@ async function loadToday() {
     await flushWater().catch(() => {});
     await importLocalWater().catch(() => {});
     // The last diary this device saw shows at once; the fresh one replaces it a moment later.
+    const mealJustSaved = justSaved; // celebrate() clears it while painting
     await apiGetSWR(viewDate ? `api/today?date=${encodeURIComponent(viewDate)}` : 'api/today', paintToday);
+    if (window.cadenceFasting) cadenceFasting.mount(document.getElementById('fastCard'), { today: isViewingToday(), mealJustSaved });
     apiGetSWR('api/challenges', paintRetosDot).catch(() => {}); // the dot on the Retos tab
   } catch (err) {
     if (!navigator.onLine) return; // the offline banner already explains it

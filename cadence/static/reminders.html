@@ -69,6 +69,19 @@
         </div>
         <div class="rm-extra" id="weeklyExtra"><label>Los domingos a las <select id="weeklyTime" class="time-pick"></select></label></div>
       </div>
+      <div class="card">
+        <div class="section-title" style="margin-bottom:6px;">AYUNO</div>
+        <div class="rm-row">
+          <span class="rm-ico"><i data-ico="timer"></i></span>
+          <div class="rm-text"><b>Inicio y fin del ayuno</b><span>A la hora de tu plan y cuando lo cumples</span></div>
+          <label class="switch"><input type="checkbox" id="fastOn" aria-label="Avisos del ayuno"><i></i></label>
+        </div>
+        <div class="rm-row" id="fastHalfRow">
+          <span class="rm-ico"><i data-ico="hourglass-medium"></i></span>
+          <div class="rm-text"><b>A la mitad del ayuno</b><span>Un recordatorio de beber agua</span></div>
+          <label class="switch"><input type="checkbox" id="fastHalf" aria-label="Aviso a la mitad del ayuno"><i></i></label>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -114,6 +127,10 @@ function render() {
   $('weeklyTime').innerHTML = options(prefs.weekly.time);
   $('weeklyExtra').style.display = prefs.weekly.on ? 'flex' : 'none';
   $('weeklyHint').textContent = `Domingos · ${label(prefs.weekly.time)}`;
+  const fast = prefs.fasting || { on: false, half: false };
+  $('fastOn').checked = fast.on;
+  $('fastHalf').checked = fast.half;
+  $('fastHalfRow').style.display = fast.on ? 'flex' : 'none';
   $('mealRows').querySelectorAll('[data-meal]').forEach((el) => el.addEventListener('change', () => { prefs.meals[el.dataset.meal].on = el.checked; changed(el.checked); }));
   $('mealRows').querySelectorAll('[data-meal-time]').forEach((el) => el.addEventListener('change', () => { prefs.meals[el.dataset.mealTime].time = el.value; changed(false); }));
 }
@@ -193,6 +210,8 @@ $('waterFrom').addEventListener('change', () => { prefs.water.from = $('waterFro
 $('waterTo').addEventListener('change', () => { prefs.water.to = $('waterTo').value; changed(false); });
 $('weeklyOn').addEventListener('change', () => { prefs.weekly.on = $('weeklyOn').checked; render(); changed($('weeklyOn').checked); });
 $('weeklyTime').addEventListener('change', () => { prefs.weekly.time = $('weeklyTime').value; changed(false); });
+$('fastOn').addEventListener('change', () => { prefs.fasting = { ...(prefs.fasting || {}), on: $('fastOn').checked }; render(); changed($('fastOn').checked); });
+$('fastHalf').addEventListener('change', () => { prefs.fasting = { ...(prefs.fasting || {}), half: $('fastHalf').checked }; changed(false); });
 
 async function load() {
   const data = await apiGet('api/reminders');

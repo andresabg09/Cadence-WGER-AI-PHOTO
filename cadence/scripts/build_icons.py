@@ -18,6 +18,8 @@ person-simple-walk person-simple-hike person-simple-bike bicycle person-simple-s
 soccer-ball basketball tennis-ball volleyball boxing-glove boat broom plant stairs music-notes music-notes-simple sneaker sneaker-move
 speedometer heartbeat baby-carriage mountains timer grains heart house user trash caret-left users eye shield-check warning warning-circle info
 heart:fill minus
+battery-medium pencil-simple gift gift:duotone hourglass-medium coffee barcode list-checks hand-heart moon-stars bell-ringing calendar-check
+coins confetti egg bread carrot fish cookie pizza avocado orange-slice cheese bowl-steam seal-check tag lightning:fill clock:duotone
 """.split()
 
 root = Path(sys.argv[1]) / "assets"

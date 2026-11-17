@@ -820,10 +820,15 @@ body:has(.plain-page) {
 .lc-sat { position: absolute; display: block; opacity: 0; pointer-events: none; color: var(--ink); text-decoration: none; transform: translate(var(--bx), var(--by)) scale(0.2); transition: transform 220ms cubic-bezier(0.4, 0, 0.6, 1), opacity 120ms ease; -webkit-tap-highlight-color: transparent; }
 .lc-ball { display: flex; width: 100%; height: 100%; border-radius: 50%; align-items: center; justify-content: center; background: color-mix(in srgb, var(--card) 86%, transparent); border: 1px solid var(--card-border); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: 0 14px 30px -12px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08); }
 .lc-label { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; color: #F5F5F7; text-shadow: 0 1px 8px rgba(0,0,0,0.6); }
-.lc-code { width: 56px; height: 56px; left: -92px; top: -78px; --bx: 96px; --by: 82px; }
-.lc-voz { width: 56px; height: 56px; left: 100px; top: -78px; --bx: -96px; --by: 82px; }
-.lc-foto { width: 72px; height: 72px; left: -4px; top: -142px; --bx: 0px; --by: 138px; }
-.lc-code .lc-label, .lc-voz .lc-label { top: 65px; }
+/* Four options on an arc (17 nov 2026): Código · Foto (the main one) · Voz · Rápido, plus the label pill above. */
+.lc-code { width: 56px; height: 56px; left: -113px; top: -63px; --bx: 117px; --by: 67px; }
+.lc-foto { width: 72px; height: 72px; left: -57px; top: -141px; --bx: 53px; --by: 137px; }
+.lc-voz { width: 56px; height: 56px; left: 57px; top: -133px; --bx: -53px; --by: 137px; }
+.lc-quick { width: 56px; height: 56px; left: 121px; top: -63px; --bx: -117px; --by: 67px; }
+.lc-quick .lc-ball { color: var(--accent-to); border-color: color-mix(in srgb, var(--accent-to) 45%, transparent); }
+.lc-code .lc-label, .lc-voz .lc-label, .lc-quick .lc-label { top: 65px; }
+.lc-pill { position: absolute; left: 32px; top: -198px; transform: translate(-50%, 10px); opacity: 0; pointer-events: none; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border-radius: 100px; white-space: nowrap; font-size: 12.5px; font-weight: 700; color: var(--ink); text-decoration: none; background: color-mix(in srgb, var(--card) 86%, transparent); border: 1px solid var(--card-border); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); transition: opacity 200ms ease, transform 420ms cubic-bezier(0.2, 1.2, 0.3, 1); }
+.launcher.open .lc-pill { opacity: 1; pointer-events: auto; transform: translate(-50%, 0); transition-delay: 200ms; }
 .lc-foto .lc-label { top: 81px; }
 .lc-foto .lc-ball { background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); border: none; color: #fff; box-shadow: 0 0 44px -6px rgba(124,92,255,0.75), 0 14px 30px -10px rgba(0,0,0,0.7); }
 .lc-scrim { position: fixed; inset: 0; z-index: 25; opacity: 0; pointer-events: none; background: radial-gradient(circle at 50% 100%, rgba(124,92,255,0.26), rgba(5,5,10,0.80) 58%); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); transition: opacity 200ms ease; }
@@ -833,9 +838,9 @@ body:has(.plain-page) {
 .launcher.open .lc-halo { opacity: 1; transform: scale(1.12); }
 .launcher.open .lc-arc path { stroke-dashoffset: 0; opacity: 1; transition: stroke-dashoffset 760ms cubic-bezier(0.3, 0.6, 0.2, 1) 60ms, opacity 200ms ease; }
 .launcher.open .lc-sat { opacity: 1; pointer-events: auto; transform: translate(0, 0) scale(1); transition: transform 560ms cubic-bezier(0.2, 1.25, 0.35, 1) var(--d, 0ms), opacity 240ms ease var(--d, 0ms); }
-.launcher.open .lc-code { --d: 90ms; } .launcher.open .lc-voz { --d: 150ms; }
+.launcher.open .lc-code { --d: 90ms; } .launcher.open .lc-voz { --d: 150ms; } .launcher.open .lc-quick { --d: 210ms; }
 .lc-sat:focus-visible, .lc-fab:focus-visible { outline: 2px solid var(--accent-to); outline-offset: 3px; }
-@media (prefers-reduced-motion: reduce) { .lc-fab, .lc-ring, .lc-halo, .lc-arc path, .lc-sat, .lc-scrim { transition: none !important; animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .lc-fab, .lc-ring, .lc-halo, .lc-arc path, .lc-sat, .lc-scrim, .lc-pill { transition: none !important; animation: none !important; } }
 
 .vol-row { gap: 10px; }
 .vol-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent-to); height: 28px; cursor: pointer; }
@@ -872,12 +877,14 @@ body:has(.constellation) .plain-body { position: relative; z-index: 1; }
 .scan-ring { transform-origin: 0 0; transition: transform 640ms cubic-bezier(0.2, 0.9, 0.2, 1); }
 .rm-scrim { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 24px; opacity: 0; transition: opacity 260ms ease; background: radial-gradient(circle at 50% 60%, rgba(124,92,255,0.22), rgba(5,5,10,0.80) 62%); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 .rm-scrim.on { opacity: 1; }
-.rm-card { position: relative; width: min(640px, 100%); padding: 34px 34px 36px; border-radius: 30px; text-align: center; background: color-mix(in srgb, var(--card) 88%, transparent); border: 1px solid var(--card-border); box-shadow: 0 40px 90px -30px rgba(0,0,0,0.8), 0 0 80px -30px rgba(124,92,255,0.7); transform: translateY(14px) scale(0.94); transition: transform 520ms cubic-bezier(0.2, 1.2, 0.3, 1); }
+.rm-card { position: relative; width: min(720px, 100%); padding: 34px 34px 36px; border-radius: 30px; text-align: center; background: color-mix(in srgb, var(--card) 88%, transparent); border: 1px solid var(--card-border); box-shadow: 0 40px 90px -30px rgba(0,0,0,0.8), 0 0 80px -30px rgba(124,92,255,0.7); transform: translateY(14px) scale(0.94); transition: transform 520ms cubic-bezier(0.2, 1.2, 0.3, 1); }
 .rm-scrim.on .rm-card { transform: none; }
 .rm-kick { font-size: 11px; font-weight: 700; letter-spacing: 0.16em; color: var(--accent-to); }
 .rm-card h2 { margin: 8px 0 26px; font-size: 24px; font-weight: 700; }
 .rm-x { position: absolute; right: 16px; top: 16px; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--card-border); background: var(--bg); color: var(--ink-soft); cursor: pointer; }
-.rm-opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.rm-opts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.rm-label { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; margin-top: 14px; border-radius: 14px; border: 1px dashed var(--card-border); color: var(--ink-soft); font-size: 13px; font-weight: 700; text-decoration: none; }
+.rm-label:hover, .rm-label:focus-visible { color: var(--ink); border-color: var(--accent-to); outline: none; }
 .rm-opt { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 26px 12px 22px; border-radius: 22px; color: var(--ink); text-decoration: none; background: var(--bg); border: 1px solid var(--card-border); opacity: 0; transform: translateY(18px) scale(0.9);
   transition: transform 560ms cubic-bezier(0.2, 1.25, 0.35, 1) var(--d), opacity 260ms ease var(--d), border-color 200ms ease, box-shadow 200ms ease; }
 .rm-scrim.on .rm-opt { opacity: 1; transform: none; }
@@ -887,7 +894,7 @@ body:has(.constellation) .plain-body { position: relative; z-index: 1; }
 .rm-opt b { font-size: 16px; } .rm-opt small { font-size: 11.5px; color: var(--ink-soft); }
 @media (prefers-reduced-motion: reduce) { .rm-scrim, .rm-card, .rm-opt, .scan-ring, .side-nav .scan { transition: none !important; } }
 /* El registro elegido desde "Agregar almuerzo": la etiqueta sobre el menu del celular */
-.lc-meal { position: absolute; left: 50%; top: -214px; transform: translate(-50%, 8px); opacity: 0; pointer-events: none; white-space: nowrap; font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; color: var(--accent-to); background: color-mix(in srgb, var(--card) 86%, transparent); border: 1px solid var(--card-border); border-radius: 100px; padding: 6px 14px; transition: opacity 260ms ease 120ms, transform 420ms cubic-bezier(0.2, 1.2, 0.3, 1) 120ms; }
+.lc-meal { position: absolute; left: 50%; top: -246px; transform: translate(-50%, 8px); opacity: 0; pointer-events: none; white-space: nowrap; font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; color: var(--accent-to); background: color-mix(in srgb, var(--card) 86%, transparent); border: 1px solid var(--card-border); border-radius: 100px; padding: 6px 14px; transition: opacity 260ms ease 120ms, transform 420ms cubic-bezier(0.2, 1.2, 0.3, 1) 120ms; }
 .launcher.open .lc-meal.has { opacity: 1; transform: translate(-50%, 0); }
 
 /* iPhone: un campo con letra menor de 16 px hace zoom al tocarlo y descuadra la pantalla */
@@ -1455,3 +1462,25 @@ body.viewas { padding-top: 0; }
 /* A real picture of the food (js/food-photo.js): the ingredient on a soft tile, never stretched */
 .food-pic { background-color: rgba(127,127,140,0.14) !important; background-size: 82% !important; background-position: center !important;
   background-repeat: no-repeat !important; opacity: 1 !important; }
+
+
+/* ---- The one menu (17 nov 2026): five destinations on every page, group tabs for Progreso and Perfil ---- */
+.tab-bar a.tab { text-decoration: none; min-width: 56px; justify-content: flex-end; }
+.tab-bar a.tab svg { width: 20px; height: 20px; }
+.tab-bar .tab.active svg * { stroke: var(--accent-to); }
+body.has-tabbar { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+body.has-tabbar .app-content { padding-bottom: 40px; }
+body.with-shell:not(.has-tabbar) .coach-orb { bottom: calc(24px + env(safe-area-inset-bottom)); }
+.group-tabs { display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 2px; padding: 4px; margin: 0 20px 6px; border-radius: 100px; background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.group-tabs .gt { position: relative; display: flex; align-items: center; justify-content: center; min-height: 40px; border-radius: 100px; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); text-decoration: none; -webkit-tap-highlight-color: transparent; transition: background 200ms ease, color 200ms ease; }
+.group-tabs .gt.on { background: var(--ink); color: var(--bg); }
+.group-tabs .gt:focus-visible { outline: 2px solid var(--accent-to); outline-offset: 2px; }
+.gt-dot { position: absolute; top: 8px; right: 10px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+.gt-dot[hidden], .side-dot[hidden] { display: none; }
+.side-dot { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+@media (min-width: 600px) { .group-tabs { margin: 0 36px 8px; max-width: 520px; } }
+@media (min-width: 1024px) {
+  body.has-tabbar { padding-bottom: 0; }
+  body.with-shell .group-tabs { margin: 0 auto 8px; max-width: 1080px; width: calc(100% - 80px); }
+  body.with-shell .coach-orb { bottom: calc(24px + env(safe-area-inset-bottom)); }
+}

@@ -160,54 +160,6 @@
     </div>
   </div>
 
-  <div class="lc-scrim" id="lcScrim"></div>
-
-  <div class="tab-bar">
-    <button class="tab active" aria-current="page">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="5" stroke="var(--accent-to)" stroke-width="1.8"/><path d="M8 10h8M8 14h5" stroke="var(--accent-to)" stroke-width="1.8"/></svg>
-      <span>Diario</span>
-    </button>
-    <a class="tab" id="retosBtn" href="challenges.html">
-      <span class="tab-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3z" stroke="var(--ink-soft)" stroke-width="1.8" stroke-linejoin="round"/></svg><i class="tab-dot" id="retosDot" hidden></i></span>
-      <span>Retos</span>
-    </a>
-    <div class="launcher" id="launcher">
-      <div class="lc-halo"></div>
-      <span class="lc-meal mono" id="lcMeal"></span>
-      <svg class="lc-arc" width="320" height="230" viewBox="-160 -210 320 230" fill="none" aria-hidden="true">
-        <defs><linearGradient id="lcg-a" x1="-100" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color: var(--accent-from); stop-opacity: 0"/><stop offset="0.5" style="stop-color: var(--accent-to)"/><stop offset="1" style="stop-color: var(--accent-from); stop-opacity: 0"/></linearGradient></defs>
-        <path d="M -96 -82 Q 0 -204 96 -82" pathLength="100" stroke="url(#lcg-a)" stroke-width="1.4" stroke-linecap="round"/>
-      </svg>
-      <a class="lc-sat lc-code" href="scan.html?mode=barcode" data-launch aria-label="Código: escanea un producto" tabindex="-1">
-        <span class="lc-ball"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6v12M7.5 6v12M11 6v12M14 6v12M17 6v12M20 6v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
-        <span class="lc-label mono">CÓDIGO</span>
-      </a>
-      <a class="lc-sat lc-foto" href="scan.html" data-launch aria-label="Foto: la IA identifica tu plato" tabindex="-1">
-        <span class="lc-ball"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8a2 2 0 012-2h1.2l.9-1.5A2 2 0 0110 3.5h4a2 2 0 011.9 1l.9 1.5H18a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="13" r="3.3" stroke="currentColor" stroke-width="1.7"/></svg></span>
-        <span class="lc-label mono">FOTO</span>
-      </a>
-      <a class="lc-sat lc-voz" href="voice.html" data-launch aria-label="Voz: dilo en voz alta" tabindex="-1">
-        <span class="lc-ball"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
-        <span class="lc-label mono">VOZ</span>
-      </a>
-      <button type="button" class="lc-fab" id="fabBtn" aria-expanded="false" aria-haspopup="true" aria-label="Registrar comida: foto, código o voz">
-        <span class="lc-core"><svg width="33" height="33" viewBox="-16 -16 32 32" fill="none" aria-hidden="true">
-          <defs><linearGradient id="lcg-r" x1="-12" y1="12" x2="12" y2="-12" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color: var(--accent-from)"/><stop offset="1" style="stop-color: var(--accent-to)"/></linearGradient>
-          <linearGradient id="lcg-l" x1="-6" y1="-6" x2="6" y2="6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#A592FF"/><stop offset="1" stop-color="#27B8E8"/></linearGradient></defs>
-          <g class="lc-ring"><circle r="11.5" stroke="rgba(255,255,255,0.10)" stroke-width="2.6"/><circle r="11.5" stroke="url(#lcg-r)" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="54 80" transform="rotate(-110)"/></g>
-          <circle r="6.2" fill="url(#lcg-l)"/><circle r="3.5" fill="#0A0A12" fill-opacity="0.9"/><circle cx="-1.6" cy="-1.8" r="1.25" fill="#fff"/>
-          <path d="M9.6 -12.4l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7z" fill="#fff"/></svg></span>
-      </button>
-    </div>
-    <a class="tab" id="progressBtn" href="progress.html">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 19V9M12 19V5M19 19v-7" stroke="var(--ink-soft)" stroke-width="1.8" stroke-linecap="round"/></svg>
-      <span>Progreso</span>
-    </a>
-    <a class="tab" id="perfilBtn" href="profile.html">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.6" stroke="var(--ink-soft)" stroke-width="1.8"/><path d="M5 20c1.4-3.8 4.2-5.6 7-5.6s5.6 1.8 7 5.6" stroke="var(--ink-soft)" stroke-width="1.8"/></svg>
-      <span>Perfil</span>
-    </a>
-  </div>
 </div>
 
 <script src="static/js/icons.js"></script>
@@ -1366,56 +1318,8 @@ function renderWorkouts(data) {
   }));
 }
 
-// ---- Central button: the cadence mark opens Foto · Código · Voz (it never opens the camera by itself) ----
-const launcher = document.getElementById('launcher');
-const lcScrim = document.getElementById('lcScrim');
-const fabBtn = document.getElementById('fabBtn');
-
-function setLauncher(open) {
-  launcher.classList.toggle('open', open);
-  lcScrim.classList.toggle('open', open);
-  fabBtn.setAttribute('aria-expanded', String(open));
-  launcher.querySelectorAll('.lc-sat').forEach((a) => a.setAttribute('tabindex', open ? '0' : '-1'));
-}
-const LC_MEALS = { desayuno: 'Desayuno', almuerzo: 'Almuerzo', merienda: 'Merienda', cena: 'Cena' };
-// Which meal the three options register into (null = the one the photo's time suggests).
-function setLauncherMeal(meal) {
-  const q = meal ? `meal=${encodeURIComponent(meal)}` : '';
-  launcher.querySelector('.lc-foto').setAttribute('href', `scan.html${q ? `?${q}` : ''}`);
-  launcher.querySelector('.lc-code').setAttribute('href', `scan.html?mode=barcode${q ? `&${q}` : ''}`);
-  launcher.querySelector('.lc-voz').setAttribute('href', `voice.html${q ? `?${q}` : ''}`);
-  const chip = document.getElementById('lcMeal');
-  chip.textContent = meal && LC_MEALS[meal] ? `AGREGAR ${LC_MEALS[meal].toUpperCase()}` : '';
-  chip.classList.toggle('has', !!(meal && LC_MEALS[meal]));
-}
-// From "Agregar almuerzo" and similar: phones open the central menu; computers open the register panel.
-function openRegister(meal) {
-  if (window.matchMedia('(min-width: 1024px)').matches) { window.openRegisterMenu({ meal }); return; }
-  openLauncher(meal);
-}
-function openLauncher(meal) {
-  setLauncherMeal(meal || null);
-  if (launcher.classList.contains('open')) return;
-  setLauncher(true);
-  window.sfx && sfx.play('open');
-  pushOverlay(() => setLauncher(false)); // the system Back button closes it and stays on the diary
-}
-function closeLauncher(quiet) {
-  if (!launcher.classList.contains('open')) return;
-  if (!quiet && window.sfx) sfx.play('close');
-  dismissOverlay();
-}
-fabBtn.addEventListener('click', () => (launcher.classList.contains('open') ? closeLauncher() : openLauncher()));
+// The central button (Foto · Código · Voz · Rápido) and openRegister() live in js/shell.js, the same on every page.
 document.getElementById('deskRegister').addEventListener('click', () => window.openRegisterMenu());
-document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('[data-register]'); if (b) openRegister(null); });
-lcScrim.addEventListener('click', () => closeLauncher());
-launcher.querySelectorAll('[data-launch]').forEach((a) => a.addEventListener('click', (e) => {
-  if (e.metaKey || e.ctrlKey || e.shiftKey) return;
-  e.preventDefault();
-  const href = a.getAttribute('href');
-  window.sfx && sfx.play('tick');
-  dismissOverlay(() => { window.location.href = href; }); // close first, so Back from the camera lands on a clean diary
-}));
 
 // The rewards: reaching the day's goal, and a streak that grew. Only right after saving a meal.
 const MILESTONES = [3, 7, 14, 30, 50, 100, 365];

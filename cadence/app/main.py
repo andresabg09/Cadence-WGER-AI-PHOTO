@@ -1317,6 +1317,15 @@ def challenges(user: store.User = Depends(current_user)):
         days_left=7 - today_.weekday(), claimable=sum(c.state == "ready" for c in daily_out + weekly_out), shop=_shop_items(user))
 
 
+@app.get("/api/challenges/dot")
+def challenges_dot(user: store.User = Depends(current_user)):
+    """Only whether something waits to be collected (coins or a gift): the dot on Progreso in the menu."""
+    daily, weekly, today_, monday = _challenge_states(user)
+    taken = store.claimed_periods(user.id, [c.key for c in daily + weekly], [today_.isoformat(), monday.isoformat()])
+    ready = sum(1 for c in daily + weekly if c.complete and (c.key, gamify.period_id(c.key, today_)) not in taken)
+    return {"claimable": ready}
+
+
 @app.post("/api/challenges/claim", response_model=ClaimOut)
 def claim_challenge(body: ClaimIn, user: store.User = Depends(current_user)):
     """Collect a finished challenge's coins. The server re-checks it and pays once per day (or week)."""

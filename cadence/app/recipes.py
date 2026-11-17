@@ -36,8 +36,9 @@ logger = logging.getLogger("cadence.recipes")
 
 HOST = "https://www.themealdb.com"
 CREDIT = "Receta y fotos: TheMealDB"
-PREP_VERSION = 2  # raise it when the preparation rules change: everything is prepared again in the background
+PREP_VERSION = 3  # raise it when the preparation rules change: everything is prepared again in the background
 # 2: the Spanish text and the grams come from a file translated once (app/data/recipes_es.json), not from Gemini on the server.
+# 3: 81 more recipes from the Caribbean and the Philippines in the same file (17 nov 2026).
 SYNC_EVERY = timedelta(days=7)
 MEALS = ("desayuno", "almuerzo", "merienda", "cena")
 # The part of the day's calories each meal usually brings (the same shares the meal score uses).

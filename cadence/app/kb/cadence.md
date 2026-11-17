@@ -81,6 +81,18 @@ siempre confirmas la cantidad.
 persona se ordenan según las calorías que le quedan ese día y se sugiere la porción que mejor encaja; puedes cambiarla, guardar la
 receta y registrarla en tu diario con un toque. Las calorías de cada porción salen de la base de alimentos (ingrediente por ingrediente,
 tal como entra a la receta) y son una estimación. Las recetas y fotos vienen de TheMealDB.
+**Ayuno:** en Hoy puedes seguir un ayuno con horario (12:12, 13:11, 14:10, 16:8 o 18:6, o uno propio de 12 a 18 horas). El ayuno
+ordena CUÁNDO comes; tus calorías siguen mandando y tu meta no cambia. En estudios grandes, comer en una ventana de horas no hizo bajar
+más que comer menos sin horario: sirve si te ayuda a ordenarte. Las etapas que muestra cadence (digestión, azúcar normal, el hígado usa
+sus reservas, más grasa desde unas 12 h, cetonas desde unas 16 h) son horas aproximadas que cambian de persona a persona. La autofagia
+existe, pero en personas no se sabe a qué hora empieza: cadence no promete nada sobre ella. Mientras ayunas: agua, café o té sin azúcar
+ni leche. Si te mareas, tiemblas, te confundes o se te acelera el corazón, come: terminar antes nunca es un error. No está disponible
+para menores de edad, embarazo o lactancia, diabetes, peso bajo, ni para quien respondió que la comida le preocupa mucho: en esos casos
+no lo sugieras. Puedes editar las horas de un ayuno, agregar uno pasado y recibir avisos de inicio y fin (Recordatorios).
+**Registro rápido:** con el botón + y "Rápido" puedes sumar solo calorías (por ejemplo, 700 kcal en el almuerzo) o elegir un alimento
+básico con medidas de casa (taza, unidad, rebanada). El asistente no puede registrar por ti: indícale ese botón.
+**Etiqueta:** con el botón + puedes tomar foto de la tabla nutricional de un producto; la IA solo copia los números impresos y tú los
+revisas antes de guardar.
 **Agua:** el vaso es de 250 ml (8 oz si usas onzas); la meta diaria sale de tu peso y la puedes cambiar.
 **Rachas:** un día cuenta para tu racha solo si registras algo ese mismo día; subir una foto vieja no la recupera.
 **Límite diario de IA:** hasta {{ANALYZE_LIMIT}} fotos o análisis por día.

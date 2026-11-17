@@ -95,6 +95,15 @@ CREATE TABLE IF NOT EXISTS recipes (
   prep_v INTEGER NOT NULL DEFAULT 0, prepared TEXT, updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS recipes_status ON recipes (status, prio);
+CREATE TABLE IF NOT EXISTS fasting_plan (
+  user_id INTEGER PRIMARY KEY, hours INTEGER, start TEXT, intro_done INTEGER NOT NULL DEFAULT 0,
+  self_excluded INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fasts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, started_at TEXT NOT NULL, ended_at TEXT,
+  planned_h REAL NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS fasts_user ON fasts (user_id, started_at);
 CREATE TABLE IF NOT EXISTS recipe_saves (
   user_id INTEGER NOT NULL, recipe_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (user_id, recipe_id)
 );
@@ -1086,3 +1095,96 @@ def recipes_saved(user_id: int) -> list[str]:
     with closing(_connect()) as conn:
         return [row[0] for row in conn.execute("SELECT recipe_id FROM recipe_saves WHERE user_id = ? ORDER BY created_at DESC, rowid DESC",
                                                (user_id,))]
+
+
+# ------------------------------------------------------------------ fasting (Block 17): each person's plan and their fasts
+
+_FAST_COLS = "id, started_at, ended_at, planned_h"
+
+
+def _fast(row) -> dict | None:
+    return {"id": row[0], "started_at": row[1], "ended_at": row[2], "planned_h": row[3]} if row else None
+
+
+def fasting_plan(user_id: int) -> dict | None:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT hours, start, intro_done, self_excluded FROM fasting_plan WHERE user_id = ?", (user_id,)).fetchone()
+    return {"hours": row[0], "start": row[1], "intro_done": bool(row[2]), "self_excluded": bool(row[3])} if row else None
+
+
+def set_fasting_plan(user_id: int, **fields) -> None:
+    allowed = {k: v for k, v in fields.items() if k in ("hours", "start", "intro_done", "self_excluded")}
+    with closing(_connect()) as conn, conn:
+        conn.execute("INSERT OR IGNORE INTO fasting_plan (user_id, updated_at) VALUES (?, ?)", (user_id, _now()))
+        for key, value in allowed.items():
+            conn.execute(f"UPDATE fasting_plan SET {key} = ?, updated_at = ? WHERE user_id = ?", (value, _now(), user_id))
+
+
+def fast_active(user_id: int) -> dict | None:
+    with closing(_connect()) as conn:
+        return _fast(conn.execute(f"SELECT {_FAST_COLS} FROM fasts WHERE user_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1",
+                                  (user_id,)).fetchone())
+
+
+def fast_get(user_id: int, fast_id: int) -> dict | None:
+    with closing(_connect()) as conn:
+        return _fast(conn.execute(f"SELECT {_FAST_COLS} FROM fasts WHERE id = ? AND user_id = ?", (fast_id, user_id)).fetchone())
+
+
+def fasts_recent(user_id: int, since_iso: str) -> list[dict]:
+    """Fasts that started after `since_iso` or are still open, newest first."""
+    with closing(_connect()) as conn:
+        rows = conn.execute(f"SELECT {_FAST_COLS} FROM fasts WHERE user_id = ? AND (started_at >= ? OR ended_at IS NULL) "
+                            "ORDER BY started_at DESC", (user_id, since_iso)).fetchall()
+    return [_fast(r) for r in rows]
+
+
+def fasts_between(user_id: int, start_iso: str, end_iso: str) -> list[dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute(f"SELECT {_FAST_COLS} FROM fasts WHERE user_id = ? AND started_at >= ? AND started_at < ? ORDER BY started_at",
+                            (user_id, start_iso, end_iso)).fetchall()
+    return [_fast(r) for r in rows]
+
+
+def fast_start(user_id: int, started_at: str, planned_h: float) -> int:
+    with closing(_connect()) as conn, conn:
+        return conn.execute("INSERT INTO fasts (user_id, started_at, planned_h, created_at) VALUES (?,?,?,?)",
+                            (user_id, started_at, planned_h, _now())).lastrowid
+
+
+def fast_add(user_id: int, started_at: str, ended_at: str, planned_h: float) -> int:
+    with closing(_connect()) as conn, conn:
+        return conn.execute("INSERT INTO fasts (user_id, started_at, ended_at, planned_h, created_at) VALUES (?,?,?,?,?)",
+                            (user_id, started_at, ended_at, planned_h, _now())).lastrowid
+
+
+def fast_update(user_id: int, fast_id: int, **fields) -> bool:
+    allowed = {k: v for k, v in fields.items() if k in ("started_at", "ended_at")}
+    if not allowed:
+        return False
+    sets = ", ".join(f"{k} = ?" for k in allowed)
+    with closing(_connect()) as conn, conn:
+        return conn.execute(f"UPDATE fasts SET {sets} WHERE id = ? AND user_id = ?", (*allowed.values(), fast_id, user_id)).rowcount > 0
+
+
+def fast_delete(user_id: int, fast_id: int) -> bool:
+    with closing(_connect()) as conn, conn:
+        return conn.execute("DELETE FROM fasts WHERE id = ? AND user_id = ?", (fast_id, user_id)).rowcount > 0
+
+
+def fast_overlaps(user_id: int, start_iso: str, end_iso: str | None, skip_id: int | None = None) -> bool:
+    """Whether [start, end) crosses another fast of this person (an open fast reaches to the far future).
+    Times are ISO strings in the same zone, so they compare as text only through Python: done here row by row."""
+    from datetime import datetime as _dtm
+    start = _dtm.fromisoformat(start_iso)
+    end = _dtm.fromisoformat(end_iso) if end_iso else None
+    with closing(_connect()) as conn:
+        rows = conn.execute("SELECT id, started_at, ended_at FROM fasts WHERE user_id = ?", (user_id,)).fetchall()
+    for fid, s, e in rows:
+        if fid == skip_id:
+            continue
+        other_start = _dtm.fromisoformat(s)
+        other_end = _dtm.fromisoformat(e) if e else None
+        if (other_end is None or start < other_end) and (end is None or other_start < end):
+            return True
+    return False

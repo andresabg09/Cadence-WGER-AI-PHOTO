@@ -31,6 +31,7 @@ DEFAULT_PREFS = {
     "water": {"on": False, "every_h": 2, "from": "08:00", "to": "22:00"},
     "meals": {"desayuno": {"on": False, "time": "08:00"}, "almuerzo": {"on": False, "time": "12:30"}, "cena": {"on": False, "time": "19:30"}},
     "weekly": {"on": False, "time": "09:00"},  # Sundays
+    "fasting": {"on": False, "half": False},  # start at the plan's hour, end when the plan is reached, optional halfway
 }
 _HHMM = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
@@ -52,7 +53,7 @@ def clean_prefs(raw: dict | None) -> dict:
     """The stored preferences merged over the defaults, with every value validated."""
     raw = raw or {}
     prefs = {"water": dict(DEFAULT_PREFS["water"]), "meals": {k: dict(v) for k, v in DEFAULT_PREFS["meals"].items()},
-             "weekly": dict(DEFAULT_PREFS["weekly"])}
+             "weekly": dict(DEFAULT_PREFS["weekly"]), "fasting": dict(DEFAULT_PREFS["fasting"])}
 
     def hhmm(value, fallback):
         return value if isinstance(value, str) and _HHMM.match(value) else fallback
@@ -67,6 +68,8 @@ def clean_prefs(raw: dict | None) -> dict:
         prefs["meals"][meal] = {"on": bool(item.get("on")), "time": hhmm(item.get("time"), default["time"])}
     weekly = raw.get("weekly") or {}
     prefs["weekly"] = {"on": bool(weekly.get("on")), "time": hhmm(weekly.get("time"), "09:00")}
+    fast = raw.get("fasting") or {}
+    prefs["fasting"] = {"on": bool(fast.get("on")), "half": bool(fast.get("half"))}
     return prefs
 
 
@@ -188,6 +191,15 @@ def run_once(now: datetime | None = None) -> int:
                     logger.exception("no se pudo armar el resumen semanal")
                     continue
             sent += push_to_user(user, {"title": reminder.title, "body": body, "url": reminder.url, "tag": reminder.key})
+        if clean_prefs(prefs)["fasting"]["on"]:
+            try:
+                from . import fasting  # late import: fasting needs accounts, which is heavier than this loop
+                state = fasting.state_for(user, now)
+                for key, title, body in fasting.due_reminders(state, clean_prefs(prefs)["fasting"], now):
+                    if store.claim_reminder(user_id, key, day):
+                        sent += push_to_user(user, {"title": title, "body": body, "url": "index.html", "tag": key.split(":")[0]})
+            except Exception:  # noqa: BLE001 - one person's fast must not stop everyone else's reminders
+                logger.exception("no se pudo revisar el ayuno")
     store.prune_reminders((now.date() - timedelta(days=3)).isoformat())
     return sent
 

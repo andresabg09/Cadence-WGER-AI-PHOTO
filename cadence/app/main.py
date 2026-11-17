@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import accounts, auth, calibration, coach, foodphotos, foodunits, gamify, nutrition, recipes, reminders, scoring, store
+from . import accounts, auth, calibration, coach, fasting, foodphotos, foodunits, gamify, nutrition, recipes, reminders, scoring, store
 from .config import settings
 from .diagnostics import run_diagnostics
 from .progress import achievements as build_achievements, day_totals, streak_runs
@@ -109,6 +109,7 @@ app = FastAPI(title="cadence", version="0.1.0")
 app.include_router(accounts.router)
 app.include_router(reminders.router)
 app.include_router(coach.router)
+app.include_router(fasting.router)
 
 
 @app.on_event("startup")
@@ -768,6 +769,17 @@ def diary_snapshot(user: store.User) -> list[str]:
     weights = store.weights_since(user.id, (today_date - timedelta(days=30)).isoformat())
     if weights:
         lines.append("- Pesos de los últimos 30 días (kg): " + ", ".join(f"{w['day']} {w['kg']}" for w in weights[-8:]))
+    try:
+        fast = fasting.state_for(user)
+        if fast["blocked"]:
+            lines.append("- Ayuno: NO disponible para esta persona por cuidado de su salud (no se lo sugieras).")
+        elif fast["active"]:
+            a = fast["active"]
+            lines.append(f"- Ayuno en curso: lleva {a['hours']:.1f} h de un plan de {round(a['planned_h'])} h.")
+        elif fast["plan"]["chosen"]:
+            lines.append(f"- Plan de ayuno {fast['plan']['label']} (empieza a las {fast['plan']['start']}); ayunos completos esta semana: {fast['week']['done']}.")
+    except Exception:  # noqa: BLE001 - the chat must answer even if this part fails
+        logger.exception("no se pudo leer el ayuno para el asistente")
     return lines
 
 

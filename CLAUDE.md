@@ -7,19 +7,14 @@ en una sesion de Claude Code, ya tienes el contexto completo.
 ## PENDIENTES Y DECISIONES ABIERTAS (revisar al empezar cada chat; actualizar al terminar)
 
 Este archivo es el contexto que Claude Code lee al iniciar un chat nuevo: lo hecho esta en "Plan por bloques" y las secciones de abajo; lo que FALTA o espera decision de Andres esta aqui.
-- **REESTRUCTURACION (17 nov, pedido de Andres; plan completo en `/root/.claude/plans/quiero-que-busques-las-tender-harbor.md` de esa sesion, resumen aqui):**
-  orden pedido: ayuno primero -> fotos -> registro sencillo con medidas de casa; menu de 5 igual en celular/tablet/escritorio
-  (Hoy con el ayuno arriba · Recetas · (+) · Progreso [Resumen|Historial|Retos|Premios] · Perfil [Yo|Objetivos|Ajustes]); mas premios y
-  regalos (caja del dia, cofre semanal; solo cosmeticos/monedas); (+) = Foto · Codigo · Voz · Rapido (solo calorias o basicos con medidas
-  de casa) + leer la etiqueta nutricional (la IA solo TRANSCRIBE, la persona confirma). REGLA DE ANDRES: lo que no menciono NO se borra;
-  "fusionar" = ordenar el acceso, las paginas y URLs siguen, atajos duplicados abren la misma pieza.
-  AYUNO (decisiones 17 nov): planes 12:12, 13:11, 14:10, 16:8, 18:6 y propio de 12 a 18 h; bloqueado para menores, SCOFF positivo,
-  embarazo/lactancia, diabetes e IMC < 18,5; no cambia la meta de kcal; nunca premia ayunar de mas; etapas con horas aproximadas y
-  sin promesas (autofagia solo como nota, sin hora: en humanos no hay umbral conocido). Se levanta el "No copiar: ayuno" del plan 8-12.
-  HECHO: 81 recetas del Caribe/Filipinas traducidas (212 en total, PREP_VERSION 3); food-photo.js con ~70 nombres mas; fotos propias con
-  credito (`app/foodphotos.py`, `app/data/food_photos.json`, `static/food-photos/`, `/api/photo-credits`, Ajustes -> Creditos de fotos).
-  DISENO: 13 tableros nuevos en la pagina "Pruebas" del canvas (fila "Reestructuracion"). ESPERA EL "GO" DE ANDRES antes de programar.
-  BLOQUEO: Wikimedia (Commons) limita con 429 a la nube de Claude; la lista de fotos propias sigue vacia (~40 alimentos latinos por buscar).
+- **REESTRUCTURACION (17 nov): PROGRAMADA tras el "Go, con iconos en vez de mascotas" de Andres, en la rama
+  `claude/cadence-redesign-restructure-xktfiu` (SIN pasar a `master`: espera su visto bueno). Detalle en "Bloque 17" mas abajo.**
+  FALTA / SIN VERIFICAR: (1) Andres debe revisar la rama y autorizar el paso a `master`; despues una revision con
+  `/cadence/api/diagnostics?deep=1`. (2) Gemini real leyendo una etiqueta (solo probado con respuestas simuladas). (3) Avisos push del ayuno
+  en un telefono real. (4) Fotos propias de ~40 alimentos latinos: Wikimedia Commons responde 429 a la nube de Claude, `food_photos.json`
+  sigue vacio (la app funciona igual; lista en el plan de esa sesion). (5) No hecho: paso "¿Como quieres lograrlo? Ayuno / Seguimiento /
+  Ambos" en el primer uso (se uso la tarjeta "Nuevo: ayuno" en Hoy, que se puede descartar) y paquetes de sonido en la tienda.
+  (6) Tableros de Tablet/Escritorio de la reestructuracion en el canvas: sin hacer (los de celular estan en "Pruebas").
 - **Seguridad:** Andres ya roto la clave de Gemini y el token de wger (28 oct). Nunca repetirlas ni ponerlas en el repo.
 - **Bloque 15 (entrenador personal), parte hecha:** historial de chats por persona (nuevo, lista, borrar, titulos por IA), el chat ve el diario de hoy (solo lectura). **FALTA, espera el "go" de Andres:** mandar fotos al chat (reusa el analisis y pasa por Confirmar), y acciones con confirmacion de un toque (agua, mover una comida; nunca borrar ni tocar reglas de salud).
 - **Panel del administrador:** hecho (numeros + "Ver como" en solo lectura `viewas.html` + registro de accesos + uso de IA por persona). Ver FOTOS de otros: no hecho, decision pendiente (recomendado: no sin avisar).
@@ -383,8 +378,8 @@ tocar codigo. Reglas para todos estos bloques: las calorias y macros salen SIEMP
 calcula; las puntuaciones se calculan en el servidor con formulas fijas y visibles); todo dato por persona vive en el servidor
 (nada solo en localStorage); tablas nuevas con `CREATE TABLE IF NOT EXISTS` (sin pasos manuales en el servidor); lecturas con
 `apiGetSWR`; hojas con `pushOverlay`; recompensas con `sfx.play`; cada endpoint nuevo exige `current_user` + prueba de
-aislamiento; probar con Playwright y wger simulado. Nada de candados ni "premium": todo se desbloquea. No copiar: ayuno,
-fotos de stock, tienda de monedas con dinero.
+aislamiento; probar con Playwright y wger simulado. Nada de candados ni "premium": todo se desbloquea. No copiar: fotos de
+stock, tienda de monedas con dinero. (El "no copiar: ayuno" se levanto el 17 nov por decision de Andres: ver Bloque 17.)
 - **Bloque 8 - Puntuacion nutricional y niveles (HECHO, 25 oct 2026; aprobado por Andres).** Implementado en `app/scoring.py` (formulas fijas: macros 30, proteina 20, fibra 15, azucar+grasa saturada 15, variedad 10, porcion 10; un criterio sin datos (menos del 60 % del peso del plato) NO resta y se avisa en `partial`; tabla de basicos con fibra/azucar/grasa sat. en `STAPLE_EXTRA`), `GET /api/today` devuelve `score`/`levels` por comida y del dia (promedio ponderado por kcal), hoja `static/js/meal-detail.js` (se abre tocando la pastilla de puntaje de cada comida) y ayudas de dibujo en `static/js/bits.js`. Los alimentos propios aceptan fibra opcional. Texto original del plan: `app/scoring.py`: puntaje 0-100 por comida y por dia
   (Excelente/Buena/Regular/Mejorable) con formula visible ("Como se calcula"): balance de macros frente a la meta de la persona,
   proteina de la comida frente a su parte del dia, fibra, azucar y grasa saturada, variedad y porcion. Si falta un dato (wger no
@@ -540,6 +535,48 @@ fotos de stock, tienda de monedas con dinero.
   SIN VERIFICAR: Gemini real preparando recetas (calidad de la traduccion y de los gramos) y el emparejamiento contra el catalogo REAL de wger
   (cuantas recetas quedan apartadas): mirar el conteo en el diagnostico tras el primer dia. NO HECHO: recetas propias de la persona, fotos en
   la busqueda de alimentos, tablero del canvas.
+- **Bloque 17 - Reestructuracion: ayuno, menu de 5, registro sencillo y regalos (17 nov 2026; pedido y "go" de Andres).**
+  REGLA DE ANDRES (vale para todo cambio de estructura): lo que no menciono NO se borra; "fusionar" = ordenar el acceso. Todas las
+  paginas siguen con su URL (enlaces viejos, app instalada, `?date=`, `?meal=`); un atajo duplicado abre la misma pieza.
+  (1) MENU UNICO (`static/js/shell.js`, lo construye en toda pagina `with-shell` salvo `data-page="escanear"`): celular y tablet = barra
+  inferior Hoy · Recetas · (+) · Progreso · Perfil (`body.has-tabbar`); escritorio = la misma lista en la barra lateral con "Registrar"
+  (`#sideRegister` -> `register-menu.js`). Pestanas de grupo (`.group-tabs`, cambian con `location.replace` = no llenan el historial):
+  Progreso [Resumen `progress.html` | Historial | Retos | Premios] y Perfil [Yo `profile.html` | Objetivos | Ajustes]. `OWNER` decide que
+  boton se enciende. El lanzador (+) vive en shell.js (`launcherHtml`, `openLauncher`, `openRegister(meal)`, `[data-register]`): Foto,
+  Codigo, Voz, Rapido y la pastilla "Etiqueta". Punto de Progreso (`#retosDot`, `GET /api/challenges/dot`: monedas por reclamar o regalo
+  por abrir; el diario lo repinta con `cadencePaintClaimDot`). Recordatorios tambien desde Perfil -> Yo. Inventario Playwright (scratchpad
+  `e2e/inventory.js`): 28 capacidades de antes, todas a 2 toques o menos desde Hoy a 390 px, y Atras correcto.
+  (2) AYUNO (`app/fasting.py`, `static/js/fasting.js`, tarjeta `#fastCard` ARRIBA en Hoy). Planes 12:12, 13:11, 14:10, 16:8, 18:6 y propio
+  de 12 a 18 h (`MIN_HOURS/MAX_HOURS`). Bloqueado (`blocked_reason`) para menores, SCOFF `ed_risk`, embarazo/lactancia, diabetes (insulina y
+  sulfonilureas = hipoglucemia; SGLT2 = cetoacidosis), IMC < 18,5 o si la persona marca "Alguna me aplica" en "Antes de empezar". NO cambia
+  la meta de kcal (Liu NEJM 2022 y Lowe JAMA IM 2020: comer en ventana no adelgaza mas que comer menos). Etapas aproximadas desde la
+  ultima comida: digestion 0 h, azucar normal 3 h, reservas 8 h, mas grasa 12 h, cetonas 16 h (`STAGES`, con "varia segun..." y fuentes);
+  autofagia SOLO como nota sin hora (en humanos no hay umbral conocido). "Para y come si..." fijo. Completo = llego a sus horas (margen
+  `GRACE_MIN`); terminar antes no castiga; mas de 24 h abierto = "¿olvidaste terminarlo?". Un solo ayuno activo; editar inicio/fin,
+  agregar uno pasado, borrar (`_check_span`: fin > inicio, <= 48 h, sin solaparse). Al registrar comida con un ayuno abierto se PREGUNTA
+  si terminarlo; nunca termina solo. Tablas `fasting_plan`, `fasts`. Endpoints: `GET /api/fasting`, `PUT /api/fasting/plan`, `POST
+  /api/fasting/intro|start|end|past`, `PATCH|DELETE /api/fasting/{id}` (hora con zona: el navegador manda `toISOString()`). Avisos
+  (`reminders.py`, clave `fasting` {on, half}): inicio, mitad (opcional) y fin, nunca a quien esta bloqueado. Las Live Activities del
+  iPhone no existen en una web: las reemplazan esos avisos. `diary_snapshot` le cuenta el ayuno al chat; `app/kb/cadence.md` lo explica.
+  (3) REGISTRO SENCILLO: "Rapido" (`static/js/quick-log.js`): basicos preparados con medidas de casa (`GET /api/quick/basics`, medidas
+  de `portions.js`) y "Solo calorias" (`POST /api/quick`: kcal y proteina que ESCRIBE la persona; se guarda como alimento propio oculto
+  `custom_foods.quick` de 900 kcal/100 g, no sale en la busqueda ni en la lista; 422 si la proteina da mas kcal que el total).
+  ETIQUETA: `POST /api/label` (`def`, cuenta para `ANALYZE_DAILY_LIMIT`): Gemini SOLO TRANSCRIBE la tabla (`vision.read_label`, temperatura
+  0); el CODIGO convierte a 100 g (`label_per_100g`: kJ/4,184, porcion -> 100 g, > 950 kcal o > 100 g por 100 g = 422) y abre la hoja de
+  alimento propio con los valores para que la persona los revise y guarde. No guarda nada solo. El selector de archivo se abre DENTRO del
+  toque (`openLabelReader`), si no el navegador lo bloquea.
+  (4) PREMIOS Y REGALOS (`app/gamify.py`): 7 premios nuevos (primer ayuno, 5 y 20 ayunos completos, primera receta, 10 recetas, 14 dias de
+  agua, primer registro rapido; categoria "Ayuno" en Premios = 29 en total con los de comida); retos "Completa tu ayuno" (diario, 30) y
+  "Ayuno constante" (semanal, 5 dias, 120) solo para quien tiene plan y no esta bloqueado, y nunca premian ayunar de mas. Regalos: Caja del
+  dia (los 4 retos diarios base `BASE_DAILY`) y Cofre de la semana (`WEEKLY_FOR_CHEST` = 4 semanales): `GET /api/gifts`, `POST
+  /api/gifts/open` (una vez por periodo, tabla `gifts`; el contenido sale de una semilla persona+periodo: monedas y a veces un adorno que
+  no tiene). Tarjeta "Regalos" arriba en Retos con animacion y `sfx.play('gift')`. Tienda: + Tema Oceano (`:root[data-theme="oceano"]`,
+  theme.js), Marco plata y Marco neon (`paintAvatars` en api.js: `frame-gold|frame-silver|frame-neon`). Retos muestra "Reintentar" si
+  falla la carga (antes se quedaba en esqueletos).
+  (5) FOTOS DE ALIMENTOS: `food-photo.js` con ~70 nombres mas en espanol hacia las fotos de TheMealDB; fotos propias con credito
+  (`app/foodphotos.py` valida archivo, licencia CC0/CC BY/CC BY-SA/dominio publico, autor y fuente de Commons; `/api/food-photos` las
+  manda primero, `/api/photo-credits` y Ajustes -> Creditos de fotos). 81 recetas del Caribe y Filipinas traducidas (212, PREP_VERSION 3).
+  Pruebas: `tests/test_fasting.py`, `test_quick.py`, `test_gifts.py`, `test_food_photos.py` (200 pasan).
 - **Idea futura: red social dentro de cadence (27 oct 2026, NO implementar; falta afinarla con Andres).** Que las personas se vean entre si (historias, fotos, como van). Preguntas abiertas: quien ve a quien (amigos por invitacion o todos), que se comparte (solo lo que la persona publique, nunca el diario por defecto), moderacion/reportar, privacidad y terminos (Bloque 7 antes de esto), y que no premie comer de menos.
 - **El chat ve tu diario (25 oct 2026).** `person_context` (coach.py) ahora incluye `main.diary_snapshot(user)`: lo comido HOY por comida (kcal/macros contra la meta, lo que queda), kcal de los 6 dias anteriores, agua, entrenos de hoy y pesos de 30 dias. Es de SOLO LECTURA (no usa `/api/today`, que registra premios) y si falla se lo dice al modelo para que no invente. Antes el asistente solo recibia perfil y meta y no sabia cuantas calorias llevaba la persona: error mio. Prueba: `test_the_assistant_sees_what_you_ate_today_and_only_yours`.
 - **Infra (25 oct 2026): consumo del servidor.** `config/prod.env` tenia encendidas las tareas SEMANALES de wger (sincronizar ejercicios,

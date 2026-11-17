@@ -7,13 +7,19 @@ en una sesion de Claude Code, ya tienes el contexto completo.
 ## PENDIENTES Y DECISIONES ABIERTAS (revisar al empezar cada chat; actualizar al terminar)
 
 Este archivo es el contexto que Claude Code lee al iniciar un chat nuevo: lo hecho esta en "Plan por bloques" y las secciones de abajo; lo que FALTA o espera decision de Andres esta aqui.
-- **TRABAJO EN CURSO (11 nov, "go" de Andres):** HECHO 2 (sin ideas rapidas), 4 (modos de porcion: `js/portions.js`, `PUT /api/portion`,
-  `me.units.portion` home|photo|grams; Bienvenida, Ajustes y primera foto/Confirmar) y 1 en parte: las recetas ya NO usan Gemini en el servidor;
-  salen de `app/data/recipes_es.json` (traducido UNA vez por Claude; 131 de Latinoamerica y Espana; lo que no esta en el archivo no se muestra;
-  al agregar recetas subir `recipes.PREP_VERSION`). FALTA: (a) traducir las del Caribe/Filipinas (~80 en `scratchpad latin.json`, ids sin
-  traducir), (b) otra fuente de recetas latinas: MyPlate (USDA, >1.000 en espanol, dominio publico) es la mejor candidata pero su servidor no
-  responde desde la nube de Claude (502); (c) HECHO punto 3: fotos reales de alimentos (`js/food-photo.js` + `/api/food-photos`; emparejado estricto, sin foto si no corresponde).
-  SIN VERIFICAR en produccion: cuantas recetas quedan listas con el catalogo real (diagnostico profundo) y las fotos en el telefono.
+- **REESTRUCTURACION (17 nov, pedido de Andres; plan completo en `/root/.claude/plans/quiero-que-busques-las-tender-harbor.md` de esa sesion, resumen aqui):**
+  orden pedido: ayuno primero -> fotos -> registro sencillo con medidas de casa; menu de 5 igual en celular/tablet/escritorio
+  (Hoy con el ayuno arriba · Recetas · (+) · Progreso [Resumen|Historial|Retos|Premios] · Perfil [Yo|Objetivos|Ajustes]); mas premios y
+  regalos (caja del dia, cofre semanal; solo cosmeticos/monedas); (+) = Foto · Codigo · Voz · Rapido (solo calorias o basicos con medidas
+  de casa) + leer la etiqueta nutricional (la IA solo TRANSCRIBE, la persona confirma). REGLA DE ANDRES: lo que no menciono NO se borra;
+  "fusionar" = ordenar el acceso, las paginas y URLs siguen, atajos duplicados abren la misma pieza.
+  AYUNO (decisiones 17 nov): planes 12:12, 13:11, 14:10, 16:8, 18:6 y propio de 12 a 18 h; bloqueado para menores, SCOFF positivo,
+  embarazo/lactancia, diabetes e IMC < 18,5; no cambia la meta de kcal; nunca premia ayunar de mas; etapas con horas aproximadas y
+  sin promesas (autofagia solo como nota, sin hora: en humanos no hay umbral conocido). Se levanta el "No copiar: ayuno" del plan 8-12.
+  HECHO: 81 recetas del Caribe/Filipinas traducidas (212 en total, PREP_VERSION 3); food-photo.js con ~70 nombres mas; fotos propias con
+  credito (`app/foodphotos.py`, `app/data/food_photos.json`, `static/food-photos/`, `/api/photo-credits`, Ajustes -> Creditos de fotos).
+  DISENO: 13 tableros nuevos en la pagina "Pruebas" del canvas (fila "Reestructuracion"). ESPERA EL "GO" DE ANDRES antes de programar.
+  BLOQUEO: Wikimedia (Commons) limita con 429 a la nube de Claude; la lista de fotos propias sigue vacia (~40 alimentos latinos por buscar).
 - **Seguridad:** Andres ya roto la clave de Gemini y el token de wger (28 oct). Nunca repetirlas ni ponerlas en el repo.
 - **Bloque 15 (entrenador personal), parte hecha:** historial de chats por persona (nuevo, lista, borrar, titulos por IA), el chat ve el diario de hoy (solo lectura). **FALTA, espera el "go" de Andres:** mandar fotos al chat (reusa el analisis y pasa por Confirmar), y acciones con confirmacion de un toque (agua, mover una comida; nunca borrar ni tocar reglas de salud).
 - **Panel del administrador:** hecho (numeros + "Ver como" en solo lectura `viewas.html` + registro de accesos + uso de IA por persona). Ver FOTOS de otros: no hecho, decision pendiente (recomendado: no sin avisar).

@@ -473,7 +473,7 @@ function mealItemRow(item, mealKey) {
         </div>
         <div style="flex:1;">
           <div style="font-size:13px;font-weight:700;">${escapeHtml(item.name)}${(item.note || readNotes()[item.diary_entry_id]) ? '<span class="note-dot" title="Tiene una observación"><i data-ico="note-pencil"></i></span>' : ''}</div>
-          <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${cadenceUnits.fmtAmount(item.amount_grams, item.liquid)} · ${Math.round(item.kcal)} kcal</div>
+          <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${item.quick ? 'Registro rápido' : cadenceUnits.fmtAmount(item.amount_grams, item.liquid)} · ${Math.round(item.kcal)} kcal</div>
         </div>
         <button class="row-del" aria-label="Borrar ${escapeHtml(item.name)}">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2m-9 0l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>

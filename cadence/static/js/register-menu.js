@@ -14,7 +14,7 @@
   function hrefs(meal) {
     const m = meal ? `meal=${encodeURIComponent(meal)}` : '';
     return { foto: `scan.html${m ? `?${m}` : ''}`, codigo: `scan.html?mode=barcode${m ? `&${m}` : ''}`, voz: `voice.html${m ? `?${m}` : ''}`,
-      rapido: '#rapido', etiqueta: `scan.html?mode=label${m ? `&${m}` : ''}` };
+      rapido: '#rapido', etiqueta: '#etiqueta' };
   }
 
   function close() { if (root) dismissOverlay(); }
@@ -54,6 +54,7 @@
       const href = a.getAttribute('href');
       if (window.sfx) sfx.play('tick');
       if (href === '#rapido') { dismissOverlay(() => window.openQuickLog({ meal })); return; }
+      if (href === '#etiqueta') { window.openLabelReader({ meal }); dismissOverlay(); return; }
       dismissOverlay(() => { window.location.href = href; });
     }));
     const first = root.querySelector('.rm-opt.primary');

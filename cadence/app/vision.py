@@ -102,6 +102,24 @@ Responde UNICAMENTE con un JSON array, sin texto adicional:
 
 
 
+# Reading a nutrition label is TRANSCRIBING printed numbers, not estimating: the person checks every value before saving,
+# and the conversions (per serving -> per 100 g, kJ -> kcal) are done in code (main.label_per_100g), never by the model.
+_LABEL_PROMPT = """
+Eres un lector de etiquetas nutricionales. En la foto hay la tabla de informacion nutricional de un producto.
+Copia SOLO los numeros que estan impresos; no calcules, no redondees, no inventes. Si un valor no se lee, usa null.
+
+Devuelve UNICAMENTE un objeto JSON con esta forma:
+{"found": true, "name": "nombre del producto en espanol si se ve, o null",
+ "basis": "serving" | "100g" | "100ml",
+ "serving_size": numero o null, "serving_unit": "g" | "ml" | null, "serving_text": "texto de la porcion tal como esta, o null",
+ "energy_kcal": numero o null, "energy_kj": numero o null, "fat": numero o null, "saturated_fat": numero o null,
+ "carbohydrates": numero o null, "sugars": numero o null, "fibre": numero o null, "protein": numero o null, "sodium_mg": numero o null}
+
+- "basis": la columna que copiaste. Si la etiqueta trae columna por 100 g (o 100 ml) USA ESA; si no, la de por porcion.
+- Si no ves una tabla nutricional, responde {"found": false}.
+"""
+
+
 class GeminiVisionClient:
     def __init__(self, api_key: str, model: str):
         # A Gemini call that never answers must not hold a worker forever: give up after 50 s (the person gets a clear error).
@@ -118,6 +136,18 @@ class GeminiVisionClient:
         )
         return _parse_components(response.text or "")
 
+
+    def read_label(self, image_bytes: bytes, mime_type: str) -> dict:
+        response = self._client.models.generate_content(
+            model=self._model,
+            contents=[types.Part.from_bytes(data=image_bytes, mime_type=mime_type), _LABEL_PROMPT],
+            config=types.GenerateContentConfig(temperature=0, response_mime_type="application/json"),
+        )
+        try:
+            data = json.loads(response.text or "{}")
+        except ValueError:
+            return {"found": False}
+        return data if isinstance(data, dict) else {"found": False}
 
     def suggest_meals(self, *, meal: str, kcal_left: int, protein_left: int, eaten: list[str], liked: list[str], count: int = 4) -> list[dict]:
         """Meal ideas as names, ingredients and grams. The calories are looked up in wger afterwards, never asked of the model."""

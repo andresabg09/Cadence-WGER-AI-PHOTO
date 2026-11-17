@@ -50,8 +50,26 @@
     if (window.cadenceQuickLog) { window.cadenceQuickLog.open(options || {}); return; }
     loadScript('static/js/quick-log.js', () => window.cadenceQuickLog.open(options || {}));
   }
+  // Reading a label: the photo is chosen inside the tap (a file chooser opened later is blocked), the rest loads after.
+  function openLabelReader(options) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.setAttribute('capture', 'environment');
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      input.remove();
+      if (!file) return;
+      if (window.cadenceQuickLog) { window.cadenceQuickLog.readLabel(file, options || {}); return; }
+      loadScript('static/js/quick-log.js', () => window.cadenceQuickLog.readLabel(file, options || {}));
+    });
+    input.click();
+  }
   window.openRegisterMenu = openRegisterMenu;
   window.openQuickLog = openQuickLog;
+  window.openLabelReader = openLabelReader;
 
   const LC_MEALS = { desayuno: 'Desayuno', almuerzo: 'Almuerzo', merienda: 'Merienda', cena: 'Cena' };
   let launcher = null;
@@ -73,7 +91,7 @@
       <div class="launcher" id="launcher">
         <div class="lc-halo"></div>
         <span class="lc-meal mono" id="lcMeal"></span>
-        <a class="lc-pill" href="scan.html?mode=label" data-launch tabindex="-1">${SAT_ICONS.etiqueta ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">${SAT_ICONS.etiqueta}</svg>` : ''}Leer la etiqueta de un producto</a>
+        <a class="lc-pill" href="#etiqueta" data-label tabindex="-1">${SAT_ICONS.etiqueta ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">${SAT_ICONS.etiqueta}</svg>` : ''}Leer la etiqueta de un producto</a>
         <svg class="lc-arc" width="320" height="230" viewBox="-160 -210 320 230" fill="none" aria-hidden="true">
           <defs><linearGradient id="lcg-a" x1="-120" y1="0" x2="120" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color: var(--accent-from); stop-opacity: 0"/><stop offset="0.5" style="stop-color: var(--accent-to)"/><stop offset="1" style="stop-color: var(--accent-from); stop-opacity: 0"/></linearGradient></defs>
           <path d="M -117 -67 Q 0 -205 117 -67" pathLength="100" stroke="url(#lcg-a)" stroke-width="1.4" stroke-linecap="round"/>
@@ -108,7 +126,6 @@
     launcher.querySelector('.lc-foto').setAttribute('href', `scan.html${q ? `?${q}` : ''}`);
     launcher.querySelector('.lc-code').setAttribute('href', `scan.html?mode=barcode${q ? `&${q}` : ''}`);
     launcher.querySelector('.lc-voz').setAttribute('href', `voice.html${q ? `?${q}` : ''}`);
-    launcher.querySelector('.lc-pill').setAttribute('href', `scan.html?mode=label${q ? `&${q}` : ''}`);
     const chip = launcher.querySelector('#lcMeal');
     chip.textContent = launcherMeal ? `AGREGAR ${LC_MEALS[launcherMeal].toUpperCase()}` : '';
     chip.classList.toggle('has', !!launcherMeal);
@@ -148,6 +165,13 @@
       if (window.sfx) sfx.play('tick');
       dismissOverlay(() => { window.location.href = href; }); // close first, so Back from the camera lands on a clean page
     }));
+    launcher.querySelector('[data-label]').addEventListener('click', (e) => {
+      e.preventDefault();
+      const meal = launcherMeal;
+      if (window.sfx) sfx.play('tick');
+      openLabelReader({ meal }); // inside this tap: the browser only opens a file chooser from the tap itself
+      dismissOverlay();
+    });
     launcher.querySelector('[data-quick]').addEventListener('click', (e) => {
       e.preventDefault();
       const meal = launcherMeal;

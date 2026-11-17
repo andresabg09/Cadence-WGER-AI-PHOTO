@@ -150,6 +150,7 @@ def _connect() -> sqlite3.Connection:
         ("users", "calc_done", "INTEGER NOT NULL DEFAULT 0"),
         ("users", "calib_next", "TEXT"),
         ("usage", "chats", "INTEGER NOT NULL DEFAULT 0"),  # messages to the interview / assistant today
+        ("custom_foods", "quick", "INTEGER"),  # 1 = a "Rápido" entry (calories typed by the person): not offered in search
     ):
         columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in columns:
@@ -663,22 +664,22 @@ def claim_entry(entry_id: str, user_id: int) -> None:
 # entries that use it too. A custom food has ingredient id -<id> everywhere; its entries are "c<id>".
 
 def create_custom_food(user_id: int, name: str, kcal: float, protein: float, carbs: float, fat: float,
-                       barcode: str | None = None, fibre: float | None = None, liquid: bool | None = None) -> int:
+                       barcode: str | None = None, fibre: float | None = None, liquid: bool | None = None, quick: bool = False) -> int:
     with closing(_connect()) as conn, conn:
         cur = conn.execute(
-            "INSERT INTO custom_foods (user_id, name, kcal, protein, carbs, fat, barcode, created_at, fibre, liquid) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO custom_foods (user_id, name, kcal, protein, carbs, fat, barcode, created_at, fibre, liquid, quick) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (user_id, name.strip(), kcal, protein, carbs, fat, barcode or None, _now(), fibre,
-             None if liquid is None else int(liquid)))
+             None if liquid is None else int(liquid), 1 if quick else None))
         return cur.lastrowid
 
 
 def _food(row) -> dict:
     return {"id": -row[0], "user_id": row[1], "name": row[2], "energy": row[3], "protein": row[4],
             "carbohydrates": row[5], "fat": row[6], "barcode": row[7], "source": "custom", "fibres": row[8],
-            "liquid": None if row[9] is None else bool(row[9])}
+            "liquid": None if row[9] is None else bool(row[9]), "quick": bool(row[10])}
 
 
-_FOOD_COLUMNS = "id, user_id, name, kcal, protein, carbs, fat, barcode, fibre, liquid"
+_FOOD_COLUMNS = "id, user_id, name, kcal, protein, carbs, fat, barcode, fibre, liquid, quick"
 
 
 def get_custom_food(ingredient_id: int, user_id: int | None = None) -> dict | None:
@@ -692,7 +693,7 @@ def get_custom_food(ingredient_id: int, user_id: int | None = None) -> dict | No
 
 def custom_foods(user_id: int, term: str | None = None) -> list[dict]:
     with closing(_connect()) as conn:
-        rows = conn.execute(f"SELECT {_FOOD_COLUMNS} FROM custom_foods WHERE user_id = ? ORDER BY id DESC", (user_id,)).fetchall()
+        rows = conn.execute(f"SELECT {_FOOD_COLUMNS} FROM custom_foods WHERE user_id = ? AND quick IS NULL ORDER BY id DESC", (user_id,)).fetchall()
     foods = [_food(r) for r in rows]
     if term:
         words = term.lower().split()

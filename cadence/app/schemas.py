@@ -141,6 +141,7 @@ class MealItem(_Liquid):
     fibre_g: float | None = None
     sugar_g: float | None = None
     sat_fat_g: float | None = None
+    quick: bool = False  # typed as calories only ("Rápido"): the screens show "registro rápido" instead of grams
 
 
 class DiaryUpdate(BaseModel):

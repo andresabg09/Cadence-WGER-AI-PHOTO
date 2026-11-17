@@ -1,6 +1,8 @@
 from time import monotonic
 import logging
+import math
 import re
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date as date_type, datetime, time, timedelta
 
@@ -12,6 +14,7 @@ import threading
 
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
+from pydantic import BaseModel, Field
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -70,6 +73,7 @@ from .schemas import (
     PaceOut,
     ProgressResponse,
     WeightPoint,
+    ConfirmItem,
     ConfirmedEntry,
     ConfirmRequest,
     ConfirmResponse,
@@ -635,6 +639,7 @@ def today(date: str | None = None, user: store.User = Depends(current_user)):
                     fibre_g=part(fibre100),
                     sugar_g=part(sugar100),
                     sat_fat_g=part(sat100),
+                    quick=bool(ingredient.get("quick")),
                 )
             )
 
@@ -1489,6 +1494,61 @@ def analyze(image: UploadFile, user: store.User = Depends(current_user)):
     return AnalyzeResponse(components=components, water_ml=water_ml)
 
 
+def _num(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number >= 0 else None
+
+
+def label_per_100g(raw: dict) -> dict:
+    """What a label said -> the values per 100 g (or 100 ml, 1 ml counted as 1 g) the food sheet expects. Plain code:
+    kJ become kcal only when the kcal are missing (4.184 kJ = 1 kcal), and a per-serving column is scaled by its size."""
+    if not raw.get("found"):
+        raise HTTPException(422, "No encontré una tabla nutricional en la foto. Acércate a la tabla, con buena luz y sin reflejos.")
+    kcal = _num(raw.get("energy_kcal"))
+    if kcal is None and _num(raw.get("energy_kj")) is not None:
+        kcal = _num(raw.get("energy_kj")) / 4.184
+    basis = raw.get("basis") if raw.get("basis") in ("serving", "100g", "100ml") else "100g"
+    size = _num(raw.get("serving_size"))
+    unit = raw.get("serving_unit") if raw.get("serving_unit") in ("g", "ml") else None
+    if basis == "serving":
+        if not size:
+            raise HTTPException(422, "La etiqueta da los valores por porción pero no se lee de cuántos gramos es la porción. Escríbelos tú.")
+        factor = 100 / size
+    else:
+        factor = 1.0
+    if kcal is None:
+        raise HTTPException(422, "No se leen las calorías de la etiqueta. Toma la foto más de cerca.")
+
+    def per100(key):
+        value = _num(raw.get(key))
+        return None if value is None else round(value * factor, 1)
+
+    out = {"name": (raw.get("name") or "").strip()[:80] or None, "kcal": round(kcal * factor, 1), "protein": per100("protein"),
+           "carbs": per100("carbohydrates"), "fat": per100("fat"), "fibre": per100("fibre"), "sugar": per100("sugars"),
+           "saturated_fat": per100("saturated_fat"), "liquid": basis == "100ml" or unit == "ml",
+           "serving": {"size": size, "unit": unit, "text": (raw.get("serving_text") or "").strip()[:60] or None,
+                       "kcal": round(kcal * (size / 100 if basis != "serving" and size else 1), 1) if size else None},
+           "basis": basis}
+    if out["kcal"] > 950 or any((out[k] or 0) > 100 for k in ("protein", "carbs", "fat", "fibre")):
+        raise HTTPException(422, "Los números leídos no cuadran (más de 100 g por cada 100 g). Revisa la foto o escríbelos tú.")
+    return out
+
+
+@app.post("/api/label")
+def read_label(image: UploadFile, user: store.User = Depends(current_user)):
+    """A photo of a product's nutrition table -> its values per 100 g, for the person to check in the food sheet.
+    Nothing is saved here: the sheet saves it only when the person taps Guardar."""
+    if not user.is_admin and not store.bump_usage(user.id, local_now().date().isoformat(), settings.analyze_daily_limit):
+        raise HTTPException(429, f"Llegaste al límite de {settings.analyze_daily_limit} fotos por día. Mañana puedes seguir; mientras tanto, escribe los valores a mano.")
+    data = image.file.read()
+    if not data:
+        raise HTTPException(400, "Imagen vacía")
+    return label_per_100g(get_vision_client().read_label(data, image.content_type or "image/jpeg"))
+
+
 _AUDIO_TYPES = {"audio/wav", "audio/x-wav", "audio/wave", "audio/mpeg", "audio/mp3", "audio/mp4", "audio/aac", "audio/ogg", "audio/webm", "audio/flac"}
 
 
@@ -1578,6 +1638,57 @@ def create_food(food: FoodIn, user: store.User = Depends(current_user)):
                             liquid=foodunits.is_liquid(existing["name"], existing.get("liquid")))
     fid = store.create_custom_food(user.id, food.name, food.kcal, food.protein, food.carbs, food.fat, code, food.fibre, food.liquid)
     return SearchResult(id=-fid, name=food.name.strip(), energy_kcal_100g=food.kcal, liquid=foodunits.is_liquid(food.name, food.liquid))
+
+
+def _plain_name(text: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", text.lower()) if not unicodedata.combining(c)).strip()
+
+
+class QuickIn(BaseModel):
+    kcal: float = Field(gt=0, le=5000)
+    protein: float | None = Field(default=None, ge=0, le=300)
+    name: str | None = Field(default=None, max_length=60)
+    meal: str | None = None
+    taken_at: str | None = None
+
+
+@app.post("/api/quick")
+def quick_log(body: QuickIn, user: store.User = Depends(current_user)):
+    """"Rápido": calories the person already knows (a label, a restaurant), typed by them, never guessed.
+
+    It is stored as one of their own foods (marked quick, so search does not offer it) and logged through the same
+    path as every other entry: the meal, the day, the streak rule and the awards all work the same."""
+    if body.protein is not None and body.protein * 4 > body.kcal * 1.05:
+        raise HTTPException(422, "La proteína no puede dar más calorías que el total")
+    portions = max(1, math.ceil(body.kcal / 900))  # catalog values are per 100 g and never above 900 kcal
+    grams = 100.0 * portions
+    name = (body.name or "").strip() or "Registro rápido"
+    fid = store.create_custom_food(user.id, name, round(body.kcal / portions, 2), round((body.protein or 0) / portions, 2), 0, 0, quick=True)
+    return confirm(ConfirmRequest(items=[ConfirmItem(ingredient_id=-fid, amount_grams=grams)], meal=body.meal, taken_at=body.taken_at), user)
+
+
+# The everyday basics offered in "Rápido" (the ready-to-eat staples' Spanish names, in this order).
+QUICK_BASICS = ["Arroz blanco cocido", "Huevo frito", "Huevo cocido", "Pechuga de pollo a la plancha", "Frijoles rojos cocidos",
+                "Frijoles negros cocidos", "Platano frito", "Pan blanco", "Tortilla de maiz", "Ensalada verde", "Yuca cocida",
+                "Papa cocida", "Pasta cocida", "Avena cocida", "Banano", "Aguacate", "Queso mozzarella", "Leche entera",
+                "Jugo de naranja", "Cafe negro"]
+
+
+@app.get("/api/quick/basics", response_model=list[SearchResult])
+def quick_basics(user: store.User = Depends(current_user)):
+    """The basics for "Rápido", from the staples (values per 100 g from the catalog; the screen turns them into home measures)."""
+    wger = get_wger_client()
+    try:
+        candidate_pool(wger, "arroz", user)  # fills the staples cache when it is old
+    finally:
+        wger.close()
+    by_name = {_plain_name(item["name"] or ""): item for item in _staples_cache["items"]}
+    out = []
+    for name in QUICK_BASICS:
+        item = by_name.get(_plain_name(name))
+        if item and item.get("energy") is not None:
+            out.append(SearchResult(id=item["id"], name=item["name"], energy_kcal_100g=float(item["energy"]), liquid=foodunits.is_liquid(item["name"])))
+    return out
 
 
 @app.get("/api/foods", response_model=list[SearchResult])

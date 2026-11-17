@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import accounts, auth, calibration, coach, foodunits, gamify, nutrition, recipes, reminders, scoring, store
+from . import accounts, auth, calibration, coach, foodphotos, foodunits, gamify, nutrition, recipes, reminders, scoring, store
 from .config import settings
 from .diagnostics import run_diagnostics
 from .progress import achievements as build_achievements, day_totals, streak_runs
@@ -2187,7 +2187,13 @@ def recipe_photo(recipe_id: str, size: str = "m", _: store.User = Depends(curren
 @app.get("/api/food-photos")
 def food_photos(_: store.User = Depends(current_user)):
     """The foods that have a real picture (by English name): the app matches them to what is on screen, never inventing one."""
-    return {"names": recipes.ingredient_names()}
+    return {"names": recipes.ingredient_names(), "local": foodphotos.for_app()}
+
+
+@app.get("/api/photo-credits")
+def photo_credits(_: store.User = Depends(current_user)):
+    """Who took the pictures cadence shows and under which licence (CC BY and CC BY-SA ask to be credited)."""
+    return {"foods": foodphotos.credits(), "recipes": recipes.CREDIT}
 
 
 @app.get("/api/recipe-ingredient/{key}")

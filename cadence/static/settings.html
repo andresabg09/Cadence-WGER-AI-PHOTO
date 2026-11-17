@@ -69,6 +69,7 @@
       <div class="menu-card">
         <button class="menu-row" id="passwordRow"><span class="ico" style="background:rgba(127,127,140,0.15);"><i data-ico="key"></i></span><span class="label">Cambiar contraseña</span><span class="chev">›</span></button>
         <button class="menu-row" data-soon="Ayuda y soporte"><span class="ico" style="background:rgba(127,127,140,0.15);"><i data-ico="question"></i></span><span class="label">Ayuda y soporte</span><span class="hint">PRONTO</span><span class="chev">›</span></button>
+        <button class="menu-row" id="creditsRow"><span class="ico" style="background:rgba(127,127,140,0.15);"><i data-ico="camera"></i></span><span class="label">Créditos de fotos</span><span class="chev">›</span></button>
         <button class="menu-row" data-soon="Términos y privacidad"><span class="ico" style="background:rgba(127,127,140,0.15);"><i data-ico="file-text"></i></span><span class="label">Términos y privacidad</span><span class="hint">PRONTO</span><span class="chev">›</span></button>
       </div>
       <p class="privacy-note"><i data-ico="shield-check"></i><span>Para ayudarte, el administrador de cadence puede ver tu actividad: lo que registras, tu agua y tus entrenos, solo para leer. Tus chats con cadence y tus fotos son solo tuyos.</span></p>
@@ -152,6 +153,22 @@ $('passwordRow').addEventListener('click', () => openSheet(`
     } catch (err) { const e = sheet.querySelector('#sErr'); e.textContent = err.message; e.classList.add('show'); }
   });
 }));
+
+// ---- picture credits (the free licences of the food pictures ask for it) ----
+$('creditsRow').addEventListener('click', async () => {
+  let data;
+  try { data = await apiGet('api/photo-credits'); } catch (err) { showToast(`No se pudieron leer los créditos: ${err.message}`); return; }
+  const esc = (t) => String(t || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const link = (url, text) => (/^https:\/\//.test(url || '') ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)}</a>` : esc(text));
+  const rows = (data.foods || []).map((f) => `<li style="margin:0 0 8px;"><b>${esc(f.food)}</b>: ${link(f.source, f.title || 'foto')} · ${esc(f.author)} · ${link(f.license_url, f.license)}</li>`).join('');
+  openSheet(`
+    <h3 class="disp" style="margin:0 0 10px;font-size:17px;">Créditos de fotos</h3>
+    <p style="margin:0 0 12px;font-size:13px;color:var(--ink-soft);">${esc(data.recipes)}. Las fotos de alimentos que no están en TheMealDB son de Wikimedia Commons, con licencia libre:</p>
+    <ul style="margin:0;padding-left:18px;font-size:12.5px;max-height:50vh;overflow:auto;">${rows || '<li>Sin fotos propias todavía.</li>'}</ul>
+    <div class="sheet-actions"><button class="btn-primary" id="sOk">Listo</button></div>`, (sheet, close) => {
+    sheet.querySelector('#sOk').addEventListener('click', () => close());
+  });
+});
 
 // ---- app: install and appearance ----
 $('installRow').addEventListener('click', () => {

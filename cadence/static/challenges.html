@@ -39,6 +39,7 @@
   </div>
   <div class="app-content progress-grid" style="padding-bottom:60px;">
     <div class="col">
+      <div class="card gift-card" id="giftCard" hidden></div>
       <div class="card" id="dailyCard"><div class="skeleton" style="height:180px;"></div></div>
       <div class="card" id="weeklyCard"><div class="skeleton" style="height:240px;"></div></div>
       <div class="rule-note"><span><i data-ico="check"></i></span><span>Los retos premian registrar, ser constante y comer con equilibrio. Ninguno te pide comer menos de lo que necesitas.</span></div>
@@ -94,7 +95,10 @@ function paint(d) {
 
 const SWATCH = {
   tema_aurora: 'linear-gradient(135deg,#07100F,#8F78FF 55%,#5CF2B0)', tema_atardecer: 'linear-gradient(135deg,#120B10,#FF7A59 55%,#FFC27A)',
+  tema_oceano: 'linear-gradient(135deg,#061019,#2F80ED 55%,#3FE0D0)',
   marco_dorado: 'radial-gradient(circle,#15151D 52%,#F5B942 54%,#FFE08A)',
+  marco_plata: 'radial-gradient(circle,#15151D 52%,#C9D1DB 54%,#F2F5F8)',
+  marco_neon: 'radial-gradient(circle,#15151D 50%,#8F78FF 53%,#5CF2D6)',
 };
 function shopRow(it) {
   const btn = it.owned
@@ -118,7 +122,7 @@ function wear(list) {
   const worn = list.find((i) => i.slot === 'theme' && i.equipped);
   let current = 'dark';
   try { current = localStorage.getItem('cadence_theme') || 'dark'; } catch { /* no storage */ }
-  const next = worn ? worn.key.replace('tema_', '') : (['aurora', 'atardecer'].includes(current) ? 'dark' : current);
+  const next = worn ? worn.key.replace('tema_', '') : (['aurora', 'atardecer', 'oceano'].includes(current) ? 'dark' : current);
   if (next !== current) { try { localStorage.setItem('cadence_theme', next); } catch { /* no storage */ } applyTheme(next); }
 }
 
@@ -146,11 +150,84 @@ async function equip(slot, item) {
 // The bought themes and the frame come with the profile: refresh them on this device.
 async function refreshMe() { rememberUser(await apiGet('api/auth/me')); }
 
-async function reload() { paint(await apiGet('api/challenges')); }
+async function reload() { paint(await apiGet('api/challenges')); loadGifts(); }
 
-(async function start() {
-  try { await apiGetSWR('api/challenges', paint); } catch (err) { $('dailyCard').innerHTML = `<p style="color:var(--bad);font-size:13px;">${bits.esc(err.message)}</p>`; }
-})();
+// ---- Gifts: the box of the day (the 4 daily challenges) and the chest of the week (4 weekly ones). Only coins and cosmetics.
+const GIFT_ICON = { daily: 'gift:duotone', weekly: 'crown-simple' };
+function giftTile(g) {
+  const ico = `<span class="gift-ico ${g.kind}${g.ready && !g.opened ? ' ready' : ''}">${cadenceIcons.icon(GIFT_ICON[g.kind])}</span>`;
+  let body;
+  if (g.opened) {
+    body = `<div class="ch-done">Abierto: +${g.coins} ${bits.coin(14)}${g.item_title ? ` y ${bits.esc(g.item_title)}` : ''}</div>`;
+  } else if (g.ready) {
+    body = `<button type="button" class="claim-btn" data-gift="${g.kind}">Abrir ${g.kind === 'daily' ? 'la caja' : 'el cofre'}</button>`;
+  } else {
+    const pct = Math.min(100, (g.now / g.total) * 100);
+    const what = g.kind === 'daily' ? 'retos diarios' : 'retos semanales';
+    body = `<div class="ch-bar"><div class="track"><i style="width:${pct.toFixed(0)}%"></i></div><span class="mono">${g.now} / ${g.total}</span></div>
+      <div class="ch-hint">Completa ${g.total} ${what} para abrirlo</div>`;
+  }
+  return `<div class="gift-tile${g.opened ? ' opened' : ''}">${ico}<div class="ch-main"><div class="ch-title">${bits.esc(g.title)}</div>${body}</div></div>`;
+}
+function paintGifts(d) {
+  const card = $('giftCard');
+  card.hidden = false;
+  card.innerHTML = `<div class="card-head"><b>Regalos</b><span class="when">Monedas y adornos</span></div><div class="gift-row">${d.gifts.map(giftTile).join('')}</div>`;
+  card.querySelectorAll('[data-gift]').forEach((b) => b.addEventListener('click', () => openGift(b)));
+}
+async function loadGifts() { try { await apiGetSWR('api/gifts', paintGifts); } catch { /* the card stays hidden; challenges still work */ } }
+
+function giftScene(kind) {
+  const el = document.createElement('div');
+  el.className = 'gift-scene';
+  el.innerHTML = `<div class="gift-stage"><span class="gift-big ${kind}">${cadenceIcons.icon(GIFT_ICON[kind])}</span><div class="gift-out" hidden></div>
+    <button type="button" class="btn-primary gift-ok" hidden>Listo</button></div>`;
+  document.body.appendChild(el);
+  return el;
+}
+
+async function openGift(btn) {
+  btn.disabled = true;
+  const kind = btn.dataset.gift;
+  const scene = giftScene(kind);
+  const close = () => { scene.remove(); reload().catch(() => {}); }; // Back, the backdrop or Listo: all repaint the card
+  pushOverlay(close);
+  scene.addEventListener('click', (e) => { if (e.target === scene || e.target.closest('.gift-ok')) dismissOverlay(); });
+  const started = Date.now();
+  try {
+    const out = await apiPost('api/gifts/open', { kind });
+    swrClear();
+    if (out.item) await refreshMe();
+    const wait = Math.max(0, 900 - (Date.now() - started)); // let the shake play before the lid opens
+    setTimeout(() => {
+      scene.classList.add('open');
+      if (window.sfx) sfx.play('gift');
+      const box = scene.querySelector('.gift-out');
+      box.hidden = false;
+      box.innerHTML = `<div class="gift-coins mono">+${out.coins} ${bits.coin(26)}</div>`
+        + (out.item ? `<div class="gift-item"><b>${bits.esc(out.item_title)}</b><span>${bits.esc(out.item_hint || '')}</span><span>Ya es tuyo: úsalo desde la tienda.</span></div>` : '');
+      scene.querySelector('.gift-ok').hidden = false;
+      $('coins').textContent = out.balance;
+    }, wait);
+  } catch (err) {
+    dismissOverlay(() => showToast(err.message));
+  }
+}
+
+function failed(err) {
+  const msg = err && err.message ? err.message : 'No pudimos cargar tus retos';
+  $('dailyCard').innerHTML = `<p style="font-size:14px;margin:0 0 12px;">${bits.esc(msg)}</p><button type="button" class="ac-ask" id="retry">Reintentar</button>`;
+  $('weeklyCard').hidden = true;
+  $('shopCard').hidden = true;
+  $('retry').addEventListener('click', () => { $('weeklyCard').hidden = false; $('shopCard').hidden = false; start(); });
+}
+
+async function start() {
+  $('dailyCard').innerHTML = '<div class="skeleton" style="height:180px;"></div>';
+  try { await apiGetSWR('api/challenges', paint); } catch (err) { failed(err); }
+}
+start();
+loadGifts();
 
 </script>
 <script>

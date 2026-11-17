@@ -1363,7 +1363,6 @@ function renderIdeasLink(data) {
   document.getElementById('ideasSub').textContent = `Te faltan ${left} kcal · ${Math.max(0, Math.round(data.goal.protein_g - data.totals.protein_g))} g de proteína`;
 }
 
-function paintRetosDot(d) { const dot = document.getElementById('retosDot'); if (dot) dot.hidden = !d.claimable; }
 
 function noteStreak(data) {
   if (data.today !== data.date) return;
@@ -1407,7 +1406,7 @@ async function loadToday() {
     const mealJustSaved = justSaved; // celebrate() clears it while painting
     await apiGetSWR(viewDate ? `api/today?date=${encodeURIComponent(viewDate)}` : 'api/today', paintToday);
     if (window.cadenceFasting) cadenceFasting.mount(document.getElementById('fastCard'), { today: isViewingToday(), mealJustSaved });
-    apiGetSWR('api/challenges', paintRetosDot).catch(() => {}); // the dot on the Retos tab
+    if (window.cadencePaintClaimDot) cadencePaintClaimDot(); // the dot on Progreso: coins to collect or a gift to open
   } catch (err) {
     if (!navigator.onLine) return; // the offline banner already explains it
     showBanner('wger', `No pudimos cargar tu diario: ${err.message}`, 'Reintentar', loadToday);

@@ -98,7 +98,10 @@ function paintAvatars() {
   const img = () => `<img src="api/avatar?v=${encodeURIComponent(v)}" alt="" style="width:100%;height:100%;border-radius:inherit;object-fit:cover;display:block;">`;
   let frame = null;
   try { frame = localStorage.getItem('cadence_frame'); } catch { /* no storage */ }
-  document.querySelectorAll('#profileBtn, .avatar-big, .side-nav a.item[href="profile.html"]').forEach((el) => el.classList.toggle('frame-gold', frame === 'marco_dorado'));
+  const FRAMES = { marco_dorado: 'frame-gold', marco_plata: 'frame-silver', marco_neon: 'frame-neon' };
+  document.querySelectorAll('#profileBtn, .avatar-big, .side-nav a.item[href="profile.html"]').forEach((el) => {
+    Object.entries(FRAMES).forEach(([key, cls]) => el.classList.toggle(cls, frame === key));
+  });
   const btn = document.getElementById('profileBtn');
   if (btn && v && btn.dataset.avatar !== v) { btn.dataset.avatar = v; btn.style.padding = '0'; btn.style.overflow = 'hidden'; btn.innerHTML = img(); }
   document.querySelectorAll('.side-nav a.item[href="profile.html"] svg').forEach((svg) => {

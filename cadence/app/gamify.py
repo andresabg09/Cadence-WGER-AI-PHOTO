@@ -81,8 +81,16 @@ MILESTONES = [
     ("hydration_5", "Semana hidratada", "Cumple tu meta de agua 5 días", "water", "agua", 5, "days_water"),
     ("early_bird", "Madrugador", "Registra el desayuno antes de las 9:00, 5 días", "early", "constancia", 5, "early_days"),
     ("mover", "En movimiento", "Registra 3 entrenamientos", "move", "movimiento", 3, "workouts"),
+    # 17 nov 2026: fasting, recipes, "Rápido" and more water. Fasting ones count COMPLETE fasts (the plan reached), never longer ones.
+    ("first_fast", "Primer ayuno", "Completa tu primer ayuno", "timer", "ayuno", 1, "fasts"),
+    ("fasts_5", "Cinco ayunos", "Completa 5 ayunos", "timer", "ayuno", 5, "fasts"),
+    ("fasts_20", "Veinte ayunos", "Completa 20 ayunos", "hourglass-medium", "ayuno", 20, "fasts"),
+    ("first_recipe", "Primera receta", "Registra una receta del recetario", "cooking-pot", "comida", 1, "recipes"),
+    ("recipes_10", "Cocinero", "Registra 10 recetas del recetario", "cooking-pot", "comida", 10, "recipes"),
+    ("hydration_14", "Dos semanas hidratado", "Cumple tu meta de agua 14 días", "water", "agua", 14, "days_water"),
+    ("first_quick", "Al grano", "Registra algo con Rápido", "lightning", "constancia", 1, "quick"),
 ]
-CATEGORIES = ("comida", "constancia", "agua", "movimiento")
+CATEGORIES = ("comida", "constancia", "agua", "movimiento", "ayuno")
 
 
 def meal_awards(meal: MealFacts, goal: scoring.Goal) -> list[str]:
@@ -103,7 +111,7 @@ def meal_awards(meal: MealFacts, goal: scoring.Goal) -> list[str]:
 
 
 def milestone_stats(days: list[DayFacts], *, total_logged: int, photos: int, best_streak: int, weights: int, workouts: int,
-                    goal: scoring.Goal, water_goal: int) -> dict[str, int]:
+                    goal: scoring.Goal, water_goal: int, fasts: int = 0, recipes: int = 0, quick: int = 0) -> dict[str, int]:
     on_target = sum(1 for d in days if goal.kcal > 0 and 0.9 * goal.kcal <= d.kcal <= 1.05 * goal.kcal)
     protein = sum(1 for d in days if goal.protein_g > 0 and d.protein >= goal.protein_g)
     bright = sum(1 for d in days if (d.score or 0) >= 85)
@@ -117,7 +125,8 @@ def milestone_stats(days: list[DayFacts], *, total_logged: int, photos: int, bes
             window |= by_day.get(start + timedelta(days=offset), set())
         best_week = max(best_week, len(window))
     return {"total_logged": total_logged, "photos": photos, "best_streak": best_streak, "weights": weights, "days_on_target": on_target,
-            "days_protein": protein, "days_bright": bright, "foods_week": best_week, "days_water": water, "early_days": early, "workouts": workouts}
+            "days_protein": protein, "days_bright": bright, "foods_week": best_week, "days_water": water, "early_days": early, "workouts": workouts,
+            "fasts": fasts, "recipes": recipes, "quick": quick}
 
 
 def milestone_states(stats: dict[str, int]) -> list[dict]:
@@ -148,7 +157,7 @@ def on_target(kcal: float, goal_kcal: float) -> bool:
     return goal_kcal > 0 and BAND_LOW * goal_kcal <= kcal <= BAND_HIGH * goal_kcal
 
 
-def daily_challenges(day: DayFacts, goal_kcal: float) -> list[Challenge]:
+def daily_challenges(day: DayFacts, goal_kcal: float, fasting: dict | None = None) -> list[Challenge]:
     kcal = day.kcal
     over = goal_kcal > 0 and kcal > BAND_HIGH * goal_kcal
     meals_logged = len(day.meals)
@@ -159,10 +168,11 @@ def daily_challenges(day: DayFacts, goal_kcal: float) -> list[Challenge]:
         Challenge("d_constant", "day", "Mantente constante", "Registra comidas 2 veces", "fork", min(meals_logged, 2), 2, 25, meals_logged >= 2),
         Challenge("d_mindful", "day", "Come con equilibrio", "Saca más de 70 puntos en 2 comidas", "leaf", min(good_meals, 2), 2, 35, good_meals >= 2),
         Challenge("d_first", "day", "Empezar de nuevo", "Registra tu primera comida", "sun", min(meals_logged, 1), 1, 25, meals_logged >= 1),
-    ]
+    ] + ([Challenge("d_fast", "day", "Completa tu ayuno", "Llega a la hora de tu plan; terminar antes también vale la pena", "timer",
+                    1 if fasting["done_today"] else 0, 1, 30, bool(fasting["done_today"]))] if fasting else [])
 
 
-def weekly_challenges(days: list[DayFacts], goal_kcal: float, water_goal: int) -> list[Challenge]:
+def weekly_challenges(days: list[DayFacts], goal_kcal: float, water_goal: int, fasting: dict | None = None) -> list[Challenge]:
     counted = sum(1 for d in days if d.counts)
     calories = sum(1 for d in days if on_target(d.kcal, goal_kcal))
     water = sum(1 for d in days if water_goal > 0 and d.water_ml >= water_goal)
@@ -178,7 +188,8 @@ def weekly_challenges(days: list[DayFacts], goal_kcal: float, water_goal: int) -
         Challenge("w_weight", "week", "Seguir el progreso", "Registra tu peso", "scale", min(weights, 1), 1, 100, weights >= 1),
         Challenge("w_move", "week", "En movimiento", "Registra 3 entrenamientos", "move", min(workouts, 3), 3, 120, workouts >= 3),
         Challenge("w_variety", "week", "Come variado", "Registra 15 alimentos distintos", "variety", min(len(foods), 15), 15, 80, len(foods) >= 15),
-    ]
+    ] + ([Challenge("w_fast", "week", "Ayuno constante", "Completa tu plan 5 días esta semana (nunca premia ayunar de más)", "timer",
+                    min(fasting["week_days"], 5), 5, 120, fasting["week_days"] >= 5)] if fasting else [])
 
 
 def week_start(day: date) -> date:
@@ -195,5 +206,44 @@ def period_id(challenge_key: str, today: date) -> str:
 SHOP = {
     "tema_aurora": ("Tema Aurora", "Violeta y verde menta para toda la app", 120, "theme"),
     "tema_atardecer": ("Tema Atardecer", "Ámbar y rosa, para la noche", 120, "theme"),
+    "tema_oceano": ("Tema Océano", "Azul profundo y turquesa", 160, "theme"),
+    "marco_plata": ("Marco plata", "Un aro plateado alrededor de tu foto de perfil", 180, "frame"),
     "marco_dorado": ("Marco dorado", "Un aro dorado alrededor de tu foto de perfil", 300, "frame"),
+    "marco_neon": ("Marco neón", "Un aro violeta y turquesa que brilla", 420, "frame"),
 }
+
+
+# ------------------------------------------------------------------ gifts (17 nov 2026)
+# The box of the day opens when the four daily challenges are done; the chest of the week when 4 weekly ones are.
+# What is inside is decided by a seed of person + period (opening it twice, or on two phones, gives the same thing):
+# coins, and sometimes a cosmetic the person does not have yet. Never anything bought with money.
+BASE_DAILY = ("d_balance", "d_constant", "d_mindful", "d_first")
+WEEKLY_FOR_CHEST = 4
+GIFT_KINDS = {"daily": "Caja del día", "weekly": "Cofre de la semana"}
+
+
+def gift_ready(kind: str, daily: list[Challenge], weekly: list[Challenge]) -> bool:
+    if kind == "daily":
+        done = {c.key for c in daily if c.complete}
+        return all(key in done for key in BASE_DAILY)
+    return sum(1 for c in weekly if c.complete) >= WEEKLY_FOR_CHEST
+
+
+def gift_progress(kind: str, daily: list[Challenge], weekly: list[Challenge]) -> tuple[int, int]:
+    if kind == "daily":
+        return sum(1 for c in daily if c.key in BASE_DAILY and c.complete), len(BASE_DAILY)
+    return min(WEEKLY_FOR_CHEST, sum(1 for c in weekly if c.complete)), WEEKLY_FOR_CHEST
+
+
+def gift_content(user_id: int, kind: str, period: str, owned: set[str]) -> dict:
+    import hashlib
+    seed = int(hashlib.sha256(f"{user_id}:{kind}:{period}".encode()).hexdigest(), 16)
+    if kind == "daily":
+        coins = (20, 30, 40, 50, 60)[seed % 5]
+        item_chance = 15
+    else:
+        coins = (100, 140, 180, 220, 250)[seed % 5]
+        item_chance = 40
+    missing = [k for k in SHOP if k not in owned]
+    item = missing[(seed // 7) % len(missing)] if missing and (seed // 101) % 100 < item_chance else None
+    return {"coins": coins, "item": item}

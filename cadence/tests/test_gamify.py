@@ -71,7 +71,7 @@ def test_milestones_and_stats():
     states = {s["key"]: s for s in gamify.milestone_states(stats)}
     assert states["streak_3"]["unlocked"] and not states["streak_7"]["unlocked"] and states["streak_7"]["value"] == 6
     assert states["hydration_5"]["unlocked"] and states["logs_25"]["unlocked"] and not states["logs_100"]["unlocked"] and states["mover"]["unlocked"]
-    assert len(states) == len(gamify.MILESTONES) == 18
+    assert len(states) == len(gamify.MILESTONES) == 25
 
 
 def test_shop_catalog_has_themes_and_a_frame():

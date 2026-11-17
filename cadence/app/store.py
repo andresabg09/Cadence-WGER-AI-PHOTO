@@ -104,6 +104,10 @@ CREATE TABLE IF NOT EXISTS fasts (
   planned_h REAL NOT NULL, created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS fasts_user ON fasts (user_id, started_at);
+CREATE TABLE IF NOT EXISTS gifts (
+  user_id INTEGER NOT NULL, kind TEXT NOT NULL, period TEXT NOT NULL, coins INTEGER NOT NULL, item TEXT, opened_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, kind, period)
+);
 CREATE TABLE IF NOT EXISTS recipe_saves (
   user_id INTEGER NOT NULL, recipe_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (user_id, recipe_id)
 );
@@ -1189,3 +1193,53 @@ def fast_overlaps(user_id: int, start_iso: str, end_iso: str | None, skip_id: in
         if (other_end is None or start < other_end) and (end is None or other_start < end):
             return True
     return False
+
+
+# ------------------------------------------------------------------ gifts and the counts behind the new awards (17 nov 2026)
+
+def gift_opened(user_id: int, kind: str, period: str) -> dict | None:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT coins, item, opened_at FROM gifts WHERE user_id = ? AND kind = ? AND period = ?", (user_id, kind, period)).fetchone()
+    return {"coins": row[0], "item": row[1], "opened_at": row[2]} if row else None
+
+
+def open_gift(user_id: int, kind: str, period: str, coins: int, item: str | None) -> bool:
+    """Opens a gift once: the coins go to the ledger and the item, if any, becomes the person's (price 0). False if already open."""
+    with closing(_connect()) as conn:
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            done = conn.execute("INSERT OR IGNORE INTO gifts (user_id, kind, period, coins, item, opened_at) VALUES (?,?,?,?,?,?)",
+                                (user_id, kind, period, coins, item, _now())).rowcount
+            if not done:
+                conn.execute("ROLLBACK")
+                return False
+            conn.execute("INSERT OR IGNORE INTO coin_ledger (user_id, key, period, amount, created_at) VALUES (?,?,?,?,?)",
+                         (user_id, f"gift:{kind}", period, coins, _now()))
+            if item:
+                conn.execute("INSERT OR IGNORE INTO coin_ledger (user_id, key, period, amount, created_at) VALUES (?,?,?,?,?)",
+                             (user_id, f"shop:{item}", f"gift:{period}", 0, _now()))
+            conn.execute("COMMIT")
+            return True
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
+
+def recipe_plates_count(user_id: int) -> int:
+    """How many recipes from the recipe book the person logged (each logged recipe is one plate 'recipe-...')."""
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT COUNT(DISTINCT plate_key) FROM entry_meta WHERE user_id = ? AND plate_key LIKE 'recipe-%'", (user_id,)).fetchone()
+    return int(row[0] or 0)
+
+
+def quick_count(user_id: int) -> int:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT COUNT(*) FROM custom_foods WHERE user_id = ? AND quick = 1", (user_id,)).fetchone()
+    return int(row[0] or 0)
+
+
+def fasts_all(user_id: int) -> list[dict]:
+    with closing(_connect()) as conn:
+        rows = conn.execute(f"SELECT {_FAST_COLS} FROM fasts WHERE user_id = ? ORDER BY started_at", (user_id,)).fetchall()
+    return [_fast(r) for r in rows]

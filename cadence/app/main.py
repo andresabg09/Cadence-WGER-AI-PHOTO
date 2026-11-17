@@ -1259,7 +1259,8 @@ def awards(user: store.User = Depends(current_user)):
     water_goal = water_goal_for(user)[0]
     stats = gamify.milestone_stats(
         list(facts.values()), total_logged=len(entries), photos=store.photo_count(user.id), best_streak=best,
-        weights=len(store.weights_since(user.id, "0000-00-00")), workouts=store.workouts_count(user.id), goal=goal, water_goal=water_goal)
+        weights=len(store.weights_since(user.id, "0000-00-00")), workouts=store.workouts_count(user.id), goal=goal, water_goal=water_goal,
+        fasts=len(_complete_fasts(user)), recipes=store.recipe_plates_count(user.id), quick=store.quick_count(user.id))
     meal_rows = [(k, d.day.isoformat(), key) for d in facts.values() for key, m in d.meals.items() for k in gamify.meal_awards(m, goal)]
     milestones = gamify.milestone_states(stats)
     unlocked_now = [(m["key"], today_.isoformat(), "") for m in milestones if m["unlocked"]]
@@ -1299,9 +1300,28 @@ def _challenge_states(user: store.User) -> tuple[list[gamify.Challenge], list[ga
         wger.close()
     goal_kcal = _goal_obj(user).kcal
     week = [facts.get(monday + timedelta(days=i), gamify.DayFacts(monday + timedelta(days=i))) for i in range((today_ - monday).days + 1)]
-    daily = gamify.daily_challenges(facts.get(today_, gamify.DayFacts(today_)), goal_kcal)
-    weekly = gamify.weekly_challenges(week, goal_kcal, water_goal_for(user)[0])
+    fast = _fasting_facts(user, today_, monday)
+    daily = gamify.daily_challenges(facts.get(today_, gamify.DayFacts(today_)), goal_kcal, fast)
+    weekly = gamify.weekly_challenges(week, goal_kcal, water_goal_for(user)[0], fast)
     return daily, weekly, today_, monday
+
+
+def _complete_fasts(user: store.User) -> list[dict]:
+    now = local_now()
+    return [f for f in (fasting.fast_out(r, now) for r in store.fasts_all(user.id)) if f["complete"]]
+
+
+def _fasting_facts(user: store.User, today_: date_type, monday: date_type) -> dict | None:
+    """For the fasting challenges: only for someone who chose to fast and may (never offered to anyone it could harm)."""
+    try:
+        plan = store.fasting_plan(user.id) or {}
+        if not plan.get("intro_done") or fasting.blocked_reason(user, today_, plan):
+            return None
+        days = {date_type.fromisoformat(f["ended_at"][:10]) for f in _complete_fasts(user)}
+    except Exception:  # noqa: BLE001 - challenges work without the fasting part
+        logger.exception("no se pudo leer el ayuno para los retos")
+        return None
+    return {"done_today": today_ in days, "week_days": sum(1 for d in days if monday <= d <= today_)}
 
 
 @app.get("/api/challenges", response_model=ChallengesResponse)
@@ -1328,7 +1348,47 @@ def challenges_dot(user: store.User = Depends(current_user)):
     daily, weekly, today_, monday = _challenge_states(user)
     taken = store.claimed_periods(user.id, [c.key for c in daily + weekly], [today_.isoformat(), monday.isoformat()])
     ready = sum(1 for c in daily + weekly if c.complete and (c.key, gamify.period_id(c.key, today_)) not in taken)
-    return {"claimable": ready}
+    gifts = sum(1 for g in _gift_states(user, daily, weekly, today_, monday) if g["ready"] and not g["opened"])
+    return {"claimable": ready + gifts}
+
+
+def _gift_states(user: store.User, daily, weekly, today_: date_type, monday: date_type) -> list[dict]:
+    out = []
+    for kind, period in (("daily", today_.isoformat()), ("weekly", monday.isoformat())):
+        opened = store.gift_opened(user.id, kind, period)
+        now, total = gamify.gift_progress(kind, daily, weekly)
+        item = opened["item"] if opened else None
+        out.append({"kind": kind, "title": gamify.GIFT_KINDS[kind], "period": period, "ready": gamify.gift_ready(kind, daily, weekly),
+                    "opened": bool(opened), "now": now, "total": total, "coins": opened["coins"] if opened else None,
+                    "item": item, "item_title": gamify.SHOP[item][0] if item in gamify.SHOP else None})
+    return out
+
+
+class GiftOpenIn(BaseModel):
+    kind: str
+
+
+@app.get("/api/gifts")
+def gifts(user: store.User = Depends(current_user)):
+    daily, weekly, today_, monday = _challenge_states(user)
+    return {"gifts": _gift_states(user, daily, weekly, today_, monday), "coins": store.coin_balance(user.id)}
+
+
+@app.post("/api/gifts/open")
+def open_gift(body: GiftOpenIn, user: store.User = Depends(current_user)):
+    """Opens the box of the day or the chest of the week, once. The server re-checks the challenges and decides what is inside."""
+    if body.kind not in gamify.GIFT_KINDS:
+        raise HTTPException(404, "Ese regalo no existe")
+    daily, weekly, today_, monday = _challenge_states(user)
+    if not gamify.gift_ready(body.kind, daily, weekly):
+        raise HTTPException(409, "Todavía no completas los retos de este regalo")
+    period = today_.isoformat() if body.kind == "daily" else monday.isoformat()
+    content = gamify.gift_content(user.id, body.kind, period, store.owned_items(user.id))
+    if not store.open_gift(user.id, body.kind, period, content["coins"], content["item"]):
+        raise HTTPException(409, "Ya abriste este regalo")
+    item = content["item"]
+    return {"coins": content["coins"], "item": item, "item_title": gamify.SHOP[item][0] if item else None,
+            "item_hint": gamify.SHOP[item][1] if item else None, "balance": store.coin_balance(user.id)}
 
 
 @app.post("/api/challenges/claim", response_model=ClaimOut)

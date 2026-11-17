@@ -34,7 +34,7 @@ def test_meal_awards_are_earned_once_shown_and_kept(wger):
 def test_awards_page_lists_everything_with_progress_and_celebrates_new_ones(wger):
     admin, ana = two_people()
     empty = admin.get("/api/awards").json()
-    assert empty["total"] == 22 and empty["unlocked"] == 0 and empty["new"] == []
+    assert empty["total"] == 29 and empty["unlocked"] == 0 and empty["new"] == []
     log_meal(admin)
     admin.post("/api/weight", json={"kg": 70})
     page = admin.get("/api/awards").json()

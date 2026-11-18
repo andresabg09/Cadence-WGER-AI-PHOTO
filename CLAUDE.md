@@ -7,10 +7,9 @@ en una sesion de Claude Code, ya tienes el contexto completo.
 ## PENDIENTES Y DECISIONES ABIERTAS (revisar al empezar cada chat; actualizar al terminar)
 
 Este archivo es el contexto que Claude Code lee al iniciar un chat nuevo: lo hecho esta en "Plan por bloques" y las secciones de abajo; lo que FALTA o espera decision de Andres esta aqui.
-- **REESTRUCTURACION (17 nov): PROGRAMADA tras el "Go, con iconos en vez de mascotas" de Andres, en la rama
-  `claude/cadence-redesign-restructure-xktfiu` (SIN pasar a `master`: espera su visto bueno). Detalle en "Bloque 17" mas abajo.**
-  FALTA / SIN VERIFICAR: (1) Andres debe revisar la rama y autorizar el paso a `master`; despues una revision con
-  `/cadence/api/diagnostics?deep=1`. (2) Gemini real leyendo una etiqueta (solo probado con respuestas simuladas). (3) Avisos push del ayuno
+- **REESTRUCTURACION (17 nov): PROGRAMADA tras el "Go, con iconos en vez de mascotas" de Andres y PUBLICADA en `master` el 18 nov
+  (pedido de Andres: "Pasalo a master"). Detalle en "Bloque 17" mas abajo.**
+  FALTA / SIN VERIFICAR: (1) Revisar el despliegue una vez con `/cadence/api/diagnostics?deep=1`. (2) Gemini real leyendo una etiqueta (solo probado con respuestas simuladas). (3) Avisos push del ayuno
   en un telefono real. (4) Fotos propias de ~40 alimentos latinos: Wikimedia Commons responde 429 a la nube de Claude, `food_photos.json`
   sigue vacio (la app funciona igual; lista en el plan de esa sesion). (5) No hecho: paso "¿Como quieres lograrlo? Ayuno / Seguimiento /
   Ambos" en el primer uso (se uso la tarjeta "Nuevo: ayuno" en Hoy, que se puede descartar) y paquetes de sonido en la tienda.

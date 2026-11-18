@@ -68,7 +68,13 @@ sin conflictos grandes.
 - **Servicio en EasyPanel (Google Cloud):** proyecto `crm`, servicio tipo
   "Compose" llamado `wger`, fuente Git apuntando a este repo, rama `master`,
   `docker-compose.yml` en la raiz.
-- **Dominio:** `https://crm-wger.cjauws.easypanel.host/`
+- **Dominio (desde el 18 nov 2026):** `https://crm-cadence-wger-ai-photo.cjauws.easypanel.host/` -> la app en
+  `https://crm-cadence-wger-ai-photo.cjauws.easypanel.host/cadence/`. El dominio viejo `crm-wger.cjauws.easypanel.host` ya no apunta a
+  nada (EasyPanel responde "404 Not Found ... configured your domain correctly"): no darlo como enlace. Si Andres reporta ese 404, no es
+  un fallo de cadence; es que abrio el dominio viejo o que el servicio se quedo sin dominio en EasyPanel. El dominio real se ve en los
+  logs de nginx (`request_host`), porque cadence llama a wger con el host de `WGER_BASE_URL`.
+  Aviso conocido y sin efecto: al arrancar, wger falla en `site.save()` con "value too long for type character varying(50)" (el
+  dominio nuevo con https:// no cabe en el nombre del Site de Django); gunicorn arranca igual. Es del core de wger: no tocarlo.
 - **Cambios ya aplicados sobre el compose oficial de wger:**
   1. Se quito `ports: - "80:80"` de nginx (el puerto 80 del host lo maneja
      EasyPanel para todos los proyectos, incluyendo Odoo de Shalom Panama).
@@ -110,7 +116,7 @@ el core de wger**. Flujo funcional:
 5. Se crea el registro via `POST /api/v2/nutritiondiary/` de wger.
 
 **Sin probar contra la instancia real todavia** - no hay acceso de red
-desde este entorno hacia `crm-wger.cjauws.easypanel.host`, asi que los
+desde este entorno hacia el dominio del servidor, asi que los
 nombres exactos de campos de `/api/v2/nutritiondiary/` y
 `/api/v2/ingredient/search/` estan implementados segun el esquema conocido
 de wger, pero **hay que verificarlos con la instancia real** (`GET
@@ -135,7 +141,7 @@ cadence/
 
 Integrado en el `docker-compose.yml` raiz como servicio `cadence` (build
 desde `./cadence`, expone 8001 interno). Expuesto publicamente en
-`https://crm-wger.cjauws.easypanel.host/cadence/` via un `location
+`https://crm-cadence-wger-ai-photo.cjauws.easypanel.host/cadence/` via un `location
 /cadence/` en `config/nginx.conf` que usa el resolver DNS de Docker en vez
 de un `upstream` estatico - a proposito, para no repetir el bug de
 powersync si el contenedor `cadence` tarda en levantar o falla el build.

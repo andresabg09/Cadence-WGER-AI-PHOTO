@@ -189,9 +189,12 @@ volumes:
   media:
   static:
 
+# cadence (18 nov 2026): the official compose fixes this network's name to `wger_network`. With a fixed name, EVERY copy of
+# this stack on the server joins the same network, so two copies (an old EasyPanel service and the current one) answer for
+# `web`, `db`, `cache`, `nginx` and `cadence` at random: an old cadence page, 502s and "Sin conexion". Without a name,
+# compose gives each project its own network. (grafana/docker-compose.yml still points at `wger_network`; it is not used here.)
 networks:
-  default:
-    name: wger_network
+  default: {}
 
 # If you get an "additional properties 'extends' not allowed"-error, your compose version
 # is too old (this needs at least 5.x). If you remove the "db" and "redis" services from

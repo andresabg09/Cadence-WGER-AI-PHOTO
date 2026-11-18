@@ -68,13 +68,16 @@ sin conflictos grandes.
 - **Servicio en EasyPanel (Google Cloud):** proyecto `crm`, servicio tipo
   "Compose" llamado `wger`, fuente Git apuntando a este repo, rama `master`,
   `docker-compose.yml` en la raiz.
-- **Dominio (desde el 18 nov 2026):** `https://crm-cadence-wger-ai-photo.cjauws.easypanel.host/` -> la app en
-  `https://crm-cadence-wger-ai-photo.cjauws.easypanel.host/cadence/`. El dominio viejo `crm-wger.cjauws.easypanel.host` ya no apunta a
-  nada (EasyPanel responde "404 Not Found ... configured your domain correctly"): no darlo como enlace. Si Andres reporta ese 404, no es
-  un fallo de cadence; es que abrio el dominio viejo o que el servicio se quedo sin dominio en EasyPanel. El dominio real se ve en los
-  logs de nginx (`request_host`), porque cadence llama a wger con el host de `WGER_BASE_URL`.
-  Aviso conocido y sin efecto: al arrancar, wger falla en `site.save()` con "value too long for type character varying(50)" (el
-  dominio nuevo con https:// no cabe en el nombre del Site de Django); gunicorn arranca igual. Es del core de wger: no tocarlo.
+- **Dominio (el de siempre, al menos desde octubre; `WGER_BASE_URL` lo trae por defecto en el compose):**
+  `https://crm-cadence-wger-ai-photo.cjauws.easypanel.host/` -> la app en `https://crm-cadence-wger-ai-photo.cjauws.easypanel.host/cadence/`.
+  NUNCA dar `crm-wger.cjauws.easypanel.host`: es de un servicio VIEJO de EasyPanel (proyecto `crm`, servicio `wger`) que no debe estar
+  encendido (EasyPanel responde "404 Not Found ... configured your domain correctly"). El dominio real se ve en los logs de nginx
+  (`request_host`).
+  **UNA SOLA COPIA DE LA PILA (caida del 18 nov):** el compose oficial fijaba la red a `wger_network`; con eso, el servicio viejo y el
+  bueno compartian red y `web`/`db`/`cache`/`nginx`/`cadence` respondian con DOS contenedores al azar (pagina vieja de cadence, 502,
+  "Sin conexion"). Se quito el nombre fijo (cada proyecto tiene su red). Si vuelve a pasar algo asi: revisar que no haya otra copia
+  encendida en EasyPanel. Aviso conocido y sin efecto: al arrancar, wger falla en `site.save()` con "value too long for type character
+  varying(50)" (el dominio con https:// no cabe en el nombre del Site de Django); gunicorn arranca igual. Es del core de wger: no tocarlo.
 - **Cambios ya aplicados sobre el compose oficial de wger:**
   1. Se quito `ports: - "80:80"` de nginx (el puerto 80 del host lo maneja
      EasyPanel para todos los proyectos, incluyendo Odoo de Shalom Panama).
